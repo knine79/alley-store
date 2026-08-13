@@ -117,33 +117,36 @@ Xcode의 자동 서명이 Developer ID 빌드에서도 App ID와 프로필을 �
 ```mermaid
 flowchart LR
     dev["개발자<br/>웹 콘솔"]
-    user["사용자<br/>SwiftUI 스토어 앱"]
+    worker["서명 워커 (macOS)<br/>codesign · notarytool<br/>서명 키는 이 머신에만"]
+    user["사용자<br/>스토어 앱"]
 
     subgraph host["서버 (Docker)"]
+        direction TB
         api["Vapor API<br/>+ 웹 콘솔"]
         db[("PostgreSQL")]
         s3[("S3 호환<br/>스토리지")]
+        api --- db
+        api --- s3
     end
 
-    worker["서명 워커 (macOS)<br/>codesign · notarytool<br/>서명 키는 이 머신의 키체인에만"]
-
     dev -->|앱 등록 · 버전 생성| api
-    user -->|브랜딩 수신 · 로그인 · 탐색| api
-    api --- db
-    api --- s3
+    worker -->|잡 폴링 · 아웃바운드만| api
+    user -->|브랜딩 · 로그인 · 탐색| api
 
-    dev -.->|미서명 빌드| s3
-    s3 -.->|앱 다운로드| user
-
-    worker -->|① 잡 폴링 · 아웃바운드만| api
-    s3 -.->|② 미서명 아티팩트| worker
-    worker -.->|③ 서명·공증 완료본| s3
+    dev ==>|① 미서명 빌드| s3
+    s3 ==>|② 미서명 아티팩트| worker
+    worker ==>|③ 서명·공증 완료본| s3
+    s3 ==>|④ 앱 다운로드| user
 ```
 
-실선은 API 호출이고, 점선은 presigned URL로 스토리지와 직접 주고받는 대용량
-전송입니다. 바이너리는 서버를 통과하지 않습니다.
+**굵은 화살표는 바이너리**입니다. presigned URL로 스토리지와 직접 오가므로 서버를
+통과하지 않습니다. 번호는 빌드 하나가 개발자에서 사용자에게 닿기까지의 순서입니다.
 
-스토어 앱은 최초 실행 시 서버 주소만 입력받고, `/api/v1/meta`로 브랜딩과 인증
+**얇은 화살표는 API 호출**이고, 화살표 방향이 곧 연결을 시작하는 쪽입니다.
+워커에서 서버로만 향한다는 점이 중요합니다. 서명 키를 보관한 머신에 인바운드
+포트를 열지 않습니다.
+
+스토어 앱은 최초 실행 시 서버 주소만 입력받고 `/api/v1/meta`로 브랜딩과 인증
 설정을 받아옵니다.
 
 ### 서명 워커가 pull 방식인 이유
@@ -229,12 +232,13 @@ SwiftUI 스토어 앱이 그대로 임포트해야 하기 때문입니다. HTTP 
 
 ```mermaid
 stateDiagram-v2
+    direction LR
     [*] --> draft
     draft --> uploaded: 바이너리 업로드
     uploaded --> signing: 워커가 서명 대행
-    uploaded --> ready: 완성본 업로드 · 서명 생략
     signing --> notarizing
     notarizing --> ready
+    uploaded --> ready: 완성본 업로드 · 서명 생략
     ready --> released: 출시
     released --> ready: 출시 취소
 
