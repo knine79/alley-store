@@ -44,7 +44,7 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
     public var iconURL: String?
     public var category: String?
     public var ownerID: UUID
-    /// 현재 사내에 출시된 최신 버전. 아직 출시본이 없으면 nil.
+    /// 현재 조직에 출시된 최신 버전. 아직 출시본이 없으면 nil.
     public var latestReleasedVersion: VersionDTO?
     public var createdAt: Date
     public var updatedAt: Date

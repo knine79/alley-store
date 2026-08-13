@@ -1,6 +1,6 @@
 import Foundation
 
-/// 버전 하나가 업로드부터 사내 출시까지 거치는 상태.
+/// 버전 하나가 업로드부터 조직 내부 출시까지 거치는 상태.
 ///
 /// ```
 /// draft → uploaded → signing → notarizing → ready → released
@@ -20,7 +20,7 @@ public enum VersionState: String, Codable, Sendable, CaseIterable {
     case notarizing
     /// 서명·공증이 끝나 배포 가능한 아티팩트가 준비됐다.
     case ready
-    /// 사내에 공개됐다. 스토어 앱 목록에 노출된다.
+    /// 조직 내부에 공개됐다. 스토어 앱 목록에 노출된다.
     case released
     /// 파이프라인이 실패했다. 로그를 확인하고 재시도할 수 있다.
     case failed

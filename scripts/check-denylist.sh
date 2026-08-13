@@ -22,10 +22,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # 검사에서 제외할 경로.
+#
+# docs/ 는 제외하지 않는다. 설계 문서에 조직 고유값이 남는 것도 같은 유출이고,
+# 예시 값은 example.com 계열을 쓰면 검사를 통과한다.
 EXCLUDES=(
     ":(exclude).env"
-    ":(exclude).env.example"
-    ":(exclude)docs/**"
     ":(exclude)scripts/check-denylist.sh"
     ":(exclude)Package.resolved"
 )
