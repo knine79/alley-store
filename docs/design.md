@@ -114,25 +114,37 @@ Xcode의 자동 서명이 Developer ID 빌드에서도 App ID와 프로필을 �
 
 ## 4. 아키텍처
 
+```mermaid
+flowchart LR
+    dev["개발자<br/>웹 콘솔"]
+    user["사용자<br/>SwiftUI 스토어 앱"]
+
+    subgraph host["서버 (Docker)"]
+        api["Vapor API<br/>+ 웹 콘솔"]
+        db[("PostgreSQL")]
+        s3[("S3 호환<br/>스토리지")]
+    end
+
+    worker["서명 워커 (macOS)<br/>codesign · notarytool<br/>서명 키는 이 머신의 키체인에만"]
+
+    dev -->|앱 등록 · 버전 생성| api
+    user -->|브랜딩 수신 · 로그인 · 탐색| api
+    api --- db
+    api --- s3
+
+    dev -.->|미서명 빌드| s3
+    s3 -.->|앱 다운로드| user
+
+    worker -->|① 잡 폴링 · 아웃바운드만| api
+    s3 -.->|② 미서명 아티팩트| worker
+    worker -.->|③ 서명·공증 완료본| s3
 ```
-┌─────────────────┐     ┌──────────────────────────────┐
-│  개발자          │     │  서버 (Docker)                 │
-│  웹 콘솔에서      │────▶│  Vapor API + 웹 콘솔           │
-│  앱 등록/업로드   │     │  PostgreSQL + S3 호환 스토리지  │
-└─────────────────┘     └──────┬───────────────▲───────┘
-                               │ ① 서명 잡 폴링   │ ③ 서명·공증
-                               │   (아웃바운드만) │    완료본 업로드
-                        ┌──────▼───────────────┴───────┐
-                        │  서명 워커 (macOS)             │
-                        │  codesign + notarytool        │
-                        │  서명 키는 이 머신의 키체인에만  │
-                        └───────────────────────────────┘
-┌─────────────────┐
-│  사용자          │     스토어 앱: 최초 실행 시 서버 주소 입력
-│  SwiftUI 스토어  │──▶  /api/v1/meta 로 브랜딩·인증 설정 수신
-│  앱에서 다운로드  │     로그인 후 탐색 → presigned URL 다운로드 → 설치
-└─────────────────┘
-```
+
+실선은 API 호출이고, 점선은 presigned URL로 스토리지와 직접 주고받는 대용량
+전송입니다. 바이너리는 서버를 통과하지 않습니다.
+
+스토어 앱은 최초 실행 시 서버 주소만 입력받고, `/api/v1/meta`로 브랜딩과 인증
+설정을 받아옵니다.
 
 ### 서명 워커가 pull 방식인 이유
 
@@ -215,14 +227,30 @@ SwiftUI 스토어 앱이 그대로 임포트해야 하기 때문입니다. HTTP 
 
 버전 상태 머신:
 
-```
-draft → uploaded → signing → notarizing → ready → released
-                      └──────── failed (재시도 가능) ────┘
+```mermaid
+stateDiagram-v2
+    [*] --> draft
+    draft --> uploaded: 바이너리 업로드
+    uploaded --> signing: 워커가 서명 대행
+    uploaded --> ready: 완성본 업로드 · 서명 생략
+    signing --> notarizing
+    notarizing --> ready
+    ready --> released: 출시
+    released --> ready: 출시 취소
+
+    draft --> failed
+    uploaded --> failed
+    signing --> failed
+    notarizing --> failed
+    ready --> failed
+    failed --> uploaded: 재시도
 ```
 
 로컬에서 이미 서명·공증을 마친 완성본을 올리는 경로는 `uploaded → ready`로 서명
-단계를 건너뜁니다. 전이 규칙은 `VersionState`에 박아두어 단계를 건너뛰는 경로를
-타입 수준에서 막습니다.
+단계를 건너뜁니다. 실패하면 업로드된 바이너리부터 다시 시작합니다.
+
+전이 규칙은 `VersionState.allowedNextStates`에 박아두어 단계를 건너뛰는 경로를
+타입 수준에서 막습니다. 위 그림과 코드가 어긋나면 코드가 기준입니다.
 
 ### 5.3 서명 워커
 
