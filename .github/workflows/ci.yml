@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 서버는 Linux 컨테이너에서 돌아가므로 Linux 에서 검증한다.
+  build-and-test:
+    name: 빌드 및 테스트 (Linux)
+    runs-on: ubuntu-latest
+    container: swift:6.2-noble
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 의존성 캐시
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: ${{ runner.os }}-spm-
+
+      - name: 빌드
+        run: swift build --build-tests
+
+      - name: 테스트
+        run: swift test --skip-build
+
+  # 워커는 macOS 전용이므로 별도로 빌드한다.
+  build-worker:
+    name: 워커 빌드 (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 의존성 캐시
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: macos-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: macos-spm-
+
+      - name: 워커 빌드
+        run: swift build --product alley-worker
+
+      - name: 실행 확인
+        run: swift run alley-worker version
+
+  # 조직 고유값이 소스에 섞이지 않았는지 검사한다.
+  denylist:
+    name: 조직 고유값 검사
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 검사 실행
+        env:
+          # 금칙어 자체가 유출이므로 레포에 두지 않고 시크릿으로 주입한다.
+          DENYLIST_TERMS: ${{ secrets.DENYLIST_TERMS }}
+        run: ./scripts/check-denylist.sh
+
+  docker:
+    name: Docker 이미지 빌드
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: 이미지 빌드
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
