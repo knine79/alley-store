@@ -120,6 +120,14 @@ swift test           # 테스트
 swift run alley-worker version
 ```
 
+## 문서
+
+| 문서 | 다루는 것 |
+| --- | --- |
+| [설계](docs/design.md) | 무엇을 왜 이렇게 만드는가. 아키텍처와 핵심 설계 |
+| [구현 계획](docs/implementation-plan.md) | 무엇을 언제 만드는가. 단계별 진행 현황 |
+| [ADR](docs/adr/README.md) | 개별 결정의 배경과 버려진 대안 |
+
 ## 라이선스
 
 미정.
