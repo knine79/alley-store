@@ -1,0 +1,50 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+*.resolved.bak
+
+# Xcode
+DerivedData/
+build/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# 서명 자산. 어떤 경우에도 레포에 들어오면 안 된다.
+*.p12
+*.mobileprovision
+*.provisionprofile
+*.cer
+*.certSigningRequest
+AuthKey_*.p8
+
+# 설정과 비밀값
+.env
+.env.*
+!.env.example
+*.local.yml
+
+# 워커 작업 디렉터리
+.alley-work/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# 에디터
+.idea/
+*.swp
+*.swo
+.vscode/
+
+# 에이전트 작업 상태 (설계 문서는 docs/ 로 옮겨 커밋한다)
+.omc/

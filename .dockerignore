@@ -1,0 +1,13 @@
+.build/
+.swiftpm/
+DerivedData/
+StoreApp/
+.git/
+.github/
+.omc/
+docs/
+.env
+.env.*
+!.env.example
+*.md
+.DS_Store
