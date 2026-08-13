@@ -1,0 +1,83 @@
+# Alley 셀프호스팅 구성.
+#
+# `cp .env.example .env` 로 설정을 만든 뒤 `docker compose up` 하면
+# 서버 + PostgreSQL + S3 호환 스토리지가 한 번에 뜹니다.
+#
+# 이 구성은 특정 클라우드나 사내 인프라를 전제하지 않습니다.
+# 어디에 배포하든 서버는 아래 환경변수만 알면 됩니다.
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      # 컨테이너 사이 통신은 서비스 이름으로 한다.
+      DATABASE_URL: postgres://${POSTGRES_USER:-alley}:${POSTGRES_PASSWORD:-alley}@postgres:5432/${POSTGRES_DB:-alley}
+      S3_ENDPOINT: http://minio:9000
+      S3_USE_PATH_STYLE: "true"
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-setup:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-alley}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-alley}
+      POSTGRES_DB: ${POSTGRES_DB:-alley}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # 서버가 붙기 전에 DB가 실제로 질의를 받을 수 있는지 확인한다.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-alley} -d ${POSTGRES_DB:-alley}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-alleyminio}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-change-me-minio-secret}
+    volumes:
+      - minio-data:/data
+    ports:
+      # 콘솔은 로컬에서만 열어둔다.
+      - "127.0.0.1:9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # 버킷을 한 번 만들고 끝나는 일회성 작업.
+  minio-setup:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      S3_BUCKET: ${S3_BUCKET:-alley-artifacts}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-alleyminio}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-change-me-minio-secret}
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 $$S3_ACCESS_KEY_ID $$S3_SECRET_ACCESS_KEY &&
+      mc mb --ignore-existing local/$$S3_BUCKET &&
+      echo '버킷 준비 완료: '$$S3_BUCKET
+      "
+
+volumes:
+  postgres-data:
+  minio-data:
