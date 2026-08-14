@@ -120,6 +120,23 @@ swift test           # 테스트
 swift run alley-worker version
 ```
 
+### 로컬 개발 루프
+
+서버는 호스트에서 돌리고 데이터베이스와 스토리지만 컨테이너로 띄우면 빌드가 빠릅니다.
+
+```bash
+docker compose up -d postgres minio minio-setup
+
+swift run alley-server migrate --yes   # 처음 한 번, 스키마가 바뀔 때마다
+swift run alley-server serve
+```
+
+`http://localhost:8080/auth/google` 을 브라우저로 열면 로그인이 시작됩니다.
+설정한 도메인 밖의 계정은 서버가 거부합니다.
+
+`docker compose up` 으로 서버까지 컨테이너로 띄우면 compose 가 `DATABASE_URL` 과
+`S3_ENDPOINT` 를 컨테이너 이름으로 덮어쓰므로 `.env` 는 그대로 두면 됩니다.
+
 ## 문서
 
 | 문서 | 다루는 것 |

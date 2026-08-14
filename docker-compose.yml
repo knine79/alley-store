@@ -35,6 +35,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-alley}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    ports:
+      # 서버를 `swift run` 으로 띄워 개발할 때 호스트에서 붙기 위한 것이다.
+      # 루프백에만 바인딩해 외부에 노출하지 않는다.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     healthcheck:
       # 서버가 붙기 전에 DB가 실제로 질의를 받을 수 있는지 확인한다.
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-alley} -d ${POSTGRES_DB:-alley}"]
@@ -52,7 +56,8 @@ services:
     volumes:
       - minio-data:/data
     ports:
-      # 콘솔은 로컬에서만 열어둔다.
+      # API 와 콘솔 모두 루프백에만 연다. API 포트는 호스트에서 개발할 때 쓴다.
+      - "127.0.0.1:${S3_PORT:-9000}:9000"
       - "127.0.0.1:9001:9001"
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
