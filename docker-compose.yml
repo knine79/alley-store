@@ -48,7 +48,10 @@ services:
     restart: unless-stopped
 
   minio:
-    image: minio/minio:latest
+    # 버전을 고정한다. latest 는 언제 받느냐에 따라 다른 판이 뜬다.
+    # 오픈소스로 공개하는 레포라 "받아서 그대로 뜨는지"가 중요하고,
+    # 누가 못 띄우겠다고 했을 때 같은 것을 보고 있어야 재현할 수 있다.
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-alleyminio}
@@ -68,7 +71,7 @@ services:
 
   # 버킷을 한 번 만들고 끝나는 일회성 작업.
   minio-setup:
-    image: minio/mc:latest
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     depends_on:
       minio:
         condition: service_healthy
