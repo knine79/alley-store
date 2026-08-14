@@ -15,6 +15,7 @@
 | [0005](0005-bundle-id-and-app-id-policy.md) | 번들 ID는 고유하게, 포털 App ID는 와일드카드로 묶는다 | 수락됨 | 2026-08-12 |
 | [0006](0006-dual-path-app-updates.md) | 앱 업데이트를 스토어 앱과 Sparkle 두 경로로 지원한다 | 수락됨 | 2026-08-13 |
 | [0007](0007-store-app-without-sandbox.md) | 스토어 앱에 App Sandbox를 쓰지 않는다 | 수락됨 | 2026-08-13 |
+| [0008](0008-session-token-design.md) | 세션 토큰은 신원만 담고 권한은 매번 조회한다 | 수락됨 | 2026-08-14 |
 
 ## 언제 쓰나
 

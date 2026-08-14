@@ -78,10 +78,16 @@ matches="$(grep -rnoE '\b[a-z0-9][a-z0-9-]*\.(internal|corp|intranet|lan)\b' "${
     | grep -viE 'localhost' || true)"
 report "사내 호스트로 보이는 도메인이 있습니다." "$matches"
 
-# example 계열이 아닌 실제 이메일 주소.
+# 실제로 등록 가능한 도메인의 이메일 주소.
+#
+# RFC 2606 / RFC 6761 이 문서용으로 예약한 이름만 통과시킨다. 예약된 이름은
+# 누구도 소유할 수 없으므로 실수로 실제 주소를 적을 위험이 없다.
+#   - example.com / example.net / example.org 와 그 하위 도메인
+#   - .test / .example / .invalid / .localhost 로 끝나는 이름
+RESERVED='@([a-z0-9-]+\.)*(example\.(com|net|org)|test|example|invalid|localhost)$'
 matches="$(grep -rnoE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' "${FILES[@]}" 2>/dev/null \
-    | grep -viE '@(example\.(com|org|net)|localhost|.*\.invalid)' || true)"
-report "실제 이메일 주소로 보이는 값이 있습니다. example.com 을 쓰세요." "$matches"
+    | grep -viE "$RESERVED" || true)"
+report "실제 등록 가능한 도메인의 이메일이 있습니다. example.com 계열을 쓰세요." "$matches"
 
 # 사설 IP 대역 하드코딩.
 matches="$(grep -rnoE '\b(10\.[0-9]{1,3}|192\.168|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]{1,3}\.[0-9]{1,3}\b' "${FILES[@]}" 2>/dev/null || true)"

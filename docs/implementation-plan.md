@@ -36,12 +36,13 @@
 ### 1-1. 서버 기초 (1주)
 
 - [x] `/api/v1/meta`, 스토어 설정
-- [ ] Google OAuth 플로우 + 도메인 서버 검증 + JWT 세션
-- [ ] users/roles, 초기 관리자 부트스트랩
-- [ ] Fluent 마이그레이션 골격
+- [x] Google OAuth 플로우 + 도메인 서버 검증 + JWT 세션 ([ADR-0008](adr/0008-session-token-design.md))
+- [x] users/roles, 초기 관리자 부트스트랩
+- [x] Fluent 마이그레이션 골격
+- [ ] 브라우저로 실제 로그인 E2E 확인
 
-**선행 조건**: Google Cloud Console에서 OAuth 클라이언트 발급.
-리다이렉트 URI는 로컬 개발용 `http://localhost:8080/auth/google/callback`부터 등록.
+**선행 조건**: Google Cloud Console에서 OAuth 클라이언트 발급 (완료).
+프로젝트 `alley-store`, 동의 화면 Internal, 웹 애플리케이션 클라이언트.
 
 ### 1-2. 앱/버전/아티팩트 (1주)
 

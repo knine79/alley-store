@@ -12,6 +12,8 @@ func routes(_ app: Application) throws {
     app.get(APIPath.meta.pathComponents) { req -> StoreMeta in
         req.application.alleyConfig.storeMeta
     }
+
+    try app.register(collection: AuthController())
 }
 
 struct HealthResponse: Content {
