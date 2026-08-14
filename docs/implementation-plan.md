@@ -5,15 +5,15 @@
 무엇을 왜 이렇게 만드는지는 [설계 문서](design.md)를, 개별 결정의 배경은
 [ADR](adr/README.md)을 보세요.
 
-- 최종 갱신: 2026-08-13
-- 현재 상태: Phase 0 완료, Phase 1-1 진행 예정
+- 최종 갱신: 2026-08-14
+- 현재 상태: Phase 1-1, 1-2 완료. 다음은 1-3 서명 워커
 
 ## 진행 현황
 
 | 단계 | 범위 | 예상 | 상태 |
 | --- | --- | --- | --- |
 | Phase 0 | 프로젝트 셋업 | 0.5주 | 완료 |
-| Phase 1 | MVP: 코어 배포 루프 | 3~4주 | 진행 예정 |
+| Phase 1 | MVP: 코어 배포 루프 | 3~4주 | 진행 중 (1-1, 1-2 완료) |
 | Phase 2 | 발급 자동화 + CLI | 1~2주 | 대기 |
 | Phase 3 | 별점 + 피드백 + 알림 | 1~2주 | 대기 |
 | Phase 4 | 마무리 + 공개 준비 | 1~2주 | 대기 |
@@ -33,23 +33,28 @@
 목표: 로그인 → 앱 등록/업로드 → 자동 서명·공증 → 스토어 앱에서 다운로드·설치가
 끝까지 동작한다.
 
-### 1-1. 서버 기초 (1주)
+### 1-1. 서버 기초 (1주) — 완료
 
 - [x] `/api/v1/meta`, 스토어 설정
 - [x] Google OAuth 플로우 + 도메인 서버 검증 + JWT 세션 ([ADR-0008](adr/0008-session-token-design.md))
 - [x] users/roles, 초기 관리자 부트스트랩
 - [x] Fluent 마이그레이션 골격
-- [ ] 브라우저로 실제 로그인 E2E 확인
+- [x] 브라우저로 실제 로그인 E2E 확인
+- [x] 쿠키와 Bearer 헤더 양쪽 인증 ([ADR-0010](adr/0010-cookie-and-bearer-authentication.md))
 
 **선행 조건**: Google Cloud Console에서 OAuth 클라이언트 발급 (완료).
 프로젝트 `alley-store`, 동의 화면 Internal, 웹 애플리케이션 클라이언트.
 
-### 1-2. 앱/버전/아티팩트 (1주)
+### 1-2. 앱/버전/아티팩트 (1주) — 완료
 
-- [ ] apps/versions/artifacts CRUD + 권한 (developer만 등록, app_members만 업로드)
-- [ ] 앱 등록 시 번들 ID 검증 (프리픽스 준수 + 중복 차단), 번들 ID 대장 조회
-- [ ] S3 presigned 업로드/다운로드 (SotoS3, multipart)
-- [ ] 버전 상태 머신 서버 연동
+- [x] apps/versions/artifacts CRUD + 권한 (developer만 등록, app_members만 업로드)
+- [x] 앱 등록 시 번들 ID 검증 (프리픽스 준수 + 중복 차단), 번들 ID 대장 조회
+- [x] S3 presigned 업로드/다운로드 ([ADR-0009](adr/0009-presigned-artifact-transfer.md))
+- [x] 버전 상태 머신 서버 연동
+- [x] 다운로드 이력 기록
+
+멀티파트 업로드는 넣지 않았습니다. 사내망에서 수백 MB를 올리는 상황이라 단순
+재시도로 충분하다고 봤습니다. 근거와 대안은 ADR-0009에 있습니다.
 
 ### 1-3. 서명 워커 (1주)
 
@@ -141,5 +146,6 @@ Phase 1을 완료로 판정하는 조건입니다.
 | 항목 | 정해야 할 시점 | 내용 |
 | --- | --- | --- |
 | Sparkle 경로 허용 여부 | Phase 4 착수 전 | appcast 경로는 사용자 단위 다운로드 이력이 남지 않는다. 추적이 중요하면 이 경로를 막는 선택지가 있다 ([ADR-0006](adr/0006-dual-path-app-updates.md)) |
-| 재개 가능 업로드 | Phase 1-2 이후 | MVP는 단순 재시도로 간다. 대용량에서 실패가 잦으면 재개 가능 업로드를 도입한다 |
+| 재개 가능 업로드 | 실패가 잦아지면 | MVP는 단순 재시도로 간다. 대용량에서 실패가 잦으면 멀티파트로 확장한다 ([ADR-0009](adr/0009-presigned-artifact-transfer.md)) |
+| 방치된 `draft` 청소 | Phase 1-3 이후 | 업로드 통지 없이 버려진 버전과 그 오브젝트가 쌓인다 ([ADR-0009](adr/0009-presigned-artifact-transfer.md)) |
 | 웹 콘솔 SPA 전환 | Phase 3 착수 전 | Leaf 서버 렌더링으로 시작한다. 통계·피드백 대시보드가 복잡해지면 재검토한다 |

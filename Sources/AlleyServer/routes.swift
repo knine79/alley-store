@@ -14,6 +14,8 @@ func routes(_ app: Application) throws {
     }
 
     try app.register(collection: AuthController())
+    try app.register(collection: AppController())
+    try app.register(collection: VersionController())
 }
 
 struct HealthResponse: Content {

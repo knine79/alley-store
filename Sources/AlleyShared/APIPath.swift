@@ -32,8 +32,20 @@ public enum APIPath {
 
     public static let apps = "\(apiRoot)/apps"
 
+    /// 이미 등록된 번들 ID 목록. 새 앱을 만들기 전에 중복을 스스로 확인한다.
+    public static let bundleIDs = "\(apiRoot)/bundle-ids"
+
     public static func app(_ id: UUID) -> String {
         "\(apps)/\(id.uuidString)"
+    }
+
+    /// 앱별 업로드 권한자 목록.
+    public static func members(ofApp id: UUID) -> String {
+        "\(app(id))/members"
+    }
+
+    public static func member(ofApp appID: UUID, userID: UUID) -> String {
+        "\(members(ofApp: appID))/\(userID.uuidString)"
     }
 
     public static func versions(ofApp id: UUID) -> String {

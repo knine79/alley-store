@@ -3,6 +3,7 @@ import Fluent
 import FluentPostgresDriver
 import JWT
 import Leaf
+import SotoS3
 import Vapor
 
 /// 애플리케이션 부트스트랩.
@@ -14,6 +15,7 @@ public func configure(_ app: Application, config: AppConfig) async throws {
     try configureDatabase(app, config: config.database)
     configureMigrations(app)
     await configureJWT(app, config: config.security)
+    try configureStorage(app, config: config.storage)
 
     app.views.use(.leaf)
 
@@ -38,6 +40,40 @@ private func configureMigrations(_ app: Application) {
     app.migrations.add(CreateUserRoleEnum())
     app.migrations.add(CreateUser())
     app.migrations.add(CreateAuthCode())
+
+    // apps → versions → artifacts 순으로 외래키가 걸린다.
+    app.migrations.add(CreateApp())
+    app.migrations.add(CreateAppMember())
+    app.migrations.add(CreateVersionEnums())
+    app.migrations.add(CreateVersion())
+    app.migrations.add(CreateArtifact())
+    app.migrations.add(CreateDownload())
+}
+
+/// 오브젝트 스토리지 연결.
+///
+/// `AWSClient` 는 커넥션 풀을 들고 있어서 요청마다 만들면 안 되고, 종료할 때
+/// 반드시 닫아야 한다. 그래서 애플리케이션 수명에 묶는다.
+private func configureStorage(_ app: Application, config: AppConfig.StorageConfig) throws {
+    let client = AWSClient(
+        credentialProvider: .static(
+            accessKeyId: config.accessKeyID,
+            secretAccessKey: config.secretAccessKey
+        )
+    )
+
+    let storage: ArtifactStorage
+    do {
+        storage = try ArtifactStorage(client: client, config: config)
+    } catch {
+        // 설정이 틀려서 못 만들었으면 클라이언트를 여기서 닫는다.
+        // 수명 훅을 아직 안 걸었으므로 아무도 대신 닫아주지 않는다.
+        try? client.syncShutdown()
+        throw error
+    }
+
+    app.lifecycle.use(AWSClientLifecycle(client: client))
+    app.artifactStorage = storage
 }
 
 private func configureJWT(_ app: Application, config: AppConfig.SecurityConfig) async {
