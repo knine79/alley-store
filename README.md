@@ -144,6 +144,7 @@ swift run alley-server serve
 | [설계](docs/design.md) | 무엇을 왜 이렇게 만드는가. 아키텍처와 핵심 설계 |
 | [구현 계획](docs/implementation-plan.md) | 무엇을 언제 만드는가. 단계별 진행 현황 |
 | [ADR](docs/adr/README.md) | 개별 결정의 배경과 버려진 대안 |
+| [용어집](docs/glossary.md) | 코드와 문서에 나오는 서버 쪽 용어 |
 
 ## 라이선스
 
