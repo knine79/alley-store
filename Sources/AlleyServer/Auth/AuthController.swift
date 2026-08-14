@@ -30,7 +30,8 @@ public struct AuthController: RouteCollection, Sendable {
     func authorize(request: Request) async throws -> Response {
         let config = request.application.alleyConfig
         let target: OAuthStateToken.Target =
-            request.query[String.self, at: "client"] == "app" ? .app : .web
+            request.query[String.self, at: APIPath.clientQueryItem] == APIPath.appClient
+            ? .app : .web
 
         let state = try await request.jwt.sign(OAuthStateToken(target: target))
         let url = GoogleOAuth(config: config.oauth).authorizationURL(state: state)
@@ -98,7 +99,7 @@ public struct AuthController: RouteCollection, Sendable {
             // 웹은 세션 토큰을 HttpOnly 쿠키로 받는다. 자바스크립트가 읽지 못하게 한다.
             let token = try await signSession(request: request, userID: userID)
             let response = request.redirect(to: "/")
-            response.cookies["alley_session"] = sessionCookie(
+            response.cookies[sessionCookieName] = sessionCookie(
                 token: token,
                 ttl: config.security.sessionTTL,
                 isSecure: config.publicBaseURL.hasPrefix("https://")

@@ -17,6 +17,13 @@ public enum APIPath {
 
     public static let googleAuthorize = "/auth/google"
     public static let googleCallback = "/auth/google/callback"
+
+    /// 로그인을 시작할 때 어떤 클라이언트인지 알리는 질의 항목.
+    ///
+    /// 값이 ``appClient`` 면 인증 후 커스텀 URL 스킴으로 돌려보낸다.
+    /// 스토어 앱과 서버가 같은 문자열을 봐야 하므로 여기서만 정의한다.
+    public static let clientQueryItem = "client"
+    public static let appClient = "app"
     /// 스토어 앱이 일회용 코드를 세션 토큰으로 교환하는 경로.
     public static let tokenExchange = "\(apiRoot)/auth/token"
     public static let currentUser = "\(apiRoot)/me"

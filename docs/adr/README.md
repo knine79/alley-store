@@ -16,6 +16,7 @@
 | [0006](0006-dual-path-app-updates.md) | 앱 업데이트를 스토어 앱과 Sparkle 두 경로로 지원한다 | 수락됨 | 2026-08-13 |
 | [0007](0007-store-app-without-sandbox.md) | 스토어 앱에 App Sandbox를 쓰지 않는다 | 수락됨 | 2026-08-13 |
 | [0008](0008-session-token-design.md) | 세션 토큰은 신원만 담고 권한은 매번 조회한다 | 수락됨 | 2026-08-14 |
+| [0010](0010-cookie-and-bearer-authentication.md) | 세션 토큰을 쿠키와 Authorization 헤더 양쪽에서 받는다 | 수락됨 | 2026-08-14 |
 
 ## 언제 쓰나
 
