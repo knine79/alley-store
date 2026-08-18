@@ -48,6 +48,9 @@ private func configureMigrations(_ app: Application) {
     app.migrations.add(CreateVersion())
     app.migrations.add(CreateArtifact())
     app.migrations.add(CreateDownload())
+
+    // 설정 행은 마이그레이션이 아니라 최초 접근 시점에 심는다 (ADR-0011).
+    app.migrations.add(CreateStoreSettings())
 }
 
 /// 오브젝트 스토리지 연결.

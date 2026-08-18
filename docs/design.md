@@ -224,7 +224,7 @@ SwiftUI 스토어 앱이 그대로 임포트해야 하기 때문입니다. HTTP 
 | 테이블              | 주요 필드                                                      |
 | ---------------- | ---------------------------------------------------------- |
 | `users`          | google_sub, email, name, avatar_url, role                  |
-| `store_settings` | 스토어 이름, 로고, 허용 도메인, 초기 관리자, 번들 ID 프리픽스 (singleton)         |
+| `store_settings` | 스토어 이름, 로고, 강조색, 허용 도메인, 번들 ID 프리픽스 (singleton, [ADR-0011](adr/0011-store-settings-in-database.md)) |
 | `apps`           | bundle_id, 이름, 아이콘, 설명, 카테고리, owner_id                     |
 | `app_members`    | app_id, user_id (앱별 업로드 권한)                                |
 | `versions`       | app_id, short_version, build_number, 릴리즈 노트, min_macos, 상태 |

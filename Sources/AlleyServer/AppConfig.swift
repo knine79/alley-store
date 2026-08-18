@@ -16,20 +16,36 @@ public struct AppConfig: Sendable {
     /// 사용자와 워커가 접근하는 서버의 공개 주소. 콜백 URL 구성에 쓴다.
     public var publicBaseURL: String
 
+    /// 환경변수에만 존재하는 스토어 설정.
+    ///
+    /// 나머지 스토어 설정은 데이터베이스(`StoreSettings`)에 있고 관리자가 화면에서
+    /// 바꾼다. 여기 남은 둘은 화면에서 바꿀 수 없는 이유가 각각 있다 (ADR-0011).
     public struct StoreConfig: Sendable {
+        /// 최초 기동 시 admin으로 승격할 이메일 목록.
+        ///
+        /// 관리자가 한 명도 없을 때 첫 관리자를 만드는 값이라 관리자 화면에 둘 수 없다.
+        public var initialAdminEmails: [String]
+
+        /// 스토어 앱이 인증 콜백을 받을 커스텀 URL 스킴.
+        ///
+        /// 스토어 앱의 `Info.plist`에 박히는 값이다. 서버에서 혼자 바꾸면 이미 깔린
+        /// 앱의 로그인이 깨진다. 앱과 서버가 함께 바뀌어야 하는 값이라 설정 화면에 두지 않는다.
+        public var callbackURLScheme: String
+
+        /// 설정 행이 아직 없을 때 한 번만 쓰이는 초기값.
+        public var seed: StoreSeed
+    }
+
+    /// 데이터베이스에 설정 행이 없을 때 심는 초기값.
+    ///
+    /// 행이 생긴 뒤로는 무시된다. 셀프호스팅에서 `.env`만 채우면 일단 뜨게 하려고 둔다.
+    public struct StoreSeed: Sendable {
         public var name: String
         public var logoURL: String?
         public var accentColor: String?
-        /// 로그인을 허용할 이메일 도메인. 비어 있으면 도메인 제한을 걸지 않는다.
         public var allowedEmailDomains: [String]
-        /// 최초 기동 시 admin으로 승격할 이메일 목록.
-        public var initialAdminEmails: [String]
-        /// 앱 번들 ID에 요구할 프리픽스. 비어 있으면 강제하지 않는다.
         public var bundleIDPrefix: String?
-        /// 프리픽스를 어길 때 등록을 막을지, 경고만 할지.
         public var enforceBundleIDPrefix: Bool
-        /// 스토어 앱이 인증 콜백을 받을 커스텀 URL 스킴.
-        public var callbackURLScheme: String
     }
 
     public struct DatabaseConfig: Sendable {
@@ -122,14 +138,16 @@ extension AppConfig {
 
         return AppConfig(
             store: StoreConfig(
-                name: optional("STORE_NAME") ?? "App Store",
-                logoURL: optional("STORE_LOGO_URL"),
-                accentColor: optional("STORE_ACCENT_COLOR"),
-                allowedEmailDomains: list("ALLOWED_EMAIL_DOMAINS").map { $0.lowercased() },
                 initialAdminEmails: list("INITIAL_ADMIN_EMAILS").map { $0.lowercased() },
-                bundleIDPrefix: optional("BUNDLE_ID_PREFIX"),
-                enforceBundleIDPrefix: boolean("ENFORCE_BUNDLE_ID_PREFIX", default: true),
-                callbackURLScheme: optional("STORE_APP_URL_SCHEME") ?? "alley"
+                callbackURLScheme: optional("STORE_APP_URL_SCHEME") ?? "alley",
+                seed: StoreSeed(
+                    name: optional("STORE_NAME") ?? "App Store",
+                    logoURL: optional("STORE_LOGO_URL"),
+                    accentColor: optional("STORE_ACCENT_COLOR"),
+                    allowedEmailDomains: list("ALLOWED_EMAIL_DOMAINS").map { $0.lowercased() },
+                    bundleIDPrefix: optional("BUNDLE_ID_PREFIX"),
+                    enforceBundleIDPrefix: boolean("ENFORCE_BUNDLE_ID_PREFIX", default: true)
+                )
             ),
             database: DatabaseConfig(url: try required("DATABASE_URL")),
             storage: StorageConfig(
@@ -151,23 +169,6 @@ extension AppConfig {
                 sessionTTL: try integer("SESSION_TTL", default: 60 * 60 * 24 * 7)
             ),
             publicBaseURL: try required("PUBLIC_BASE_URL")
-        )
-    }
-}
-
-// MARK: - 클라이언트로 내보내는 형태
-
-extension AppConfig {
-    /// 클라이언트 부트스트랩용 메타 정보로 변환한다.
-    ///
-    /// 비밀값이 섞여 나가지 않도록 노출할 항목만 명시적으로 옮긴다.
-    public var storeMeta: StoreMeta {
-        StoreMeta(
-            storeName: store.name,
-            logoURL: store.logoURL,
-            accentColor: store.accentColor,
-            allowedEmailDomains: store.allowedEmailDomains,
-            callbackURLScheme: store.callbackURLScheme
         )
     }
 }

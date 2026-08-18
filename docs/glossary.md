@@ -147,6 +147,18 @@ try await App.query(on: db).filter(\.$bundleID == id).first()
 
 `@Field`, `@Parent`, `@Children`가 `@NSManaged`와 relationship에 해당합니다.
 
+### store_settings 와 씨앗
+
+관리자가 화면에서 바꾸는 설정(스토어 이름, 로고, 강조색, 허용 로그인 도메인,
+번들 ID 프리픽스)은 `store_settings` 테이블의 **행 하나**에 있습니다.
+
+행이 없으면 환경변수 값으로 한 번 만들고(**씨앗**), 그 뒤로는 데이터베이스가
+진실입니다. `.env`를 고쳐도 아무 일도 일어나지 않습니다. 그러지 않으면 화면에서
+바꾼 값이 재시작마다 되돌아갑니다.
+
+비밀값과 부팅에 필요한 값은 환경변수에 남습니다. 어느 쪽이 어디 있는지와 그 이유는
+[ADR-0011](adr/0011-store-settings-in-database.md)에 있습니다.
+
 ---
 
 ## 인증

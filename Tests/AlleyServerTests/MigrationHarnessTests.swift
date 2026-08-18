@@ -8,7 +8,7 @@ import VaporTesting
 ///
 /// 마이그레이션과 제약(유니크, 외래키)은 흉내로 검증되지 않는다. 진짜 PostgreSQL 을
 /// 상대해야 하고, 그러려면 스키마를 올리고 되돌리는 이 하네스가 먼저 믿을 만해야 한다.
-@Suite("테스트 데이터베이스 하네스", .serialized)
+@Suite("테스트 데이터베이스 하네스")
 struct MigrationHarnessTests {
     @Test("스키마를 올리면 표를 쓸 수 있다")
     func migrationsCreateUsableSchema() async throws {

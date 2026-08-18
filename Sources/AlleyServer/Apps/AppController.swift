@@ -74,7 +74,7 @@ public struct AppController: RouteCollection, Sendable {
     func create(request: Request) async throws -> Response {
         let user = try request.requirePublisher()
         let payload = try request.content.decode(CreateAppRequest.self)
-        let config = request.application.alleyConfig
+        let settings = try await request.storeSettings()
 
         let name = payload.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
@@ -82,7 +82,7 @@ public struct AppController: RouteCollection, Sendable {
         }
 
         let bundleID = payload.bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
-        try validateBundleID(bundleID, config: config, logger: request.logger)
+        try validateBundleID(bundleID, settings: settings, logger: request.logger)
 
         // 형식이 맞아도 이미 쓰는 ID 면 안 된다. 같은 번들 ID 를 가진 앱이 둘이면
         // macOS 쪽에서 어느 쪽이 설치돼 있는지 구분할 방법이 없다.
@@ -117,19 +117,19 @@ public struct AppController: RouteCollection, Sendable {
 
     private func validateBundleID(
         _ bundleID: String,
-        config: AppConfig,
+        settings: StoreSettings,
         logger: Logger
     ) throws {
         do {
             try BundleIdentifier.validate(
                 bundleID,
-                requiredPrefix: config.store.bundleIDPrefix
+                requiredPrefix: settings.bundleIDPrefix
             )
         } catch {
             // `validate` 는 타입이 붙은 오류를 던지므로 error 는 ValidationError 다.
             // 프리픽스는 조직의 정책이라 경고만 하고 넘어가도록 설정할 수 있다.
             // 형식 오류는 정책이 아니라 사실이라 언제나 막는다.
-            if case .prefixMismatch = error, !config.store.enforceBundleIDPrefix {
+            if case .prefixMismatch = error, !settings.enforceBundleIDPrefix {
                 logger.notice("번들 ID 프리픽스 규칙에서 벗어난 등록: \(bundleID)")
                 return
             }

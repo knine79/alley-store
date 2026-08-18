@@ -267,6 +267,15 @@ public struct AddAppMemberRequest: Codable, Sendable {
     }
 }
 
+/// 사용자 역할 변경 요청.
+public struct UpdateUserRoleRequest: Codable, Sendable {
+    public var role: UserRole
+
+    public init(role: UserRole) {
+        self.role = role
+    }
+}
+
 /// 앱 메타데이터 수정 요청.
 ///
 /// 번들 ID는 여기 없다. 이미 설치된 앱의 정체성이라 바꾸면 다른 앱이 된다.

@@ -18,6 +18,7 @@
 | [0008](0008-session-token-design.md) | 세션 토큰은 신원만 담고 권한은 매번 조회한다 | 수락됨 | 2026-08-14 |
 | [0009](0009-presigned-artifact-transfer.md) | 바이너리는 서버를 거치지 않고 presigned URL로 주고받는다 | 수락됨 | 2026-08-14 |
 | [0010](0010-cookie-and-bearer-authentication.md) | 세션 토큰을 쿠키와 Authorization 헤더 양쪽에서 받는다 | 수락됨 | 2026-08-14 |
+| [0011](0011-store-settings-in-database.md) | 스토어 설정을 데이터베이스로 옮기고 환경변수는 씨앗으로만 쓴다 | 수락됨 | 2026-08-18 |
 
 ## 언제 쓰나
 

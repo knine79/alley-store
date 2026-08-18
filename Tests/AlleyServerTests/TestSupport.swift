@@ -1,3 +1,4 @@
+import AlleyShared
 import Fluent
 import Foundation
 import Testing
@@ -59,27 +60,103 @@ func withConfiguredApp(
     }
 }
 
+/// 데이터베이스를 쓰는 테스트를 한 줄로 세우는 자물쇠.
+///
+/// Swift Testing 의 `.serialized` 는 **그 스위트 안에서만** 순서를 보장한다.
+/// 스위트끼리는 여전히 병렬로 돈다. 우리 테스트는 전부 같은 데이터베이스의 스키마를
+/// 올렸다 내리므로, 한 스위트가 되돌리는 동안 다른 스위트가 그 표를 읽으면 깨진다.
+///
+/// 스위트마다 `.serialized` 를 붙이는 방법은 새 스위트를 만들 때 잊으면 그만이다.
+/// 그래서 헬퍼 안에 자물쇠를 둬서 잊을 수 없게 한다.
+private actor DatabaseTestLock {
+    static let shared = DatabaseTestLock()
+
+    private var isBusy = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    func acquire() async {
+        guard isBusy else {
+            isBusy = true
+            return
+        }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+
+    func release() {
+        if waiting.isEmpty {
+            isBusy = false
+        } else {
+            // 순서를 유지해서 먼저 기다린 쪽이 먼저 들어가게 한다.
+            waiting.removeFirst().resume()
+        }
+    }
+}
+
 /// 스키마를 올린 뒤 본문을 돌리고, 끝나면 되돌린다.
 ///
 /// 되돌리기를 `defer` 가 아니라 성공·실패 양쪽에서 명시적으로 부르는 이유는,
 /// 실패했을 때 되돌리기까지 실패하면 그 오류가 원래 오류를 덮어버리기 때문이다.
 /// 원래 오류를 살려서 던진다.
 ///
-/// **이 함수를 쓰는 스위트에는 `.serialized` 를 붙여야 한다.** 테스트가 병렬로 돌면
-/// 한쪽이 스키마를 되돌리는 동안 다른 쪽이 그 표를 읽는다.
+/// 같은 데이터베이스를 쓰는 다른 테스트와 겹치지 않도록 자물쇠를 잡고 돈다.
+/// 스위트에 `.serialized` 를 붙일 필요가 없다.
 func withMigratedApp(
     overrides: [String: String] = [:],
     _ body: (Application) async throws -> Void
 ) async throws {
-    try await withConfiguredApp(overrides: overrides) { app in
-        try await app.autoRevert()
-        try await app.autoMigrate()
-        do {
-            try await body(app)
-        } catch {
-            try? await app.autoRevert()
-            throw error
+    await DatabaseTestLock.shared.acquire()
+    do {
+        try await withConfiguredApp(overrides: overrides) { app in
+            try await app.autoRevert()
+            try await app.autoMigrate()
+            do {
+                try await body(app)
+            } catch {
+                try? await app.autoRevert()
+                throw error
+            }
+            try await app.autoRevert()
         }
-        try await app.autoRevert()
+    } catch {
+        await DatabaseTestLock.shared.release()
+        throw error
+    }
+    await DatabaseTestLock.shared.release()
+}
+
+// MARK: - 인증된 요청 만들기
+
+extension Application {
+    /// 테스트용 사용자를 만들고 그 사용자로 인증되는 세션 토큰을 함께 준다.
+    ///
+    /// 로그인 왕복(Google 리다이렉트)은 테스트에서 재현할 수 없으므로 토큰을 직접
+    /// 서명한다. 서명 키는 `configure` 가 넣은 것과 같아서, 미들웨어가 실제로 검증하는
+    /// 경로를 그대로 지난다.
+    func makeUser(
+        email: String,
+        role: UserRole,
+        name: String? = nil
+    ) async throws -> (user: User, token: String) {
+        let user = User(
+            googleSubject: "sub-\(email)",
+            email: email,
+            name: name ?? email,
+            role: role
+        )
+        try await user.save(on: db)
+
+        let token = try await jwt.keys.sign(
+            SessionToken(userID: try user.requireID(), issuedAt: Date(), ttl: 3600)
+        )
+        return (user, token)
+    }
+}
+
+extension HTTPHeaders {
+    /// Bearer 토큰을 실은 헤더.
+    static func bearer(_ token: String) -> HTTPHeaders {
+        var headers = HTTPHeaders()
+        headers.bearerAuthorization = .init(token: token)
+        return headers
     }
 }

@@ -72,7 +72,8 @@ public struct AuthController: RouteCollection, Sendable {
             applicationIdentifier: config.oauth.clientID
         )
 
-        let policy = EmailDomainPolicy(allowedDomains: config.store.allowedEmailDomains)
+        let settings = try await request.storeSettings()
+        let policy = EmailDomainPolicy(allowedDomains: settings.allowedEmailDomains)
         let email: String
         do {
             email = try policy.admit(

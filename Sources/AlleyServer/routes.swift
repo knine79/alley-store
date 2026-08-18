@@ -9,13 +9,17 @@ func routes(_ app: Application) throws {
 
     // 클라이언트 부트스트랩 지점.
     // 스토어 앱은 서버 도메인만 알고 여기서 브랜딩과 인증 설정을 받아간다.
-    app.get(APIPath.meta.pathComponents) { req -> StoreMeta in
-        req.application.alleyConfig.storeMeta
+    app.get(APIPath.meta.pathComponents) { req async throws -> StoreMeta in
+        // 브랜딩과 허용 도메인은 관리자가 화면에서 바꾸므로 요청 시점에 읽는다.
+        // 커스텀 URL 스킴만 환경변수에서 온다 (ADR-0011).
+        try await req.storeSettings()
+            .toMeta(callbackURLScheme: req.application.alleyConfig.store.callbackURLScheme)
     }
 
     try app.register(collection: AuthController())
     try app.register(collection: AppController())
     try app.register(collection: VersionController())
+    try app.register(collection: AdminController())
 }
 
 struct HealthResponse: Content {
