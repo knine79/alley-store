@@ -120,6 +120,21 @@ swift test           # 테스트
 swift run alley-worker version
 ```
 
+### 테스트
+
+테스트는 **전용 데이터베이스**(`alley_test`)를 씁니다. 마이그레이션과 제약(유니크,
+외래키)은 흉내로 검증되지 않아서 진짜 PostgreSQL 을 상대합니다. 테스트가 끝날 때마다
+스키마를 통째로 되돌리므로 개발용 데이터베이스를 쓰면 개발 중이던 데이터가 날아갑니다.
+
+`docker compose up` 을 처음 하는 환경이면 자동으로 만들어집니다. 이미 볼륨이 있다면
+한 번만 손으로 만드세요.
+
+```bash
+docker compose exec postgres createdb -U alley alley_test
+```
+
+다른 데이터베이스를 쓰려면 `TEST_DATABASE_URL` 로 넘깁니다.
+
 ### 로컬 개발 루프
 
 서버는 호스트에서 돌리고 데이터베이스와 스토리지만 컨테이너로 띄우면 빌드가 빠릅니다.

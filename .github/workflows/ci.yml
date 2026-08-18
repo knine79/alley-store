@@ -16,6 +16,23 @@ jobs:
     name: 빌드 및 테스트 (Linux)
     runs-on: ubuntu-latest
     container: swift:6.2-noble
+    services:
+      # 테스트가 실제 PostgreSQL 을 쓴다. 마이그레이션과 제약(유니크, 외래키)은
+      # 흉내로는 검증되지 않는다.
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: alley
+          POSTGRES_PASSWORD: alley
+          POSTGRES_DB: alley_test
+        options: >-
+          --health-cmd "pg_isready -U alley -d alley_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # 잡 컨테이너 안에서는 서비스를 이름으로 부른다.
+      TEST_DATABASE_URL: postgres://alley:alley@postgres:5432/alley_test
     steps:
       - uses: actions/checkout@v4
 
