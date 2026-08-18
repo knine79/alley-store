@@ -18,6 +18,7 @@ public func configure(_ app: Application, config: AppConfig) async throws {
     try configureStorage(app, config: config.storage)
 
     app.views.use(.leaf)
+    configureMiddleware(app)
 
     // 업로드는 presigned URL로 스토리지에 직접 올라가므로
     // 서버가 큰 바디를 받을 일이 없다.
@@ -51,6 +52,22 @@ private func configureMigrations(_ app: Application) {
 
     // 설정 행은 마이그레이션이 아니라 최초 접근 시점에 심는다 (ADR-0011).
     app.migrations.add(CreateStoreSettings())
+}
+
+/// 미들웨어 스택.
+///
+/// 기본 스택을 그대로 두지 않고 새로 쌓는다. Vapor 기본값에는 언제나 JSON 을 주는
+/// `ErrorMiddleware` 가 들어 있는데, 웹 콘솔에서 주소를 잘못 치면 사용자가
+/// `{"error":true,...}` 를 보게 된다.
+///
+/// 순서가 중요하다. 오류 처리가 가장 바깥에 있어야 안쪽에서 난 오류를 다 잡는다.
+private func configureMiddleware(_ app: Application) {
+    app.middleware = .init()
+    app.middleware.use(ConsoleErrorMiddleware())
+    // 쿠키로 인증된 상태 변경 요청의 출처를 확인한다 (ADR-0010 후속).
+    app.middleware.use(OriginCheckMiddleware())
+    // Public/ 의 정적 파일. 라우트에서 못 찾으면 여기서 찾는다.
+    app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
 }
 
 /// 오브젝트 스토리지 연결.

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>#if(page.title):#(page.title) · #endif#(page.store.name)</title>
+    <link rel="stylesheet" href="/console.css">
+    #if(page.store.accentColor):
+    <style>:root { --accent: #(page.store.accentColor); }</style>
+    #endif
+</head>
+<body>
+    <header class="chrome">
+        <div class="chrome-inner">
+            <a class="brand" href="/">
+                #if(page.store.logoURL):
+                <img class="brand-logo" src="#(page.store.logoURL)" alt="">
+                #endif
+                <span class="brand-name">#(page.store.name)</span>
+            </a>
+
+            #if(page.user):
+            <nav class="chrome-nav">
+                <span class="chrome-user" title="#(page.user.email)">#(page.user.name)</span>
+                <form method="post" action="/logout">
+                    <button class="button button-quiet" type="submit">로그아웃</button>
+                </form>
+            </nav>
+            #endif
+        </div>
+    </header>
+
+    <main class="page">
+        #import("content")
+    </main>
+</body>
+</html>

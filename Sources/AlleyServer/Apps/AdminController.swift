@@ -46,10 +46,16 @@ public struct AdminController: RouteCollection, Sendable {
 
         // 빈 문자열은 "지우기"로 본다. 항목을 안 보낸 것과 구분된다.
         if let logoURL = payload.logoURL {
-            settings.logoURL = logoURL.isEmpty ? nil : logoURL
+            settings.logoURL = logoURL.isEmpty
+                ? nil
+                : try StoreSettingsValidation.validatedLogoURL(logoURL)
         }
         if let accentColor = payload.accentColor {
-            settings.accentColor = accentColor.isEmpty ? nil : accentColor
+            // 화면의 <style> 안에 그대로 들어가는 값이다. 오타 하나로 콘솔이
+            // 통째로 깨지면 되돌릴 화면조차 안 보인다.
+            settings.accentColor = accentColor.isEmpty
+                ? nil
+                : try StoreSettingsValidation.validatedAccentColor(accentColor)
         }
         if let prefix = payload.bundleIDPrefix {
             settings.bundleIDPrefix = prefix.isEmpty ? nil : prefix

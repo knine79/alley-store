@@ -160,3 +160,12 @@ extension HTTPHeaders {
         return headers
     }
 }
+
+extension HTTPHeaders {
+    /// 웹 콘솔처럼 세션 쿠키로 인증하는 요청의 헤더.
+    static func sessionCookie(_ token: String) -> HTTPHeaders {
+        var headers = HTTPHeaders()
+        headers.cookie = HTTPCookies(dictionaryLiteral: (sessionCookieName, .init(string: token)))
+        return headers
+    }
+}

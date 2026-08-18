@@ -29,8 +29,9 @@ WORKDIR /staging
 RUN cp "$(swift build --package-path /build -c release --show-bin-path)/alley-server" ./ \
     && cp -R /usr/lib/swift/linux/*.so* ./ 2>/dev/null || true \
     && find -L /build/.build/release -regex '.*\.resources$' -exec cp -Ra {} ./ \; \
-    && [ -d /build/Web/Public ] && cp -R /build/Web/Public ./Public || mkdir -p ./Public \
-    && [ -d /build/Web/Views ] && cp -R /build/Web/Views ./Views || mkdir -p ./Views
+    && cp -R /build/Public ./Public \
+    && mkdir -p ./Resources \
+    && cp -R /build/Resources/Views ./Resources/Views
 
 # ==============================================================================
 # 실행 단계

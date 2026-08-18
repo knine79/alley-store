@@ -1,0 +1,9 @@
+#extend("layout"):
+#export("content"):
+<section class="hero">
+    <p class="status-code">#(statusCode)</p>
+    <h1 class="hero-title">#(reason)</h1>
+    <a class="button" href="/">처음으로</a>
+</section>
+#endexport
+#endextend

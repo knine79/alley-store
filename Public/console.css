@@ -1,0 +1,271 @@
+/*
+ * 웹 콘솔 스타일.
+ *
+ * 빌드 스텝 없이 이 한 장으로 끝낸다. 프레임워크를 들이면 Node 툴체인이 따라오고,
+ * 그건 Swift 레포에 프론트엔드 빌드 파이프라인을 얹는 일이 된다.
+ *
+ * 색과 로고는 스토어 설정에서 온다. --accent 를 레이아웃이 덮어쓰므로 여기 값은
+ * 설정이 비었을 때의 기본값이다. 특정 조직의 색을 여기 박으면 안 된다 (ADR-0003).
+ */
+
+:root {
+    --accent: #3b6fd4;
+    --accent-text: #ffffff;
+
+    --bg: #f7f7f8;
+    --surface: #ffffff;
+    --border: #e2e2e5;
+    --text: #1a1a1e;
+    --text-muted: #6b6b74;
+    --warning-bg: #fff8e6;
+    --warning-border: #e8d5a3;
+    --warning-text: #6b5316;
+
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --space-7: 48px;
+
+    --radius: 8px;
+    --radius-small: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #16161a;
+        --surface: #1e1e23;
+        --border: #33333b;
+        --text: #ececf0;
+        --text-muted: #9a9aa4;
+        --warning-bg: #2e2717;
+        --warning-border: #4d4126;
+        --warning-text: #e2c98a;
+    }
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR",
+        system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+}
+
+code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    font-size: 0.9em;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-small);
+    padding: 1px var(--space-1);
+}
+
+/* ── 상단 껍데기 ─────────────────────────────────────────── */
+
+.chrome {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+}
+
+.chrome-inner {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: var(--space-3) var(--space-5);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+}
+
+.brand {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: inherit;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.brand-logo {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-small);
+    object-fit: contain;
+}
+
+.chrome-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.chrome-user {
+    color: var(--text-muted);
+    font-size: 14px;
+    /* 이름이 길어도 껍데기가 무너지지 않게 한다. */
+    max-width: 14em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chrome-nav form {
+    margin: 0;
+}
+
+/* ── 본문 ────────────────────────────────────────────────── */
+
+.page {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: var(--space-6) var(--space-5) var(--space-7);
+}
+
+.page-title {
+    margin: 0 0 var(--space-2);
+    font-size: 26px;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+}
+
+.page-lead {
+    margin: 0 0 var(--space-6);
+    color: var(--text-muted);
+}
+
+/* ── 로그인·오류처럼 가운데 세우는 화면 ──────────────────── */
+
+.hero {
+    max-width: 30rem;
+    margin: var(--space-7) auto;
+    text-align: center;
+}
+
+.hero-title {
+    margin: 0 0 var(--space-3);
+    font-size: 28px;
+    line-height: 1.3;
+    letter-spacing: -0.02em;
+}
+
+.hero-lead {
+    margin: 0 0 var(--space-6);
+    color: var(--text-muted);
+}
+
+.hero-note {
+    margin: var(--space-5) 0 0;
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.hero-note.warning {
+    background: var(--warning-bg);
+    border: 1px solid var(--warning-border);
+    color: var(--warning-text);
+    border-radius: var(--radius);
+    padding: var(--space-3) var(--space-4);
+    text-align: left;
+}
+
+.status-code {
+    margin: 0 0 var(--space-2);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+}
+
+/* ── 버튼 ────────────────────────────────────────────────── */
+
+.button {
+    display: inline-block;
+    padding: var(--space-2) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-small);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 14px;
+    line-height: 1.4;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.button:hover {
+    border-color: var(--text-muted);
+}
+
+.button-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-text);
+    font-weight: 500;
+}
+
+.button-primary:hover {
+    /* 강조색이 설정에서 오므로 명도를 직접 계산할 수 없다.
+       투명도로 눌러서 어떤 색에서도 눌린 느낌이 나게 한다. */
+    opacity: 0.9;
+    border-color: var(--accent);
+}
+
+.button-large {
+    padding: var(--space-3) var(--space-5);
+    font-size: 15px;
+}
+
+.button-quiet {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-muted);
+}
+
+.button-quiet:hover {
+    border-color: var(--border);
+    color: var(--text);
+}
+
+.button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* ── 비어 있는 상태 ──────────────────────────────────────── */
+
+.empty {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--space-6);
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.empty p {
+    margin: 0;
+}
+
+.empty-note {
+    margin-top: var(--space-2) !important;
+    font-size: 14px;
+}
+
+/* 허용 도메인처럼 짧은 항목을 나열하는 자리. */
+.domain-list {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+}
