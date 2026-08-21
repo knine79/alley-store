@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>#if(page.title):#(page.title) · #endif#(page.store.name)</title>
-    <link rel="stylesheet" href="/console.css">
+    <link rel="stylesheet" href="/console.css?v=#(page.assetVersion)">
     #if(page.store.accentColor):
     <style>:root { --accent: #(page.store.accentColor); }</style>
     #endif

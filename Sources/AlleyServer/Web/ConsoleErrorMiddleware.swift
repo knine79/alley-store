@@ -99,7 +99,8 @@ public struct ConsoleErrorMiddleware: AsyncMiddleware {
                     page: PageContext(
                         title: "\(status.code)",
                         store: settings.toChrome(),
-                        user: request.auth.get(User.self).flatMap { try? $0.toDTO() }
+                        user: request.auth.get(User.self).flatMap { try? $0.toDTO() },
+                        assetVersion: request.application.assetVersion.value
                     ),
                     statusCode: Int(status.code),
                     reason: reason

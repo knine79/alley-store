@@ -18,6 +18,8 @@ public func configure(_ app: Application, config: AppConfig) async throws {
     try configureStorage(app, config: config.storage)
 
     app.views.use(.leaf)
+    // 정적 파일 주소에 붙일 지문. 파일이 바뀌면 값이 바뀌어 브라우저가 새로 받는다.
+    app.assetVersion = AssetVersion(publicDirectory: app.directory.publicDirectory)
     configureMiddleware(app)
 
     // 업로드는 presigned URL로 스토리지에 직접 올라가므로
@@ -66,6 +68,9 @@ private func configureMiddleware(_ app: Application) {
     app.middleware.use(ConsoleErrorMiddleware())
     // 쿠키로 인증된 상태 변경 요청의 출처를 확인한다 (ADR-0010 후속).
     app.middleware.use(OriginCheckMiddleware())
+    // 정적 파일이 브라우저에 눌러앉지 않게 한다. FileMiddleware 보다 바깥에 둬야
+    // 그쪽이 만든 응답에 헤더를 붙일 수 있다.
+    app.middleware.use(StaticCacheMiddleware())
     // Public/ 의 정적 파일. 라우트에서 못 찾으면 여기서 찾는다.
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
 }

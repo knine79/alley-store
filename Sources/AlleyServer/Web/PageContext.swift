@@ -9,6 +9,8 @@ struct PageContext: Encodable {
     var title: String?
     var store: StoreChrome
     var user: UserDTO?
+    /// 정적 파일 주소에 붙는 지문. `AssetVersion` 참고.
+    var assetVersion: String
 }
 
 /// 화면에 바르는 브랜딩.
@@ -35,7 +37,8 @@ extension Request {
         PageContext(
             title: title,
             store: try await storeSettings().toChrome(),
-            user: auth.get(User.self).flatMap { try? $0.toDTO() }
+            user: auth.get(User.self).flatMap { try? $0.toDTO() },
+            assetVersion: application.assetVersion.value
         )
     }
 }

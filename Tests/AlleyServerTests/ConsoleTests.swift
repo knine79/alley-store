@@ -90,6 +90,52 @@ struct ConsoleViewTests {
     }
 }
 
+@Suite("정적 파일 캐시")
+struct StaticCacheTests {
+    @Test("정적 파일은 쓸 때마다 서버에 물어보게 한다")
+    func assetsRevalidate() async throws {
+        try await withMigratedApp { app in
+            try await app.testing().test(.GET, "/console.css") { response in
+                // Cache-Control 이 없으면 브라우저가 자기 판단으로 캐시한다.
+                // 그러면 고친 CSS 가 조용히 반영되지 않는다.
+                #expect(response.headers.first(name: .cacheControl) == "no-cache")
+                #expect(response.headers.first(name: .eTag) != nil)
+            }
+        }
+    }
+
+    @Test("화면 응답에는 붙이지 않는다")
+    func pagesAreNotTaggedAsAssets() async throws {
+        try await withMigratedApp { app in
+            try await app.testing().test(.GET, "/") { response in
+                #expect(response.headers.first(name: .cacheControl) == nil)
+            }
+        }
+    }
+
+    @Test("정적 파일 주소에 지문이 붙는다")
+    func stylesheetURLIsFingerprinted() async throws {
+        try await withMigratedApp { app in
+            try await app.testing().test(.GET, "/") { response in
+                // Cache-Control 은 새로 받는 응답에만 걸린다. 이미 캐시된 항목까지
+                // 확실히 갈아치우려면 주소가 바뀌어야 한다.
+                #expect(response.body.string.contains("/console.css?v="))
+            }
+        }
+    }
+
+    @Test("파일이 그대로면 지문도 그대로다")
+    func fingerprintIsStableForSameFiles() async throws {
+        try await withMigratedApp { app in
+            let first = AssetVersion(publicDirectory: app.directory.publicDirectory).value
+            let second = AssetVersion(publicDirectory: app.directory.publicDirectory).value
+            // 매번 달라지면 캐시가 아무 의미가 없어진다.
+            #expect(first == second)
+            #expect(!first.isEmpty)
+        }
+    }
+}
+
 @Suite("오류 응답 형식")
 struct ConsoleErrorTests {
     @Test("API 경로는 JSON 오류를 준다")
