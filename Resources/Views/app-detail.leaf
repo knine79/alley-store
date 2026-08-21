@@ -2,14 +2,9 @@
 #export("content"):
 <nav class="breadcrumb"><a href="/apps">앱</a></nav>
 
-<div class="page-head">
-    <div>
-        <h1 class="page-title">#(app.name)</h1>
-        <p class="page-lead"><code>#(app.bundleID)</code></p>
-    </div>
-    #if(canUpload):
-    <a class="button button-primary" href="/apps/#(app.id)/versions/new">새 버전</a>
-    #endif
+<div class="title-row">
+    <h1 class="page-title">#(app.name)</h1>
+    <code class="title-id">#(app.bundleID)</code>
 </div>
 
 #if(app.summary):
@@ -22,31 +17,36 @@
 <section class="section">
     <h2 class="section-title">버전</h2>
     #if(count(versions) == 0):
-    <div class="empty"><p>아직 올린 버전이 없습니다.</p></div>
+    <div class="empty">
+        <p>아직 올린 버전이 없습니다.</p>
+        #if(canUpload):
+        <p class="empty-note">업로드 화면은 아직 만드는 중입니다. 지금은 API 로 올릴 수 있습니다.</p>
+        #endif
+    </div>
     #else:
     <table class="table">
         <thead>
             <tr>
-                <th>버전</th>
-                <th>빌드</th>
-                <th>상태</th>
-                <th>크기</th>
-                <th>올린 날짜</th>
+                <th class="table-tight">버전</th>
+                <th class="table-tight">빌드</th>
+                <th class="table-tight">크기</th>
+                <th class="table-tight">올린 날짜</th>
+                <th class="table-fill">상태</th>
             </tr>
         </thead>
         <tbody>
             #for(version in versions):
             <tr>
-                <td class="table-strong">#(version.shortVersion)</td>
-                <td class="table-muted">#(version.buildNumber)</td>
-                <td>
+                <td class="table-tight table-strong">#(version.shortVersion)</td>
+                <td class="table-tight table-muted">#(version.buildNumber)</td>
+                <td class="table-tight table-muted">#if(version.fileSize):#(version.fileSize)#else:—#endif</td>
+                <td class="table-tight table-muted">#(version.createdAt)</td>
+                <td class="table-fill">
                     <span class="badge badge-#(version.state)">#(version.stateName)</span>
                     #if(version.failureReason):
                     <span class="table-note">#(version.failureReason)</span>
                     #endif
                 </td>
-                <td class="table-muted">#if(version.fileSize):#(version.fileSize)#else:—#endif</td>
-                <td class="table-muted">#(version.createdAt)</td>
             </tr>
             #endfor
         </tbody>
