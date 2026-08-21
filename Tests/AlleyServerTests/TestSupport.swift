@@ -169,3 +169,56 @@ extension HTTPHeaders {
         return headers
     }
 }
+
+extension HTTPHeaders {
+    /// 브라우저 폼 제출을 흉내낸 헤더.
+    ///
+    /// 쿠키와 함께 `Origin` 을 붙인다. `Host` 도 맞춰서 출처 검사를 통과하게 한다.
+    /// 검사 자체는 별도 테스트에서 확인한다.
+    static func form(cookie token: String, origin: String = "http://localhost:8080") -> HTTPHeaders {
+        var headers = HTTPHeaders.sessionCookie(token)
+        headers.add(name: .origin, value: origin)
+        headers.replaceOrAdd(name: .host, value: "localhost:8080")
+        headers.contentType = .urlEncodedForm
+        return headers
+    }
+}
+
+// MARK: - 픽스처
+
+extension Application {
+    /// 테스트용 앱 하나.
+    @discardableResult
+    func seedApp(bundleID: String, name: String, owner: User) async throws -> App {
+        let record = App(bundleID: bundleID, name: name, ownerID: try owner.requireID())
+        try await record.save(on: db)
+        // 화면이 오너 이메일을 읽으므로 관계를 채워둔다.
+        record.$owner.value = owner
+        return record
+    }
+
+    /// 테스트용 버전 하나.
+    ///
+    /// 상태를 직접 넣는다. 전이 규칙을 거치면 픽스처마다 여러 단계를 밟아야 하고,
+    /// 그러면 상태 머신 테스트와 화면 테스트가 얽힌다.
+    @discardableResult
+    func seedVersion(
+        appID: UUID,
+        short: String,
+        build: Int,
+        state: VersionState,
+        by user: User,
+        uploadKind: UploadKind = .unsigned
+    ) async throws -> Version {
+        let version = Version(
+            appID: appID,
+            shortVersion: short,
+            buildNumber: build,
+            uploadKind: uploadKind,
+            createdByID: try user.requireID(),
+            state: state
+        )
+        try await version.save(on: db)
+        return version
+    }
+}

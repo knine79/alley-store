@@ -61,6 +61,22 @@ public enum VersionState: String, Codable, Sendable, CaseIterable {
     public var isPubliclyVisible: Bool {
         self == .released
     }
+
+    /// 화면에 그대로 쓰는 이름.
+    ///
+    /// 웹 콘솔과 스토어 앱이 같은 말을 써야 해서 여기 둔다. 상태를 각자 번역하면
+    /// 같은 버전이 웹에서는 "준비됨", 앱에서는 "대기 중"으로 보인다.
+    public var displayName: String {
+        switch self {
+        case .draft: return "업로드 대기"
+        case .uploaded: return "서명 대기"
+        case .signing: return "서명 중"
+        case .notarizing: return "공증 대기"
+        case .ready: return "배포 준비됨"
+        case .released: return "출시됨"
+        case .failed: return "실패"
+        }
+    }
 }
 
 /// 서명 워커가 처리하는 잡의 상태.

@@ -1,0 +1,46 @@
+#extend("layout"):
+#export("content"):
+<div class="page-head">
+    <div>
+        <h1 class="page-title">앱</h1>
+        <p class="page-lead">
+            #if(canRegister):등록된 앱과 준비 중인 앱을 모두 봅니다.#else:출시된 앱을 내려받을 수 있습니다.#endif
+        </p>
+    </div>
+    #if(canRegister):
+    <a class="button button-primary" href="/apps/new">새 앱</a>
+    #endif
+</div>
+
+#if(count(apps) == 0):
+<div class="empty">
+    <p>아직 등록된 앱이 없습니다.</p>
+    #if(canRegister):
+    <p class="empty-note">첫 앱을 등록하면 여기에 표시됩니다.</p>
+    #endif
+</div>
+#else:
+<ul class="card-list">
+    #for(app in apps):
+    <li class="card">
+        <a class="card-link" href="/apps/#(app.id)">
+            <span class="card-title">#(app.name)</span>
+            <code class="card-id">#(app.bundleID)</code>
+        </a>
+        #if(app.summary):
+        <p class="card-summary">#(app.summary)</p>
+        #endif
+        <p class="card-meta">
+            #if(app.latestReleasedVersion):
+            <span class="badge badge-released">#(app.latestReleasedVersion) 출시됨</span>
+            #else:
+            <span class="badge">출시본 없음</span>
+            #endif
+            #if(app.category):<span class="card-category">#(app.category)</span>#endif
+        </p>
+    </li>
+    #endfor
+</ul>
+#endif
+#endexport
+#endextend

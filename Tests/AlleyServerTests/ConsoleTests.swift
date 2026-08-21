@@ -36,15 +36,31 @@ struct ConsoleViewTests {
         }
     }
 
-    @Test("로그인하면 사용자와 로그아웃이 보인다")
-    func showsUserWhenSignedIn() async throws {
+    @Test("로그인하면 첫 화면이 앱 목록으로 보낸다")
+    func signedInHomeGoesToApps() async throws {
+        try await withMigratedApp { app in
+            let (_, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+
+            // 콘솔에 들어와서 하려는 일은 대개 앱을 보거나 올리는 것이다.
+            // 중간에 한 장을 더 두면 매번 한 번씩 더 눌러야 한다.
+            try await app.testing().test(
+                .GET, "/", headers: .sessionCookie(token)
+            ) { response in
+                #expect(response.status == .seeOther)
+                #expect(response.headers.first(name: .location) == "/apps")
+            }
+        }
+    }
+
+    @Test("로그인하면 껍데기에 사용자와 로그아웃이 보인다")
+    func chromeShowsUserWhenSignedIn() async throws {
         try await withMigratedApp { app in
             let (_, token) = try await app.makeUser(
                 email: "dev@example.com", role: .developer, name: "개발자"
             )
 
             try await app.testing().test(
-                .GET, "/", headers: .sessionCookie(token)
+                .GET, "/apps", headers: .sessionCookie(token)
             ) { response in
                 #expect(response.status == .ok)
                 let html = response.body.string

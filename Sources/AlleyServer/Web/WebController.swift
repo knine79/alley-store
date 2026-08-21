@@ -22,20 +22,17 @@ public struct WebController: RouteCollection, Sendable {
     }
 
     /// 첫 화면. 로그인 상태에 따라 갈린다.
+    ///
+    /// 로그인해 있으면 앱 목록으로 보낸다. 콘솔에 들어와서 하려는 일은 대개 앱을
+    /// 보거나 올리는 것이라, 중간에 한 장을 더 두면 매번 한 번씩 더 눌러야 한다.
     @Sendable
-    func home(request: Request) async throws -> View {
-        if let user = request.auth.get(User.self) {
-            return try await request.view.render(
-                "home",
-                HomeContext(
-                    page: try await request.pageContext(),
-                    canPublish: user.role.canPublish,
-                    canAdminister: user.role.canAdminister
-                )
-            ).get()
+    func home(request: Request) async throws -> Response {
+        if request.auth.has(User.self) {
+            return request.redirect(to: "/apps")
         }
+
         let settings = try await request.storeSettings()
-        return try await request.view.render(
+        let view = try await request.view.render(
             "login",
             LoginContext(
                 page: try await request.pageContext(title: "로그인"),
@@ -43,6 +40,11 @@ public struct WebController: RouteCollection, Sendable {
                 authorizationPath: APIPath.googleAuthorize
             )
         ).get()
+
+        let response = Response(status: .ok)
+        response.headers.contentType = .html
+        response.body = .init(buffer: view.data)
+        return response
     }
 
     /// 로그아웃.
@@ -61,12 +63,6 @@ public struct WebController: RouteCollection, Sendable {
 }
 
 // MARK: - 화면별 데이터
-
-struct HomeContext: Encodable {
-    var page: PageContext
-    var canPublish: Bool
-    var canAdminister: Bool
-}
 
 struct LoginContext: Encodable {
     var page: PageContext

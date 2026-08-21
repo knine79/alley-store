@@ -1,0 +1,75 @@
+#extend("layout"):
+#export("content"):
+<nav class="breadcrumb"><a href="/apps">앱</a></nav>
+
+<div class="page-head">
+    <div>
+        <h1 class="page-title">#(app.name)</h1>
+        <p class="page-lead"><code>#(app.bundleID)</code></p>
+    </div>
+    #if(canUpload):
+    <a class="button button-primary" href="/apps/#(app.id)/versions/new">새 버전</a>
+    #endif
+</div>
+
+#if(app.summary):
+<p class="lead-text">#(app.summary)</p>
+#endif
+#if(app.details):
+<p class="body-text">#(app.details)</p>
+#endif
+
+<section class="section">
+    <h2 class="section-title">버전</h2>
+    #if(count(versions) == 0):
+    <div class="empty"><p>아직 올린 버전이 없습니다.</p></div>
+    #else:
+    <table class="table">
+        <thead>
+            <tr>
+                <th>버전</th>
+                <th>빌드</th>
+                <th>상태</th>
+                <th>크기</th>
+                <th>올린 날짜</th>
+            </tr>
+        </thead>
+        <tbody>
+            #for(version in versions):
+            <tr>
+                <td class="table-strong">#(version.shortVersion)</td>
+                <td class="table-muted">#(version.buildNumber)</td>
+                <td>
+                    <span class="badge badge-#(version.state)">#(version.stateName)</span>
+                    #if(version.failureReason):
+                    <span class="table-note">#(version.failureReason)</span>
+                    #endif
+                </td>
+                <td class="table-muted">#if(version.fileSize):#(version.fileSize)#else:—#endif</td>
+                <td class="table-muted">#(version.createdAt)</td>
+            </tr>
+            #endfor
+        </tbody>
+    </table>
+    #endif
+</section>
+
+#if(canUpload):
+<section class="section">
+    <h2 class="section-title">업로드 권한</h2>
+    <ul class="person-list">
+        #for(member in members):
+        <li class="person">
+            <span class="person-name">#(member.user.name)</span>
+            <span class="person-email">#(member.user.email)</span>
+            #if(member.isOwner):<span class="badge">오너</span>#endif
+        </li>
+        #endfor
+    </ul>
+    #if(canManage):
+    <p class="field-note">멤버 추가와 제거는 아직 API 로만 됩니다.</p>
+    #endif
+</section>
+#endif
+#endexport
+#endextend
