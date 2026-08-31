@@ -10,6 +10,7 @@ let package = Package(
         .library(name: "AlleyShared", targets: ["AlleyShared"]),
         .executable(name: "alley-server", targets: ["AlleyServer"]),
         .executable(name: "alley-worker", targets: ["AlleyWorker"]),
+        .executable(name: "alley", targets: ["AlleyCLI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/vapor/vapor.git", from: "4.106.0"),
@@ -60,7 +61,19 @@ let package = Package(
             dependencies: ["AlleyWorkerCore"]
         ),
 
+        // CI 에서 버전을 올리는 도구. 서버·워커와 같은 DTO 를 쓴다.
+        .target(
+            name: "AlleyCLICore",
+            dependencies: [
+                "AlleyShared",
+                "AlleyProcess",
+                .product(name: "Crypto", package: "swift-crypto"),
+            ]
+        ),
+        .executableTarget(name: "AlleyCLI", dependencies: ["AlleyCLICore"]),
+
         .testTarget(name: "AlleySharedTests", dependencies: ["AlleyShared"]),
+        .testTarget(name: "AlleyCLITests", dependencies: ["AlleyCLICore"]),
         .testTarget(name: "AlleyWorkerTests", dependencies: ["AlleyWorkerCore"]),
         .testTarget(
             name: "AlleyServerTests",
