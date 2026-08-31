@@ -50,9 +50,10 @@ Alley는 이 과정을 하나의 흐름으로 묶습니다.
 | 디렉터리 | 설명 |
 | --- | --- |
 | `Sources/AlleyShared` | 서버·워커·스토어 앱이 공유하는 DTO와 API 경로 |
+| `Sources/AlleyProcess` | 외부 명령 실행 (워커와 앱이 `codesign` 등을 부른다) |
 | `Sources/AlleyServer` | Vapor 기반 API 서버와 웹 콘솔 |
-| `Sources/AlleyWorker` | macOS 서명 워커 |
-| `StoreApp` | SwiftUI 스토어 앱 (예정) |
+| `Sources/AlleyWorkerCore` | 서명·공증 파이프라인 |
+| `Sources/AlleyStoreCore` | SwiftUI 스토어 앱 (macOS 전용) |
 
 세 계층이 같은 Swift 타입을 공유하므로 API 스펙이 어긋나면 컴파일 단계에서 잡힙니다.
 
@@ -97,6 +98,30 @@ swift run alley-worker preflight
 
 `preflight` 는 서명과 공증에 필요한 것들이 실제로 준비됐는지 확인합니다.
 잡을 받은 뒤 환경 문제로 실패하는 상황을 미리 걸러냅니다.
+
+확인이 끝나면 설치합니다. `launchd` 에 등록해서 로그인할 때마다 뜨게 합니다.
+
+```bash
+./scripts/install-worker.sh
+```
+
+서명 키는 로그인 키체인에 있고 그 키체인은 로그아웃 상태에서 잠겨 있으므로,
+시스템 데몬이 아니라 LaunchAgent 로 설치합니다. 로그는
+`~/Library/Logs/alley-worker.log` 에 쌓입니다.
+
+### 스토어 앱 빌드
+
+```bash
+./scripts/build-store-app.sh          # 번들만 만든다
+./scripts/build-store-app.sh --sign   # 서명·공증까지 한다
+```
+
+`.build/store-app/` 아래에 `.app` 이 만들어집니다. 조직 고유값(번들 ID, 앱 이름,
+로그인 콜백 스킴)은 환경변수로 넘깁니다. Xcode 프로젝트를 두지 않는 이유는
+[ADR-0014](docs/adr/0014-store-app-without-xcode-project.md)에 있습니다.
+
+첫 배포는 웹 콘솔에서 직접 내려받습니다. 그 뒤로는 스토어 앱이 자기 자신도
+스토어에서 업데이트합니다.
 
 ## 설정
 
