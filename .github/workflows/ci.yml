@@ -49,9 +49,9 @@ jobs:
       - name: 테스트
         run: swift test --skip-build
 
-  # 워커는 macOS 전용이므로 별도로 빌드한다.
-  build-worker:
-    name: 워커 빌드 (macOS)
+  # 워커와 스토어 앱은 macOS 전용이다. 리눅스 잡은 이 둘을 짓지 못한다.
+  build-macos:
+    name: 워커·스토어 앱 (macOS)
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -68,6 +68,14 @@ jobs:
 
       - name: 실행 확인
         run: swift run alley-worker version
+
+      - name: 스토어 앱 번들 조립
+        run: ./scripts/build-store-app.sh
+
+      # 이 테스트들은 macOS 에서만 지어진다. 리눅스 잡이 돌리는 swift test 에는
+      # 스토어 앱 타깃이 아예 없으므로 여기서 돌리지 않으면 아무도 돌리지 않는다.
+      - name: macOS 전용 테스트
+        run: swift test --filter 'AlleyStoreTests|AlleyWorkerTests'
 
   # 조직 고유값이 소스에 섞이지 않았는지 검사한다.
   denylist:
