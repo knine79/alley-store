@@ -24,6 +24,8 @@ struct AppPagesController: RouteCollection, Sendable {
         pages.post("new", use: submitNew)
         pages.get(":appID", use: detail)
         pages.post(":appID", "edit", use: submitEdit)
+        pages.post(":appID", "deploy-tokens", use: issueDeployToken)
+        pages.post(":appID", "deploy-tokens", ":tokenID", "revoke", use: revokeDeployToken)
     }
 
     // MARK: - 목록
@@ -125,6 +127,14 @@ struct AppPagesController: RouteCollection, Sendable {
 
     @Sendable
     func detail(request: Request) async throws -> View {
+        try await renderDetail(on: request, issuedToken: nil)
+    }
+
+    /// 상세 화면을 그린다.
+    ///
+    /// 방금 발급한 토큰이 있으면 함께 넘긴다. 서버는 해시만 갖고 있어서 다음 요청에는
+    /// 보여줄 방법이 없다. 그래서 발급 직후에만 이 자리에 실린다.
+    func renderDetail(on request: Request, issuedToken: IssuedDeployToken?) async throws -> View {
         let user = try request.requireUser()
         let app = try await request.findApp()
         try await app.$owner.load(on: request.db)
@@ -143,6 +153,16 @@ struct AppPagesController: RouteCollection, Sendable {
             members = try await loadMembers(of: app, on: request.db)
         }
 
+        // 배포 토큰은 앱을 관리하는 사람만 본다. 멤버에게는 있는지조차 알릴 이유가 없다.
+        var deployTokens: [DeployTokenRow] = []
+        if canManage {
+            deployTokens = try await DeployToken.query(on: request.db)
+                .filter(\.$app.$id == app.requireID())
+                .sort(\.$name)
+                .all()
+                .map { try DeployTokenRow(token: $0) }
+        }
+
         // 실패한 버전은 로그가 있어야 올린 사람이 스스로 고칠 수 있다.
         // 올릴 권한이 없는 사람에게는 보여줄 이유가 없다. 워커 환경이 드러난다.
         let logs = canUpload
@@ -156,6 +176,8 @@ struct AppPagesController: RouteCollection, Sendable {
                 app: try AppRow(app: app, latestReleased: nil),
                 versions: try versions.map { try VersionRow(version: $0, log: logs[try $0.requireID()]) },
                 members: members,
+                deployTokens: deployTokens,
+                issuedToken: issuedToken,
                 canUpload: canUpload,
                 canManage: canManage
             )
@@ -178,6 +200,53 @@ struct AppPagesController: RouteCollection, Sendable {
                 category: values.category ?? ""
             ),
             on: request.db
+        )
+        return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
+    }
+
+    // MARK: - 배포 토큰
+
+    @Sendable
+    func issueDeployToken(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        try app.requireManageAccess(for: user)
+
+        let values = try request.content.decode(DeployTokenFormValues.self)
+        let created = try await DeployTokenIssuing.issue(
+            named: values.name ?? "",
+            for: app,
+            by: user,
+            on: request.db,
+            logger: request.logger
+        )
+
+        // 리다이렉트하지 않는다. 토큰은 이 응답에만 있고 다시 볼 방법이 없다.
+        let view = try await renderDetail(
+            on: request,
+            issuedToken: IssuedDeployToken(name: created.token.name, value: created.value)
+        )
+        let response = Response(status: .created)
+        response.headers.contentType = .html
+        response.body = .init(buffer: view.data)
+        return response
+    }
+
+    @Sendable
+    func revokeDeployToken(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        try app.requireManageAccess(for: user)
+
+        guard let tokenID = request.parameters.get("tokenID", as: UUID.self) else {
+            throw Abort(.badRequest, reason: "토큰 ID 형식이 올바르지 않습니다.")
+        }
+        try await DeployTokenIssuing.revoke(
+            tokenID,
+            ofApp: app,
+            by: user,
+            on: request.db,
+            logger: request.logger
         )
         return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
     }
@@ -294,8 +363,36 @@ struct AppDetailContext: Encodable {
     var app: AppRow
     var versions: [VersionRow]
     var members: [AppMemberDTO]
+    var deployTokens: [DeployTokenRow]
+    var issuedToken: IssuedDeployToken?
     var canUpload: Bool
     var canManage: Bool
+}
+
+struct DeployTokenFormValues: Codable {
+    var name: String?
+}
+
+extension DeployTokenFormValues: Content {}
+
+struct DeployTokenRow: Encodable {
+    var id: String
+    var name: String
+    var lastUsed: String?
+    var isActive: Bool
+
+    init(token: DeployToken) throws {
+        self.id = token.id?.uuidString ?? ""
+        self.name = token.name
+        self.lastUsed = token.lastUsedAt.map { DateStyle.minute.string(from: $0) }
+        self.isActive = token.isActive
+    }
+}
+
+/// 방금 발급한 토큰. 이 화면을 벗어나면 다시 볼 수 없다.
+struct IssuedDeployToken: Encodable {
+    var name: String
+    var value: String
 }
 
 extension AppFormValues: Content {}

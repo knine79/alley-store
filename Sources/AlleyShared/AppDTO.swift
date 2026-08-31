@@ -304,6 +304,54 @@ public struct TokenExchangeResponse: Codable, Sendable {
     }
 }
 
+/// CI 파이프라인이 쓰는 앱별 배포 토큰.
+///
+/// 토큰 값은 여기 없다. 발급 직후 한 번만 내려간다 (ADR-0015).
+public struct DeployTokenDTO: Codable, Sendable, Identifiable, Equatable {
+    public var id: UUID
+    public var appID: UUID
+    public var name: String
+    /// 마지막으로 이 토큰이 쓰인 시각. 안 쓰는 토큰을 찾아 지울 때 본다.
+    public var lastUsedAt: Date?
+    public var revokedAt: Date?
+    public var createdAt: Date
+
+    public init(
+        id: UUID,
+        appID: UUID,
+        name: String,
+        lastUsedAt: Date? = nil,
+        revokedAt: Date? = nil,
+        createdAt: Date
+    ) {
+        self.id = id
+        self.appID = appID
+        self.name = name
+        self.lastUsedAt = lastUsedAt
+        self.revokedAt = revokedAt
+        self.createdAt = createdAt
+    }
+}
+
+public struct CreateDeployTokenRequest: Codable, Sendable {
+    public var name: String
+
+    public init(name: String) {
+        self.name = name
+    }
+}
+
+/// 배포 토큰을 발급한 직후에만 한 번 내려주는 응답.
+public struct CreatedDeployToken: Codable, Sendable {
+    public var token: DeployTokenDTO
+    public var value: String
+
+    public init(token: DeployTokenDTO, value: String) {
+        self.token = token
+        self.value = value
+    }
+}
+
 /// 사용자 역할 변경 요청.
 public struct UpdateUserRoleRequest: Codable, Sendable {
     public var role: UserRole

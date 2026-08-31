@@ -74,6 +74,9 @@ private func configureMigrations(_ app: Application) {
     app.migrations.add(CreateSigningJobEnum())
     app.migrations.add(CreateSigningJob())
 
+    // CI 파이프라인이 쓰는 앱별 배포 토큰 (ADR-0015).
+    app.migrations.add(CreateDeployToken())
+
     // 설정 행은 마이그레이션이 아니라 최초 접근 시점에 심는다 (ADR-0011).
     app.migrations.add(CreateStoreSettings())
 }

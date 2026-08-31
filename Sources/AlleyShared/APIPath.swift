@@ -48,6 +48,20 @@ public enum APIPath {
         "\(members(ofApp: appID))/\(userID.uuidString)"
     }
 
+    /// 앱별 배포 토큰 목록·발급.
+    public static func deployTokens(ofApp id: UUID) -> String {
+        "\(app(id))/deploy-tokens"
+    }
+
+    public static func deployToken(ofApp appID: UUID, tokenID: UUID) -> String {
+        "\(deployTokens(ofApp: appID))/\(tokenID.uuidString)"
+    }
+
+    /// 배포 토큰이 자기가 어느 앱의 것인지 확인하는 경로.
+    ///
+    /// CLI 는 앱 ID 를 모르고 토큰만 안다. 토큰이 스스로 밝히게 한다.
+    public static let deployApp = "\(apiRoot)/deploy/app"
+
     public static func versions(ofApp id: UUID) -> String {
         "\(app(id))/versions"
     }

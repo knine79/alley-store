@@ -12,7 +12,10 @@ public struct VersionController: RouteCollection, Sendable {
     public init() {}
 
     public func boot(routes: any RoutesBuilder) throws {
-        let authenticated = routes.grouped(SessionAuthenticator(), User.guardMiddleware())
+        // 사람의 세션과 CI 의 배포 토큰이 나란히 선다. 둘 다 막지 않고 붙이기만 하며,
+        // 무엇이 필요한지는 핸들러마다 다르다. 다운로드는 사람만 할 수 있고
+        // (이력에 사용자를 남긴다), 업로드는 양쪽 다 할 수 있다 (ADR-0015).
+        let authenticated = routes.grouped(SessionAuthenticator(), DeployTokenAuthenticator())
 
         let ofApp = authenticated
             .grouped(APIPath.apps.pathComponents)
@@ -38,9 +41,8 @@ public struct VersionController: RouteCollection, Sendable {
     /// 새어나가면 출시 전에 알려지지 않아야 할 일정이 드러난다.
     @Sendable
     func list(request: Request) async throws -> [VersionDTO] {
-        let user = try request.requireUser()
         let app = try await request.findApp()
-        let canSeeAll = try await app.canUpload(user, on: request.db)
+        let canSeeAll = try await request.uploadRights(to: app) != nil
 
         var query = try Version.query(on: request.db)
             .filter(\.$app.$id == app.requireID())
@@ -56,11 +58,15 @@ public struct VersionController: RouteCollection, Sendable {
 
     @Sendable
     func detail(request: Request) async throws -> VersionDTO {
-        let user = try request.requireUser()
         let version = try await request.findVersion()
 
-        if !version.state.isPubliclyVisible {
-            try await version.app.requireUploadAccess(for: user, on: request.db)
+        if version.state.isPubliclyVisible {
+            // 출시본은 받을 사람 누구나 본다. 다만 로그인은 해야 한다.
+            guard request.deployToken != nil || request.auth.has(User.self) else {
+                throw Abort(.unauthorized, reason: "인증이 필요합니다.")
+            }
+        } else {
+            _ = try await request.requireUploadRights(to: version.app)
         }
         return try version.toDTO()
     }
@@ -73,9 +79,8 @@ public struct VersionController: RouteCollection, Sendable {
     /// `complete` 를 불러야 `uploaded` 로 넘어간다.
     @Sendable
     func create(request: Request) async throws -> Response {
-        let user = try request.requireUser()
         let app = try await request.findApp()
-        try await app.requireUploadAccess(for: user, on: request.db)
+        let principal = try await request.requireUploadRights(to: app)
 
         let payload = try request.content.decode(CreateVersionRequest.self)
         let shortVersion = payload.shortVersion.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -103,9 +108,13 @@ public struct VersionController: RouteCollection, Sendable {
             releaseNotes: payload.releaseNotes,
             minimumOSVersion: payload.minimumOSVersion,
             uploadKind: payload.uploadKind,
-            createdByID: try user.requireID()
+            createdByID: try principal.attributedUserID
         )
         try await version.save(on: request.db)
+
+        request.logger.notice(
+            "버전 생성 [\(app.bundleID) \(shortVersion) (\(payload.buildNumber)), 올린 쪽: \(principal.description)]"
+        )
 
         let key = ArtifactStorage.objectKey(
             appID: appID,
@@ -135,9 +144,8 @@ public struct VersionController: RouteCollection, Sendable {
     /// 클라이언트 말만 믿으면 빈 버전이 출시될 수 있어서 `HEAD` 로 실제 크기를 읽는다.
     @Sendable
     func completeUpload(request: Request) async throws -> VersionDTO {
-        let user = try request.requireUser()
         let version = try await request.findVersion()
-        try await version.app.requireUploadAccess(for: user, on: request.db)
+        _ = try await request.requireUploadRights(to: version.app)
 
         // 재시도는 failed 에서 다시 올리는 경로다. 이미 서명까지 간 버전을
         // 여기서 되돌리지는 않는다.
@@ -229,9 +237,8 @@ public struct VersionController: RouteCollection, Sendable {
 
     @Sendable
     func release(request: Request) async throws -> VersionDTO {
-        let user = try request.requireUser()
         let version = try await request.findVersion()
-        try await version.app.requireUploadAccess(for: user, on: request.db)
+        _ = try await request.requireUploadRights(to: version.app)
 
         try version.transition(to: .released)
         try await version.save(on: request.db)
@@ -244,9 +251,8 @@ public struct VersionController: RouteCollection, Sendable {
     /// 문제가 해결되면 다시 출시할 수 있어야 한다.
     @Sendable
     func unrelease(request: Request) async throws -> VersionDTO {
-        let user = try request.requireUser()
         let version = try await request.findVersion()
-        try await version.app.requireUploadAccess(for: user, on: request.db)
+        _ = try await request.requireUploadRights(to: version.app)
 
         try version.transition(to: .ready)
         version.releasedAt = nil
@@ -257,6 +263,9 @@ public struct VersionController: RouteCollection, Sendable {
     // MARK: - 다운로드
 
     /// 이력을 남기고 만료 있는 다운로드 URL 을 내준다.
+    ///
+    /// **배포 토큰으로는 받을 수 없다.** 이력에 사람을 남기는 것이 이 경로의 목적 중
+    /// 하나인데, 파이프라인을 그 자리에 적으면 "누가 받아갔나"가 흐려진다.
     @Sendable
     func download(request: Request) async throws -> DownloadTicket {
         let user = try request.requireUser()
