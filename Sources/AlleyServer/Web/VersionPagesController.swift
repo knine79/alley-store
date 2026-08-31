@@ -19,6 +19,7 @@ struct VersionPagesController: RouteCollection, Sendable {
         pages.get("new", use: newForm)
         pages.post(":versionID", "release", use: release)
         pages.post(":versionID", "unrelease", use: unrelease)
+        pages.post(":versionID", "retry", use: retry)
     }
 
     // MARK: - 업로드 화면
@@ -70,6 +71,44 @@ struct VersionPagesController: RouteCollection, Sendable {
             try version.transition(to: .ready)
             version.releasedAt = nil
         }
+    }
+
+    // MARK: - 재시도
+
+    /// 실패한 버전을 다시 서명 큐에 넣는다.
+    ///
+    /// 올린 바이너리는 그대로 두고 상태만 되돌린다. 서명이 실패하는 이유는 대개 워커
+    /// 쪽 환경(인증서 만료, 공증 자격증명)이라, 고친 뒤 같은 파일로 다시 시도하는 것이
+    /// 자연스럽다. 파일 자체가 문제였다면 새 빌드를 올리면 된다.
+    @Sendable
+    func retry(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let version = try await request.findVersion()
+        try await version.app.requireUploadAccess(for: user, on: request.db)
+
+        guard let appID = request.parameters.get("appID", as: UUID.self),
+              version.$app.id == appID
+        else {
+            throw Abort(.notFound, reason: "버전을 찾을 수 없습니다.")
+        }
+        guard version.state == .failed else {
+            throw Abort(
+                .conflict,
+                reason: "실패한 버전만 다시 시도할 수 있습니다. 현재 상태: \(version.state.rawValue)"
+            )
+        }
+
+        try version.transition(to: .uploaded)
+        // 완성본을 올린 경로에는 워커가 할 일이 없다. 상태만 제자리로 돌린다.
+        if version.uploadKind == .signed {
+            try version.transition(to: .ready)
+        }
+        try await version.save(on: request.db)
+
+        if version.uploadKind == .unsigned {
+            try await SigningJob.enqueue(versionID: try version.requireID(), on: request.db)
+        }
+        return request.redirect(to: "/apps/\(appID.uuidString)")
     }
 
     private func changeRelease(

@@ -822,3 +822,32 @@ textarea.input {
     font-size: 13px;
     color: var(--text-muted);
 }
+
+/* ── 서명 로그 ───────────────────────────────────────────── */
+
+/* 평소에는 접어둔다. 잘 되고 있을 때 읽을 것이 아니다. */
+.log {
+    margin-top: var(--space-2);
+    font-size: 13px;
+}
+
+.log summary {
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.log-body {
+    margin: var(--space-2) 0 0;
+    padding: var(--space-3);
+    max-height: 20rem;
+    /* 워커 로그는 줄이 길다. 표를 밀어내지 않게 자기 안에서만 스크롤한다. */
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-small);
+    background: var(--bg);
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+}

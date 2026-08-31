@@ -55,6 +55,12 @@
                     #if(version.failureReason):
                     <span class="table-note">#(version.failureReason)</span>
                     #endif
+                    #if(version.log):
+                    <details class="log">
+                        <summary>서명 로그</summary>
+                        <pre class="log-body">#(version.log)</pre>
+                    </details>
+                    #endif
                 </td>
                 #if(canUpload):
                 <td class="table-tight">
@@ -67,6 +73,11 @@
                     <form class="row-form" method="post"
                           action="/apps/#(app.id)/versions/#(version.id)/release">
                         <button class="button button-primary" type="submit">출시</button>
+                    </form>
+                    #elseif(version.canRetry):
+                    <form class="row-form" method="post"
+                          action="/apps/#(app.id)/versions/#(version.id)/retry">
+                        <button class="button" type="submit">다시 시도</button>
                     </form>
                     #endif
                 </td>

@@ -143,12 +143,18 @@ struct AppPagesController: RouteCollection, Sendable {
             members = try await loadMembers(of: app, on: request.db)
         }
 
+        // 실패한 버전은 로그가 있어야 올린 사람이 스스로 고칠 수 있다.
+        // 올릴 권한이 없는 사람에게는 보여줄 이유가 없다. 워커 환경이 드러난다.
+        let logs = canUpload
+            ? try await SigningJob.latestLogs(ofVersions: versions.map { try $0.requireID() }, on: request.db)
+            : [:]
+
         return try await request.view.render(
             "app-detail",
             AppDetailContext(
                 page: try await request.pageContext(title: app.name),
                 app: try AppRow(app: app, latestReleased: nil),
-                versions: try versions.map { try VersionRow(version: $0) },
+                versions: try versions.map { try VersionRow(version: $0, log: logs[try $0.requireID()]) },
                 members: members,
                 canUpload: canUpload,
                 canManage: canManage
@@ -235,8 +241,11 @@ struct VersionRow: Encodable {
     var fileSize: String?
     var createdAt: String
     var failureReason: String?
+    /// 서명 워커가 남긴 로그. 실패했을 때만 화면에 편다.
+    var log: String?
+    var canRetry: Bool
 
-    init(version: Version) throws {
+    init(version: Version, log: String? = nil) throws {
         self.id = try version.requireID().uuidString
         self.shortVersion = version.shortVersion
         self.buildNumber = version.buildNumber
@@ -248,6 +257,8 @@ struct VersionRow: Encodable {
         self.fileSize = version.bestArtifact?.fileSize.map(ByteCount.humanReadable)
         self.createdAt = DateStyle.day.string(from: version.createdAt ?? Date())
         self.failureReason = version.failureReason
+        self.log = log
+        self.canRetry = version.state == .failed
     }
 }
 

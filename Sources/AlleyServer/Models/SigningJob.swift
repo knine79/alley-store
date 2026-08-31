@@ -99,6 +99,29 @@ extension SigningJob {
     }
 }
 
+extension SigningJob {
+    /// 버전마다 가장 최근 잡의 로그.
+    ///
+    /// 버전별로 따로 조회하면 목록 화면에서 N+1 이 된다. 한 번에 읽어 접는다.
+    static func latestLogs(
+        ofVersions versionIDs: [UUID],
+        on database: any Database
+    ) async throws -> [UUID: String] {
+        guard !versionIDs.isEmpty else { return [:] }
+
+        let jobs = try await SigningJob.query(on: database)
+            .filter(\.$version.$id ~~ versionIDs)
+            .sort(\.$attempt, .ascending)
+            .all()
+
+        return jobs.reduce(into: [:]) { result, job in
+            guard let log = job.log, !log.isEmpty else { return }
+            // 시도 순으로 읽으므로 나중 것이 앞의 것을 덮는다.
+            result[job.$version.id] = log
+        }
+    }
+}
+
 // MARK: - 마이그레이션
 
 public struct CreateSigningJobEnum: AsyncMigration {

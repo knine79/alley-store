@@ -227,3 +227,123 @@ struct ReleaseActionTests {
         }
     }
 }
+
+@Suite("서명 재시도")
+struct RetryActionTests {
+    /// 서명이 실패한 버전과 그 로그를 만든다.
+    private func failedVersion(
+        on app: Application
+    ) async throws -> (token: String, appID: UUID, version: Version) {
+        let (owner, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+        let record = try await app.seedApp(bundleID: "com.example.tool", name: "도구", owner: owner)
+        let appID = try record.requireID()
+        let version = try await app.seedVersion(
+            appID: appID, short: "1.0.0", build: 1, state: .failed, by: owner
+        )
+        version.failureReason = "서명 identity 를 찾지 못했습니다."
+        try await version.save(on: app.db)
+
+        let job = try await SigningJob.enqueue(versionID: try version.requireID(), on: app.db)
+        job.state = .failed
+        job.log = "codesign: no identity found"
+        try await job.save(on: app.db)
+
+        return (token, appID, version)
+    }
+
+    @Test("실패한 버전을 다시 큐에 넣는다")
+    func retryRequeues() async throws {
+        try await withMigratedApp { app in
+            let (token, appID, version) = try await failedVersion(on: app)
+            let versionID = try version.requireID()
+
+            try await app.testing().test(
+                .POST, "/apps/\(appID.uuidString)/versions/\(versionID.uuidString)/retry",
+                headers: .form(cookie: token)
+            ) { #expect($0.status == .seeOther) }
+
+            // 올린 바이너리는 그대로 두고 상태만 되돌린다.
+            let stored = try #require(try await Version.find(versionID, on: app.db))
+            #expect(stored.state == .uploaded)
+            #expect(stored.failureReason == nil)
+
+            let queued = try await SigningJob.query(on: app.db)
+                .filter(\.$version.$id == versionID)
+                .filter(\.$state == .queued)
+                .count()
+            #expect(queued == 1)
+        }
+    }
+
+    @Test("완성본은 다시 시도해도 워커를 거치지 않는다")
+    func signedRetrySkipsQueue() async throws {
+        try await withMigratedApp { app in
+            let (owner, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let record = try await app.seedApp(
+                bundleID: "com.example.tool", name: "도구", owner: owner
+            )
+            let appID = try record.requireID()
+            let version = try await app.seedVersion(
+                appID: appID, short: "1.0.0", build: 1, state: .failed, by: owner,
+                uploadKind: .signed
+            )
+            let versionID = try version.requireID()
+
+            try await app.testing().test(
+                .POST, "/apps/\(appID.uuidString)/versions/\(versionID.uuidString)/retry",
+                headers: .form(cookie: token)
+            ) { #expect($0.status == .seeOther) }
+
+            let stored = try #require(try await Version.find(versionID, on: app.db))
+            #expect(stored.state == .ready)
+            #expect(try await SigningJob.query(on: app.db).count() == 0)
+        }
+    }
+
+    @Test("실패하지 않은 버전은 다시 시도할 수 없다")
+    func rejectsHealthyVersion() async throws {
+        try await withMigratedApp { app in
+            let (owner, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let record = try await app.seedApp(
+                bundleID: "com.example.tool", name: "도구", owner: owner
+            )
+            let appID = try record.requireID()
+            let version = try await app.seedVersion(
+                appID: appID, short: "1.0.0", build: 1, state: .ready, by: owner
+            )
+
+            try await app.testing().test(
+                .POST,
+                "/apps/\(appID.uuidString)/versions/\(try version.requireID().uuidString)/retry",
+                headers: .form(cookie: token)
+            ) { #expect($0.status == .conflict) }
+        }
+    }
+
+    @Test("서명 로그는 올릴 수 있는 사람에게만 보인다")
+    func logIsForUploaders() async throws {
+        try await withMigratedApp { app in
+            let (token, appID, _) = try await failedVersion(on: app)
+            let (_, userToken) = try await app.makeUser(email: "user@example.com", role: .user)
+            let (owner, _) = try await app.makeUser(email: "other@example.com", role: .developer)
+            let visible = try await app.seedApp(
+                bundleID: "com.example.public", name: "공개", owner: owner
+            )
+            try await app.seedVersion(
+                appID: try visible.requireID(), short: "1.0.0", build: 1,
+                state: .released, by: owner
+            )
+
+            // 올린 사람은 로그를 보고 스스로 고칠 수 있어야 한다.
+            try await app.testing().test(
+                .GET, "/apps/\(appID.uuidString)", headers: .sessionCookie(token)
+            ) { #expect($0.body.string.contains("codesign: no identity found")) }
+
+            // 받기만 하는 사람에게는 워커 환경이 드러날 이유가 없다.
+            try await app.testing().test(
+                .GET, "/apps/\(try visible.requireID().uuidString)",
+                headers: .sessionCookie(userToken)
+            ) { #expect(!$0.body.string.contains("서명 로그")) }
+        }
+    }
+}
