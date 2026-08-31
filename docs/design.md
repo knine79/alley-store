@@ -182,23 +182,35 @@ alley-store/
 ├── Package.swift
 ├── Sources/
 │   ├── AlleyShared/       # DTO, API 경로 (서버·워커·앱 공유, 외부 의존 없음)
+│   ├── AlleyProcess/      # 외부 명령 실행 (워커·앱이 codesign 등을 부른다)
 │   ├── AlleyServer/       # Vapor API 서버 + 웹 콘솔
-│   └── AlleyWorker/       # macOS 서명 워커
+│   ├── AlleyWorkerCore/   # 서명 워커의 동작
+│   ├── AlleyWorker/       # 워커 실행 파일
+│   ├── AlleyStoreCore/    # SwiftUI 스토어 앱 (macOS 전용)
+│   └── AlleyStore/        # 앱 실행 파일
 ├── Tests/
-├── StoreApp/              # SwiftUI 스토어 앱 (예정)
-├── Web/                   # 웹 콘솔 리소스 (Leaf 템플릿 + 정적 파일)
-├── scripts/
+├── Resources/Views/       # 웹 콘솔 Leaf 템플릿
+├── Public/                # 웹 콘솔 정적 파일 (CSS, 업로드 스크립트)
+├── scripts/               # 워커 설치, 앱 번들 조립, 금칙어 검사
 ├── docker-compose.yml
 ├── Dockerfile
 └── docs/
 ```
 
+실행 파일 타깃(`AlleyWorker`, `AlleyStore`)은 진입점 한 줄만 갖고 나머지는 라이브러리
+타깃에 둡니다. 테스트가 `main.swift` 를 가진 타깃을 그대로 임포트할 수 없기 때문입니다.
+스토어 앱 타깃은 `#if os(macOS)` 로 감싸서 리눅스에서는 아예 만들어지지 않습니다.
+
 `AlleyShared`는 Vapor를 포함해 어떤 외부 프레임워크에도 의존하지 않습니다.
 SwiftUI 스토어 앱이 그대로 임포트해야 하기 때문입니다. HTTP 직렬화 능력은
 서버 쪽에서 덧붙입니다.
 
-웹 콘솔은 MVP에서 Vapor + Leaf 서버 렌더링에 최소한의 JS로 갑니다. 화면이 복잡해지면
-(통계, 피드백 대시보드) 그때 SPA 전환을 검토합니다.
+웹 콘솔은 MVP에서 Vapor + Leaf 서버 렌더링에 최소한의 JS로 갑니다. 실제로 스크립트를
+쓰는 화면은 버전 업로드 하나뿐입니다([ADR-0012](adr/0012-browser-upload-script.md)).
+화면이 복잡해지면(통계, 피드백 대시보드) 그때 SPA 전환을 검토합니다.
+
+스토어 앱은 Xcode 프로젝트 없이 SwiftPM 타깃과 번들 조립 스크립트로 만듭니다
+([ADR-0014](adr/0014-store-app-without-xcode-project.md)).
 
 ---
 
