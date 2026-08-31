@@ -21,6 +21,9 @@
 
             #if(page.user):
             <nav class="chrome-nav">
+                #if(page.isAdmin):
+                <a class="chrome-link" href="/admin/settings">관리</a>
+                #endif
                 <span class="chrome-user" title="#(page.user.email)">#(page.user.name)</span>
                 <form method="post" action="/logout">
                     <button class="button button-quiet" type="submit">로그아웃</button>

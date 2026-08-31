@@ -16,6 +16,18 @@ public enum UserRole: String, Codable, Sendable, CaseIterable {
     public var canAdminister: Bool {
         self == .admin
     }
+
+    /// 화면에 그대로 쓰는 이름.
+    ///
+    /// `VersionState.displayName` 과 같은 이유로 여기 둔다. 웹 콘솔과 스토어 앱이
+    /// 각자 번역하면 같은 역할이 화면마다 다른 이름으로 보인다.
+    public var displayName: String {
+        switch self {
+        case .user: return "사용자"
+        case .developer: return "개발자"
+        case .admin: return "관리자"
+        }
+    }
 }
 
 public struct UserDTO: Codable, Sendable, Identifiable, Equatable {

@@ -1,0 +1,77 @@
+#extend("layout"):
+#export("content"):
+<div class="page-head">
+    <div>
+        <h1 class="page-title">스토어 설정</h1>
+        <p class="page-lead">여기서 바꾼 값은 다음 요청부터 바로 반영됩니다. 재시작이 필요 없습니다.</p>
+    </div>
+    <a class="button" href="/admin/users">역할 관리</a>
+</div>
+
+#if(error):
+<p class="notice notice-error">#(error)</p>
+#endif
+#if(saved):
+<p class="notice notice-ok">저장했습니다.</p>
+#endif
+
+<form class="form" method="post" action="/admin/settings">
+    <label class="field">
+        <span class="field-label">스토어 이름</span>
+        <input class="input" type="text" name="storeName" required value="#(values.storeName)">
+    </label>
+
+    <label class="field">
+        <span class="field-label">로고 주소 <span class="field-optional">선택</span></span>
+        <input class="input" type="url" name="logoURL" value="#(values.logoURL)"
+               placeholder="https://example.com/logo.png"
+               autocapitalize="off" autocorrect="off" spellcheck="false">
+        <span class="field-note">비우면 이름만 표시됩니다.</span>
+    </label>
+
+    <label class="field">
+        <span class="field-label">강조색 <span class="field-optional">선택</span></span>
+        <input class="input" type="text" name="accentColor" value="#(values.accentColor)"
+               placeholder="#3b6fd4"
+               autocapitalize="off" autocorrect="off" spellcheck="false">
+        <span class="field-note"><code>#RGB</code>, <code>#RRGGBB</code>, <code>#RRGGBBAA</code> 형식입니다.</span>
+    </label>
+
+    <label class="field">
+        <span class="field-label">로그인 허용 도메인</span>
+        <input class="input" type="text" name="allowedEmailDomains"
+               value="#(values.allowedEmailDomains)" placeholder="example.com, example.org"
+               autocapitalize="off" autocorrect="off" spellcheck="false">
+        <span class="field-note">쉼표로 나눠 적습니다. 비우면 <strong>누구나 로그인할 수 있습니다.</strong></span>
+    </label>
+
+    <label class="check">
+        <input type="checkbox" name="confirmOpenToAnyDomain" value="on">
+        <span>
+            <span class="check-name">도메인 제한 없이 열어두는 것을 확인합니다</span>
+            <span class="check-note">허용 도메인을 비우려면 이 항목을 켜야 저장됩니다.</span>
+        </span>
+    </label>
+
+    <label class="field">
+        <span class="field-label">번들 ID 프리픽스 <span class="field-optional">선택</span></span>
+        <input class="input" type="text" name="bundleIDPrefix" value="#(values.bundleIDPrefix)"
+               placeholder="com.example"
+               autocapitalize="off" autocorrect="off" spellcheck="false">
+    </label>
+
+    <label class="check">
+        <input type="checkbox" name="enforceBundleIDPrefix" value="on"
+               #if(values.enforceBundleIDPrefix):checked#endif>
+        <span>
+            <span class="check-name">프리픽스를 강제합니다</span>
+            <span class="check-note">끄면 규칙에서 벗어난 등록을 로그에만 남기고 통과시킵니다.</span>
+        </span>
+    </label>
+
+    <div class="form-actions">
+        <button class="button button-primary" type="submit">저장</button>
+    </div>
+</form>
+#endexport
+#endextend

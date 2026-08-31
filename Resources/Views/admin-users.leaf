@@ -1,0 +1,47 @@
+#extend("layout"):
+#export("content"):
+<div class="page-head">
+    <div>
+        <h1 class="page-title">역할 관리</h1>
+        <p class="page-lead">
+            한 번이라도 로그인한 계정만 여기 나옵니다. 바뀐 역할은 그 사람의 다음 요청부터 적용됩니다.
+        </p>
+    </div>
+    <a class="button" href="/admin/settings">스토어 설정</a>
+</div>
+
+#if(error):
+<p class="notice notice-error">#(error)</p>
+#endif
+
+<table class="table">
+    <thead>
+        <tr>
+            <th class="table-fill">사람</th>
+            <th class="table-tight">역할</th>
+        </tr>
+    </thead>
+    <tbody>
+        #for(person in users):
+        <tr>
+            <td class="table-fill">
+                <span class="table-strong">#(person.name)</span>
+                #if(person.isSelf):<span class="badge">나</span>#endif
+                <span class="table-note">#(person.email)</span>
+            </td>
+            <td class="table-tight">
+                <form class="row-form" method="post" action="/admin/users/#(person.id)/role">
+                    <select class="input select" name="role" aria-label="#(person.email) 의 역할">
+                        #for(option in roles):
+                        <option value="#(option.value)"#if(option.value == person.role): selected#endif>#(option.name)</option>
+                        #endfor
+                    </select>
+                    <button class="button" type="submit">변경</button>
+                </form>
+            </td>
+        </tr>
+        #endfor
+    </tbody>
+</table>
+#endexport
+#endextend

@@ -92,16 +92,10 @@ public struct ConsoleErrorMiddleware: AsyncMiddleware {
         on request: Request
     ) async -> Response {
         do {
-            let settings = try await request.storeSettings()
             let view = try await request.view.render(
                 "error",
                 ErrorPageContext(
-                    page: PageContext(
-                        title: "\(status.code)",
-                        store: settings.toChrome(),
-                        user: request.auth.get(User.self).flatMap { try? $0.toDTO() },
-                        assetVersion: request.application.assetVersion.value
-                    ),
+                    page: try await request.pageContext(title: "\(status.code)"),
                     statusCode: Int(status.code),
                     reason: reason
                 )

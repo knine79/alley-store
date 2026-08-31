@@ -20,6 +20,8 @@
     --warning-bg: #fff8e6;
     --warning-border: #e8d5a3;
     --warning-text: #6b5316;
+    --ok-border: #7fb28a;
+    --ok-text: #2f6b41;
 
     --space-1: 4px;
     --space-2: 8px;
@@ -46,6 +48,8 @@
         --warning-bg: #2e2717;
         --warning-border: #4d4126;
         --warning-text: #e2c98a;
+        --ok-border: #3f6b4c;
+        --ok-text: #8fcfa3;
     }
 }
 
@@ -112,6 +116,17 @@ code {
     display: flex;
     align-items: center;
     gap: var(--space-3);
+}
+
+.chrome-link {
+    color: var(--text-muted);
+    font-size: 14px;
+    text-decoration: none;
+}
+
+.chrome-link:hover {
+    color: var(--text);
+    text-decoration: underline;
 }
 
 .chrome-user {
@@ -579,6 +594,11 @@ textarea.input {
     color: #b23c3c;
 }
 
+.notice-ok {
+    border-color: var(--ok-border);
+    color: var(--ok-text);
+}
+
 @media (prefers-color-scheme: dark) {
     .notice-error {
         color: #ef8a8a;
@@ -652,6 +672,12 @@ textarea.input {
     margin: 0;
 }
 
+.select {
+    width: auto;
+    font-size: 14px;
+    padding: var(--space-1) var(--space-2);
+}
+
 /* ── 라디오 · 체크박스 ───────────────────────────────────── */
 
 .choice-group {
@@ -667,7 +693,8 @@ textarea.input {
     margin-bottom: var(--space-1);
 }
 
-.choice {
+.choice,
+.check {
     display: flex;
     align-items: flex-start;
     gap: var(--space-3);
@@ -682,18 +709,21 @@ textarea.input {
     border-color: var(--accent);
 }
 
-.choice input {
+.choice input,
+.check input {
     margin: 3px 0 0;
     accent-color: var(--accent);
 }
 
-.choice-name {
+.choice-name,
+.check-name {
     display: block;
     font-size: 14px;
     font-weight: 500;
 }
 
-.choice-note {
+.choice-note,
+.check-note {
     display: block;
     font-size: 13px;
     color: var(--text-muted);

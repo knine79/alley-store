@@ -9,6 +9,8 @@ struct PageContext: Encodable {
     var title: String?
     var store: StoreChrome
     var user: UserDTO?
+    /// 껍데기에 관리 메뉴를 띄울지. 역할을 템플릿에서 비교하지 않으려고 미리 접는다.
+    var isAdmin: Bool
     /// 정적 파일 주소에 붙는 지문. `AssetVersion` 참고.
     var assetVersion: String
 }
@@ -34,10 +36,12 @@ extension StoreSettings {
 extension Request {
     /// 로그인 여부와 무관하게 껍데기를 만든다.
     func pageContext(title: String? = nil) async throws -> PageContext {
-        PageContext(
+        let user = auth.get(User.self)
+        return PageContext(
             title: title,
             store: try await storeSettings().toChrome(),
-            user: auth.get(User.self).flatMap { try? $0.toDTO() },
+            user: user.flatMap { try? $0.toDTO() },
+            isAdmin: user?.role.canAdminister ?? false,
             assetVersion: application.assetVersion.value
         )
     }
