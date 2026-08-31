@@ -15,12 +15,18 @@
 #endif
 
 <section class="section">
-    <h2 class="section-title">버전</h2>
+    <div class="section-head">
+        <h2 class="section-title">버전</h2>
+        #if(canUpload):
+        <a class="button button-primary" href="/apps/#(app.id)/versions/new">새 버전</a>
+        #endif
+    </div>
+
     #if(count(versions) == 0):
     <div class="empty">
         <p>아직 올린 버전이 없습니다.</p>
         #if(canUpload):
-        <p class="empty-note">업로드 화면은 아직 만드는 중입니다. 지금은 API 로 올릴 수 있습니다.</p>
+        <p class="empty-note">새 버전을 올리면 여기에 표시됩니다.</p>
         #endif
     </div>
     #else:
@@ -32,6 +38,9 @@
                 <th class="table-tight">크기</th>
                 <th class="table-tight">올린 날짜</th>
                 <th class="table-fill">상태</th>
+                #if(canUpload):
+                <th class="table-tight"><span class="visually-hidden">출시</span></th>
+                #endif
             </tr>
         </thead>
         <tbody>
@@ -47,6 +56,21 @@
                     <span class="table-note">#(version.failureReason)</span>
                     #endif
                 </td>
+                #if(canUpload):
+                <td class="table-tight">
+                    #if(version.isReleased):
+                    <form class="row-form" method="post"
+                          action="/apps/#(app.id)/versions/#(version.id)/unrelease">
+                        <button class="button" type="submit">철회</button>
+                    </form>
+                    #elseif(version.canRelease):
+                    <form class="row-form" method="post"
+                          action="/apps/#(app.id)/versions/#(version.id)/release">
+                        <button class="button button-primary" type="submit">출시</button>
+                    </form>
+                    #endif
+                </td>
+                #endif
             </tr>
             #endfor
         </tbody>

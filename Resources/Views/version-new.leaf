@@ -1,0 +1,84 @@
+#extend("layout"):
+#export("content"):
+<nav class="breadcrumb"><a href="/apps">앱</a> · <a href="/apps/#(appID)">#(appName)</a></nav>
+<h1 class="page-title">새 버전</h1>
+<p class="page-lead">
+    파일은 이 서버를 거치지 않고 스토리지로 바로 올라갑니다. 창을 닫으면 업로드가 끊깁니다.
+</p>
+
+<noscript>
+    <p class="notice notice-error">
+        이 화면은 브라우저에서 스토리지로 직접 업로드합니다. 자바스크립트를 켜거나
+        <code>alley</code> CLI 로 올려주세요.
+    </p>
+</noscript>
+
+<p class="notice notice-error" id="upload-error" hidden></p>
+
+<form class="form" id="upload-form"
+      data-create-url="#(createVersionPath)"
+      data-version-root="#(versionRootPath)"
+      data-app-url="/apps/#(appID)">
+    <label class="field">
+        <span class="field-label">버전</span>
+        <input class="input" type="text" name="shortVersion" required placeholder="1.0.0"
+               autocapitalize="off" autocorrect="off" spellcheck="false">
+        <span class="field-note">사람이 보는 번호입니다. <code>CFBundleShortVersionString</code> 과 맞추세요.</span>
+    </label>
+
+    <label class="field">
+        <span class="field-label">빌드 번호</span>
+        <input class="input" type="number" name="buildNumber" required min="1"
+               value="#(suggestedBuildNumber)">
+        <span class="field-note">같은 앱 안에서 겹칠 수 없습니다. macOS 가 이 값으로 최신을 판단합니다.</span>
+    </label>
+
+    <fieldset class="field choice-group">
+        <legend class="field-label">서명 상태</legend>
+        <label class="choice">
+            <input type="radio" name="uploadKind" value="unsigned" checked>
+            <span>
+                <span class="choice-name">미서명</span>
+                <span class="choice-note">서명 워커가 서명·공증까지 대신합니다.</span>
+            </span>
+        </label>
+        <label class="choice">
+            <input type="radio" name="uploadKind" value="signed">
+            <span>
+                <span class="choice-name">서명·공증 완료</span>
+                <span class="choice-note">이미 마친 완성본입니다. 서명 단계를 건너뜁니다.</span>
+            </span>
+        </label>
+    </fieldset>
+
+    <label class="field">
+        <span class="field-label">최소 macOS 버전 <span class="field-optional">선택</span></span>
+        <input class="input" type="text" name="minimumOSVersion" placeholder="14.0"
+               autocapitalize="off" autocorrect="off" spellcheck="false">
+    </label>
+
+    <label class="field">
+        <span class="field-label">릴리즈 노트 <span class="field-optional">선택</span></span>
+        <textarea class="input" name="releaseNotes" rows="4"></textarea>
+    </label>
+
+    <label class="field">
+        <span class="field-label">파일</span>
+        <input class="input" type="file" name="file" required accept=".zip,application/zip">
+        <span class="field-note"><code>.app</code> 번들은 디렉터리라 그대로 올릴 수 없습니다. zip 으로 압축해서 올리세요.</span>
+    </label>
+
+    <div class="progress-row" id="upload-progress" hidden>
+        <progress class="progress" id="upload-bar" max="100" value="0"></progress>
+        <span class="progress-label" id="upload-status">준비 중…</span>
+    </div>
+
+    <div class="form-actions">
+        <a class="button" href="/apps/#(appID)">취소</a>
+        <button class="button button-primary" type="submit" id="upload-submit">올리기</button>
+    </div>
+</form>
+
+<script src="/upload.js?v=#(page.assetVersion)" defer></script>
+#endexport
+#endextend

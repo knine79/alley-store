@@ -24,6 +24,7 @@ func routes(_ app: Application) throws {
     // 웹 콘솔. JSON API 보다 뒤에 등록해서 경로가 겹칠 때 API 가 이긴다.
     try app.register(collection: WebController())
     try app.register(collection: AppPagesController())
+    try app.register(collection: VersionPagesController())
 }
 
 struct HealthResponse: Content {

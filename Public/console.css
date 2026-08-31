@@ -626,3 +626,128 @@ textarea.input {
 .person-email {
     color: var(--text-muted);
 }
+
+/* ── 제목 + 오른쪽 버튼 (구역 안) ────────────────────────── */
+
+.section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-4);
+}
+
+.section-head .section-title {
+    margin: 0;
+}
+
+/* ── 표 안의 버튼 하나짜리 폼 ────────────────────────────── */
+
+/* 출시·철회·역할 변경은 폼 하나에 버튼 하나다. 블록으로 두면 칸 높이가 늘어난다. */
+.row-form {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+}
+
+/* ── 라디오 · 체크박스 ───────────────────────────────────── */
+
+.choice-group {
+    border: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--space-2);
+}
+
+.choice-group legend {
+    padding: 0;
+    margin-bottom: var(--space-1);
+}
+
+.choice {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-small);
+    background: var(--surface);
+    cursor: pointer;
+}
+
+.choice:has(input:checked) {
+    border-color: var(--accent);
+}
+
+.choice input {
+    margin: 3px 0 0;
+    accent-color: var(--accent);
+}
+
+.choice-name {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.choice-note {
+    display: block;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+/* ── 업로드 진행률 ───────────────────────────────────────── */
+
+.progress-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+/* 진행률 막대는 브라우저마다 기본 모양이 달라서 직접 그린다. */
+.progress {
+    flex: 1;
+    height: 6px;
+    border: none;
+    border-radius: 999px;
+    background: var(--border);
+    appearance: none;
+}
+
+.progress::-webkit-progress-bar {
+    border-radius: 999px;
+    background: var(--border);
+}
+
+.progress::-webkit-progress-value {
+    border-radius: 999px;
+    background: var(--accent);
+}
+
+.progress::-moz-progress-bar {
+    border-radius: 999px;
+    background: var(--accent);
+}
+
+.progress-label {
+    font-size: 13px;
+    color: var(--text-muted);
+    /* 퍼센트가 바뀔 때마다 막대가 좌우로 흔들리지 않게 자리를 잡아둔다. */
+    min-width: 9em;
+    text-align: right;
+}
+
+/* 표의 머리글 중 화면에는 필요 없지만 스크린 리더에는 있어야 하는 칸. */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}

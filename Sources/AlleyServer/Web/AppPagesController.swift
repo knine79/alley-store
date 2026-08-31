@@ -226,6 +226,11 @@ struct VersionRow: Encodable {
     var state: String
     var stateName: String
     var isReleased: Bool
+    /// 지금 출시 버튼을 눌러도 되는 상태인지.
+    ///
+    /// 상태 머신에 물어본다. 화면이 조건을 따로 갖고 있으면 규칙이 바뀔 때 한쪽만
+    /// 남아서, 눌리는데 서버가 거절하는 버튼이 된다.
+    var canRelease: Bool
     var releaseNotes: String?
     var fileSize: String?
     var createdAt: String
@@ -238,6 +243,7 @@ struct VersionRow: Encodable {
         self.state = version.state.rawValue
         self.stateName = version.state.displayName
         self.isReleased = version.state.isPubliclyVisible
+        self.canRelease = version.state.canTransition(to: .released)
         self.releaseNotes = version.releaseNotes
         self.fileSize = version.bestArtifact?.fileSize.map(ByteCount.humanReadable)
         self.createdAt = DateStyle.day.string(from: version.createdAt ?? Date())
