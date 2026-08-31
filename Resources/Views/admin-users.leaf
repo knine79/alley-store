@@ -7,7 +7,10 @@
             한 번이라도 로그인한 계정만 여기 나옵니다. 바뀐 역할은 그 사람의 다음 요청부터 적용됩니다.
         </p>
     </div>
-    <a class="button" href="/admin/settings">스토어 설정</a>
+    <div class="head-actions">
+        <a class="button" href="/admin/settings">스토어 설정</a>
+        <a class="button" href="/admin/workers">서명 워커</a>
+    </div>
 </div>
 
 #if(error):

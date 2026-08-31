@@ -174,11 +174,22 @@ public struct VersionController: RouteCollection, Sendable {
 
         try version.transition(to: .uploaded)
         // 서명·공증을 마치고 올린 완성본은 서명 단계를 건너뛴다.
-        // 미서명 업로드는 여기서 멈추고 서명 잡이 이어받는다 (Phase 1-3).
         if version.uploadKind == .signed {
             try version.transition(to: .ready)
         }
         try await version.save(on: request.db)
+
+        // 미서명 업로드는 여기서 멈추고 서명 워커가 이어받는다. 잡을 만드는 시점이
+        // 곧 큐에 들어가는 시점이라, 이 저장이 끝나기 전에는 워커가 가져갈 수 없다.
+        if version.uploadKind == .unsigned {
+            let job = try await SigningJob.enqueue(
+                versionID: try version.requireID(),
+                on: request.db
+            )
+            request.logger.notice(
+                "서명 잡 대기 [버전: \(version.shortVersion) (\(version.buildNumber)), 시도: \(job.attempt)]"
+            )
+        }
 
         try await version.$artifacts.load(on: request.db)
         return try version.toDTO()

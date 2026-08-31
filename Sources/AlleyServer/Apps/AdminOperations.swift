@@ -119,4 +119,59 @@ enum AdminOperations {
             "역할 변경 [대상: \(target.email), \(previous.rawValue) → \(role.rawValue), 관리자: \(admin.email)]"
         )
     }
+
+    // MARK: - 워커
+
+    /// 워커를 등록하고 토큰을 발급한다.
+    ///
+    /// 토큰 원문은 이 함수의 반환값에만 존재한다. 저장되는 것은 해시뿐이라(ADR-0013)
+    /// 부르는 쪽이 화면에 한 번 보여주고 나면 서버 어디에도 남지 않는다.
+    static func registerWorker(
+        named name: String,
+        by admin: User,
+        on database: any Database,
+        logger: Logger
+    ) async throws -> CreatedWorker {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw Abort(.badRequest, reason: "워커 이름은 비울 수 없습니다.")
+        }
+
+        let token = Worker.generateToken()
+        let worker = Worker(
+            name: trimmed,
+            tokenHash: Worker.hash(token: token),
+            createdByID: try admin.requireID()
+        )
+        try await worker.save(on: database)
+
+        logger.notice("워커 등록 [이름: \(trimmed), 관리자: \(admin.email)]")
+        return CreatedWorker(worker: try worker.toDTO(), token: token)
+    }
+
+    /// 워커 토큰을 폐기한다.
+    ///
+    /// 행을 지우지 않는다. 잡 이력이 이 워커를 가리키고 있어서, 지우면 "누가 서명했나"가
+    /// 함께 사라진다. 폐기 시각만 남기고 토큰을 무효로 만든다.
+    @discardableResult
+    static func revokeWorker(
+        _ workerID: UUID,
+        by admin: User,
+        on database: any Database,
+        logger: Logger
+    ) async throws -> Worker {
+        guard let worker = try await Worker.find(workerID, on: database) else {
+            throw Abort(.notFound, reason: "워커를 찾을 수 없습니다.")
+        }
+        guard worker.isActive else {
+            throw Abort(.conflict, reason: "이미 폐기된 워커입니다.")
+        }
+
+        worker.revokedAt = Date()
+        worker.currentJobID = nil
+        try await worker.save(on: database)
+
+        logger.notice("워커 폐기 [이름: \(worker.name), 관리자: \(admin.email)]")
+        return worker
+    }
 }

@@ -306,6 +306,8 @@ enum ByteCount {
 /// Leaf 에서 날짜를 다루면 형식이 템플릿마다 갈린다. 서버에서 한 번 정해서 넘긴다.
 enum DateStyle {
     case day
+    /// 워커가 살아 있는지는 날짜만으로 알 수 없다. 마지막 접속에는 시각까지 붙인다.
+    case minute
 
     func string(from date: Date) -> String {
         let formatter = DateFormatter()
@@ -314,6 +316,8 @@ enum DateStyle {
         switch self {
         case .day:
             formatter.dateFormat = "yyyy. M. d."
+        case .minute:
+            formatter.dateFormat = "yyyy. M. d. HH:mm"
         }
         return formatter.string(from: date)
     }

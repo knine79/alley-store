@@ -52,6 +52,11 @@ private func configureMigrations(_ app: Application) {
     app.migrations.add(CreateArtifact())
     app.migrations.add(CreateDownload())
 
+    // 워커가 있어야 잡이 워커를 참조할 수 있다.
+    app.migrations.add(CreateWorker())
+    app.migrations.add(CreateSigningJobEnum())
+    app.migrations.add(CreateSigningJob())
+
     // 설정 행은 마이그레이션이 아니라 최초 접근 시점에 심는다 (ADR-0011).
     app.migrations.add(CreateStoreSettings())
 }

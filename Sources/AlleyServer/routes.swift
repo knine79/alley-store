@@ -20,6 +20,7 @@ func routes(_ app: Application) throws {
     try app.register(collection: AppController())
     try app.register(collection: VersionController())
     try app.register(collection: AdminController())
+    try app.register(collection: WorkerController())
 
     // 웹 콘솔. JSON API 보다 뒤에 등록해서 경로가 겹칠 때 API 가 이긴다.
     try app.register(collection: WebController())

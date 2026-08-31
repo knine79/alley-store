@@ -124,6 +124,60 @@ func withMigratedApp(
     await DatabaseTestLock.shared.release()
 }
 
+// MARK: - 스토리지 대역
+
+/// 테스트가 쓰는 인메모리 아티팩트 스토리지.
+///
+/// 업로드 완료 통지와 서명 결과 보고는 **스토리지에 파일이 실제로 있는지 확인하는 것**이
+/// 핵심 규칙이다. 그 규칙을 검증하려고 매번 MinIO 를 띄우는 대신 여기서 흉내낸다.
+/// presigned URL 도 형식만 맞춰 돌려준다. 테스트는 그 URL 로 실제 전송을 하지 않는다.
+final class FakeArtifactStorage: ArtifactStoring, @unchecked Sendable {
+    private let lock = NSLock()
+    private var sizes: [String: Int64] = [:]
+
+    /// 누군가 이 키에 파일을 올렸다고 가정한다.
+    func place(key: String, size: Int64 = 1024) {
+        lock.lock()
+        defer { lock.unlock() }
+        sizes[key] = size
+    }
+
+    func uploadURL(key: String) async throws -> PresignedURL {
+        PresignedURL(
+            url: "https://storage.example/\(key)?upload=1",
+            expiresAt: Date().addingTimeInterval(600)
+        )
+    }
+
+    func downloadURL(key: String) async throws -> PresignedURL {
+        PresignedURL(
+            url: "https://storage.example/\(key)?download=1",
+            expiresAt: Date().addingTimeInterval(600)
+        )
+    }
+
+    func head(key: String) async throws -> Int64? {
+        // NSLock 은 async 함수 안에서 직접 잠글 수 없다. 잠그는 구간을 동기 함수로 뺀다.
+        size(of: key)
+    }
+
+    private func size(of key: String) -> Int64? {
+        lock.lock()
+        defer { lock.unlock() }
+        return sizes[key]
+    }
+}
+
+extension Application {
+    /// 스토리지를 흉내내는 것으로 바꾸고 그 손잡이를 돌려준다.
+    @discardableResult
+    func useFakeStorage() -> FakeArtifactStorage {
+        let storage = FakeArtifactStorage()
+        artifactStorage = storage
+        return storage
+    }
+}
+
 // MARK: - 인증된 요청 만들기
 
 extension Application {
@@ -149,6 +203,16 @@ extension Application {
             SessionToken(userID: try user.requireID(), issuedAt: Date(), ttl: 3600)
         )
         return (user, token)
+    }
+}
+
+extension Application {
+    /// 테스트용 워커를 등록하고 토큰을 함께 준다.
+    func makeWorker(name: String = "test-worker") async throws -> (worker: Worker, token: String) {
+        let token = Worker.generateToken()
+        let worker = Worker(name: name, tokenHash: Worker.hash(token: token), createdByID: nil)
+        try await worker.save(on: db)
+        return (worker, token)
     }
 }
 

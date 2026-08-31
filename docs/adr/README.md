@@ -20,6 +20,7 @@
 | [0010](0010-cookie-and-bearer-authentication.md) | 세션 토큰을 쿠키와 Authorization 헤더 양쪽에서 받는다 | 수락됨 | 2026-08-14 |
 | [0011](0011-store-settings-in-database.md) | 스토어 설정을 데이터베이스로 옮기고 환경변수는 씨앗으로만 쓴다 | 수락됨 | 2026-08-18 |
 | [0012](0012-browser-upload-script.md) | 콘솔에서 스크립트를 쓰는 화면은 업로드 하나로 한정한다 | 수락됨 | 2026-08-26 |
+| [0013](0013-worker-token-authentication.md) | 워커는 사용자와 다른 신원으로, 해시만 저장하는 토큰으로 인증한다 | 수락됨 | 2026-08-31 |
 
 ## 언제 쓰나
 

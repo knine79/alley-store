@@ -7,7 +7,10 @@ import VaporTesting
 
 @Suite("관리자 화면 접근")
 struct AdminPageAccessTests {
-    @Test("관리자가 아니면 볼 수 없다", arguments: ["/admin", "/admin/settings", "/admin/users"])
+    @Test(
+        "관리자가 아니면 볼 수 없다",
+        arguments: ["/admin", "/admin/settings", "/admin/users", "/admin/workers"]
+    )
     func nonAdminsAreBlocked(_ path: String) async throws {
         try await withMigratedApp { app in
             let (_, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
@@ -308,6 +311,95 @@ struct RolePageTests {
                     try request.content.encode(["role": "superuser"], as: .urlEncodedForm)
                 }
             ) { #expect($0.status == .badRequest) }
+        }
+    }
+}
+
+@Suite("서명 워커 화면")
+struct WorkerPageTests {
+    @Test("토큰은 발급 직후 한 번만 보인다")
+    func showsTokenOnce() async throws {
+        try await withMigratedApp { app in
+            let (_, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
+
+            var issued: String?
+            try await app.testing().test(
+                .POST, "/admin/workers", headers: .form(cookie: token),
+                beforeRequest: { request in
+                    try request.content.encode(["name": "build-mac-01"], as: .urlEncodedForm)
+                }
+            ) { response in
+                #expect(response.status == .created)
+                let html = response.body.string
+                #expect(html.contains("alleyw_"))
+                issued = html
+            }
+            _ = try #require(issued)
+
+            // 서버는 해시만 갖고 있어서 다음 화면에서 다시 보여줄 방법이 없다.
+            try await app.testing().test(
+                .GET, "/admin/workers", headers: .sessionCookie(token)
+            ) { response in
+                #expect(response.body.string.contains("build-mac-01"))
+                #expect(!response.body.string.contains("alleyw_"))
+            }
+        }
+    }
+
+    @Test("발급한 토큰이 실제로 통한다")
+    func issuedTokenWorks() async throws {
+        try await withMigratedApp { app in
+            app.useFakeStorage()
+            let (admin, _) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            let created = try await AdminOperations.registerWorker(
+                named: "build-mac-01", by: admin, on: app.db, logger: app.logger
+            )
+
+            // 화면에 찍히는 문자열과 워커가 실제로 쓰는 문자열이 같아야 한다.
+            try await app.testing().test(
+                .GET, "\(APIPath.nextJob)?timeout=0", headers: .bearer(created.token)
+            ) { #expect($0.status == .noContent) }
+        }
+    }
+
+    @Test("폐기하면 토큰이 즉시 막힌다")
+    func revokingBlocksToken() async throws {
+        try await withMigratedApp { app in
+            app.useFakeStorage()
+            let (admin, cookie) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            let created = try await AdminOperations.registerWorker(
+                named: "build-mac-01", by: admin, on: app.db, logger: app.logger
+            )
+
+            try await app.testing().test(
+                .POST, "/admin/workers/\(created.worker.id.uuidString)/revoke",
+                headers: .form(cookie: cookie)
+            ) { #expect($0.status == .seeOther) }
+
+            try await app.testing().test(
+                .GET, "\(APIPath.nextJob)?timeout=0", headers: .bearer(created.token)
+            ) { #expect($0.status == .unauthorized) }
+
+            // 잡 이력이 이 워커를 가리키므로 행은 남는다.
+            let stored = try #require(try await Worker.find(created.worker.id, on: app.db))
+            #expect(stored.revokedAt != nil)
+        }
+    }
+
+    @Test("이름이 비면 발급하지 않는다")
+    func rejectsEmptyName() async throws {
+        try await withMigratedApp { app in
+            let (_, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
+
+            try await app.testing().test(
+                .POST, "/admin/workers", headers: .form(cookie: token),
+                beforeRequest: { request in
+                    try request.content.encode(["name": "   "], as: .urlEncodedForm)
+                }
+            ) { response in
+                #expect(response.status == .badRequest)
+                #expect(response.body.string.contains("워커 이름"))
+            }
         }
     }
 }

@@ -781,3 +781,44 @@ textarea.input {
     clip-path: inset(50%);
     white-space: nowrap;
 }
+
+/* ── 제목 옆 버튼 묶음 ───────────────────────────────────── */
+
+.head-actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
+/* ── 한 번만 보여주는 토큰 ───────────────────────────────── */
+
+/* 이 자리를 벗어나면 다시 볼 수 없는 값이라, 눈에 띄고 고르기 쉬워야 한다. */
+.token-box {
+    margin-bottom: var(--space-5);
+    padding: var(--space-4);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.token-title {
+    margin: 0 0 var(--space-2);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.token-value {
+    display: block;
+    padding: var(--space-3);
+    font-size: 13px;
+    line-height: 1.5;
+    /* 토큰은 길고 띄어쓰기가 없다. 넘치게 두면 상자가 가로로 삐져나간다. */
+    word-break: break-all;
+    user-select: all;
+}
+
+.token-note {
+    margin: var(--space-3) 0 0;
+    font-size: 13px;
+    color: var(--text-muted);
+}

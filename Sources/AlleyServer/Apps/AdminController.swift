@@ -18,6 +18,9 @@ public struct AdminController: RouteCollection, Sendable {
         admin.patch("settings", use: updateSettings)
         admin.get("users", use: listUsers)
         admin.patch("users", ":userID", use: updateUserRole)
+        admin.get("workers", use: listWorkers)
+        admin.post("workers", use: registerWorker)
+        admin.delete("workers", ":workerID", use: revokeWorker)
     }
 
     // MARK: - 스토어 설정
@@ -70,6 +73,48 @@ public struct AdminController: RouteCollection, Sendable {
         )
         return try target.toDTO()
     }
+
+    // MARK: - 워커
+
+    @Sendable
+    func listWorkers(request: Request) async throws -> [WorkerDTO] {
+        _ = try request.requireAdmin()
+        return try await Worker.query(on: request.db)
+            .sort(\.$name)
+            .all()
+            .map { try $0.toDTO() }
+    }
+
+    @Sendable
+    func registerWorker(request: Request) async throws -> Response {
+        let admin = try request.requireAdmin()
+        let payload = try request.content.decode(CreateWorkerRequest.self)
+        let created = try await AdminOperations.registerWorker(
+            named: payload.name,
+            by: admin,
+            on: request.db,
+            logger: request.logger
+        )
+
+        let response = Response(status: .created)
+        try response.content.encode(created)
+        return response
+    }
+
+    @Sendable
+    func revokeWorker(request: Request) async throws -> WorkerDTO {
+        let admin = try request.requireAdmin()
+        guard let workerID = request.parameters.get("workerID", as: UUID.self) else {
+            throw Abort(.badRequest, reason: "워커 ID 형식이 올바르지 않습니다.")
+        }
+        let worker = try await AdminOperations.revokeWorker(
+            workerID,
+            by: admin,
+            on: request.db,
+            logger: request.logger
+        )
+        return try worker.toDTO()
+    }
 }
 
 extension Request {
@@ -85,6 +130,9 @@ extension Request {
     }
 }
 
+extension WorkerDTO: Content {}
+extension CreateWorkerRequest: Content {}
+extension CreatedWorker: Content {}
 extension StoreSettingsDTO: Content {}
 extension UpdateStoreSettingsRequest: Content {}
 extension UpdateUserRoleRequest: Content {}

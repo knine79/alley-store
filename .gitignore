@@ -1,5 +1,7 @@
 # Swift Package Manager
 .build/
+# 빌드 디렉터리를 다른 곳으로 심볼릭 링크한 워크트리에서는 위 규칙이 걸리지 않는다.
+.build
 .swiftpm/
 *.resolved.bak
 

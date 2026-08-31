@@ -4,7 +4,7 @@ import Foundation
 ///
 /// 워커는 이 안의 URL만으로 일을 끝낼 수 있어야 한다.
 /// 서명 identity와 공증 자격증명은 워커 로컬 설정에서 오며 여기 담기지 않는다.
-public struct SigningJob: Codable, Sendable, Identifiable, Equatable {
+public struct SigningJobDTO: Codable, Sendable, Identifiable, Equatable {
     public var id: UUID
     public var versionID: UUID
     public var appBundleID: String
@@ -94,5 +94,60 @@ public struct WorkerHeartbeat: Codable, Sendable {
         self.workerName = workerName
         self.osVersion = osVersion
         self.currentJobID = currentJobID
+    }
+}
+
+// MARK: - 워커 등록
+
+/// 등록된 워커 한 대. 토큰은 여기 없다.
+public struct WorkerDTO: Codable, Sendable, Identifiable, Equatable {
+    public var id: UUID
+    public var name: String
+    /// 마지막으로 서버에 말을 건 시각. 하트비트와 잡 폴링 양쪽이 갱신한다.
+    public var lastSeenAt: Date?
+    public var osVersion: String?
+    public var currentJobID: UUID?
+    /// 폐기된 워커는 토큰이 더 이상 통하지 않는다. 기록은 남긴다.
+    public var revokedAt: Date?
+    public var createdAt: Date
+
+    public init(
+        id: UUID,
+        name: String,
+        lastSeenAt: Date? = nil,
+        osVersion: String? = nil,
+        currentJobID: UUID? = nil,
+        revokedAt: Date? = nil,
+        createdAt: Date
+    ) {
+        self.id = id
+        self.name = name
+        self.lastSeenAt = lastSeenAt
+        self.osVersion = osVersion
+        self.currentJobID = currentJobID
+        self.revokedAt = revokedAt
+        self.createdAt = createdAt
+    }
+}
+
+public struct CreateWorkerRequest: Codable, Sendable {
+    public var name: String
+
+    public init(name: String) {
+        self.name = name
+    }
+}
+
+/// 워커를 등록한 직후에만 한 번 내려주는 응답.
+///
+/// 서버는 토큰의 해시만 저장하므로 이 순간을 놓치면 다시 볼 수 없다.
+/// 잃어버리면 새로 발급받아야 한다.
+public struct CreatedWorker: Codable, Sendable {
+    public var worker: WorkerDTO
+    public var token: String
+
+    public init(worker: WorkerDTO, token: String) {
+        self.worker = worker
+        self.token = token
     }
 }

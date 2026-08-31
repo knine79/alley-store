@@ -3,12 +3,10 @@ import Fluent
 import Foundation
 import Vapor
 
-/// 관리자 화면. 스토어 설정과 역할 관리.
+/// 관리자 화면. 스토어 설정, 역할 관리, 서명 워커.
 ///
 /// 규칙은 `AdminOperations` 에 있고 JSON API 와 공유한다. 여기서는 폼에서 온 문자열을
 /// 요청 타입으로 옮기는 일만 한다.
-///
-/// **워커 등록 화면은 아직 없다.** `workers` 표가 Phase 1-3 에서 생긴다.
 struct AdminPagesController: RouteCollection, Sendable {
     func boot(routes: any RoutesBuilder) throws {
         let pages = routes
@@ -20,6 +18,9 @@ struct AdminPagesController: RouteCollection, Sendable {
         pages.post("settings", use: submitSettings)
         pages.get("users", use: userList)
         pages.post("users", ":userID", "role", use: submitRole)
+        pages.get("workers", use: workerList)
+        pages.post("workers", use: registerWorker)
+        pages.post("workers", ":workerID", "revoke", use: revokeWorker)
     }
 
     /// 관리 화면의 첫 장은 설정이다. 역할 관리는 사람이 들어올 때마다 하는 일이 아니다.
@@ -144,6 +145,74 @@ struct AdminPagesController: RouteCollection, Sendable {
         ).get()
     }
 
+    // MARK: - 워커
+
+    @Sendable
+    func workerList(request: Request) async throws -> View {
+        _ = try request.requireAdmin()
+        return try await renderWorkers(issued: nil, error: nil, on: request)
+    }
+
+    @Sendable
+    func registerWorker(request: Request) async throws -> Response {
+        let admin = try request.requireAdmin()
+        let values = try request.content.decode(WorkerFormValues.self)
+
+        do {
+            let created = try await AdminOperations.registerWorker(
+                named: values.name ?? "",
+                by: admin,
+                on: request.db,
+                logger: request.logger
+            )
+            // 리다이렉트하지 않는다. 토큰은 지금 이 응답에만 있고, 서버는 해시만
+            // 갖고 있어서 다음 화면에서 다시 보여줄 방법이 없다.
+            let view = try await renderWorkers(issued: created, error: nil, on: request)
+            return htmlResponse(view, status: .created)
+        } catch let abort as any AbortError where abort.status.code < 500 {
+            let view = try await renderWorkers(issued: nil, error: abort.reason, on: request)
+            return htmlResponse(view, status: abort.status)
+        }
+    }
+
+    @Sendable
+    func revokeWorker(request: Request) async throws -> Response {
+        let admin = try request.requireAdmin()
+        guard let workerID = request.parameters.get("workerID", as: UUID.self) else {
+            throw Abort(.badRequest, reason: "워커 ID 형식이 올바르지 않습니다.")
+        }
+
+        do {
+            try await AdminOperations.revokeWorker(
+                workerID,
+                by: admin,
+                on: request.db,
+                logger: request.logger
+            )
+        } catch let abort as any AbortError where abort.status.code < 500 {
+            let view = try await renderWorkers(issued: nil, error: abort.reason, on: request)
+            return htmlResponse(view, status: abort.status)
+        }
+        return request.redirect(to: "/admin/workers")
+    }
+
+    private func renderWorkers(
+        issued: CreatedWorker?,
+        error: String?,
+        on request: Request
+    ) async throws -> View {
+        let workers = try await Worker.query(on: request.db).sort(\.$name).all()
+        return try await request.view.render(
+            "admin-workers",
+            WorkerListPageContext(
+                page: try await request.pageContext(title: "서명 워커"),
+                workers: try workers.map { try WorkerRow(worker: $0) },
+                issued: issued.map { IssuedWorkerToken(name: $0.worker.name, token: $0.token) },
+                error: error
+            )
+        ).get()
+    }
+
     private func htmlResponse(_ view: View, status: HTTPStatus) -> Response {
         let response = Response(status: status)
         response.headers.contentType = .html
@@ -237,5 +306,42 @@ struct UserListPageContext: Encodable {
     var page: PageContext
     var users: [UserRow]
     var roles: [RoleOption]
+    var error: String?
+}
+
+struct WorkerFormValues: Codable {
+    var name: String?
+}
+
+extension WorkerFormValues: Content {}
+
+struct WorkerRow: Encodable {
+    var id: String
+    var name: String
+    var osVersion: String?
+    var lastSeen: String?
+    var isBusy: Bool
+    var isActive: Bool
+
+    init(worker: Worker) throws {
+        self.id = worker.id?.uuidString ?? ""
+        self.name = worker.name
+        self.osVersion = worker.osVersion
+        self.lastSeen = worker.lastSeenAt.map { DateStyle.minute.string(from: $0) }
+        self.isBusy = worker.currentJobID != nil
+        self.isActive = worker.isActive
+    }
+}
+
+/// 방금 발급한 토큰. 이 화면을 벗어나면 다시 볼 수 없다.
+struct IssuedWorkerToken: Encodable {
+    var name: String
+    var token: String
+}
+
+struct WorkerListPageContext: Encodable {
+    var page: PageContext
+    var workers: [WorkerRow]
+    var issued: IssuedWorkerToken?
     var error: String?
 }

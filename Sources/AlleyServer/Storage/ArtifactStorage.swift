@@ -3,18 +3,37 @@ import Foundation
 import SotoS3
 import Vapor
 
-/// 아티팩트 오브젝트 스토리지 접근.
+/// 만료 시각이 붙은 서명된 URL.
+public struct PresignedURL: Sendable {
+    public var url: String
+    public var expiresAt: Date
+
+    public init(url: String, expiresAt: Date) {
+        self.url = url
+        self.expiresAt = expiresAt
+    }
+}
+
+/// 아티팩트를 어디에 두고 어떻게 주고받을지.
+///
+/// 프로토콜로 한 겹 두는 이유는 테스트 때문이다. 업로드 완료 통지와 서명 결과 보고는
+/// **스토리지에 파일이 실제로 있는지 확인하는 것이 핵심 규칙**인데, 구현이 S3 에
+/// 박혀 있으면 그 규칙을 검증하려고 매번 오브젝트 스토리지를 띄워야 한다.
+public protocol ArtifactStoring: Sendable {
+    /// 이 키로 파일을 올릴 수 있는 URL. `PUT` 으로 보낸다.
+    func uploadURL(key: String) async throws -> PresignedURL
+    /// 이 키의 파일을 받을 수 있는 URL. `GET` 으로 보낸다.
+    func downloadURL(key: String) async throws -> PresignedURL
+    /// 스토리지에 실제로 파일이 있는지 확인하고 크기를 읽는다. 없으면 nil.
+    func head(key: String) async throws -> Int64?
+}
+
+/// S3 호환 오브젝트 스토리지 구현.
 ///
 /// 서버는 바이너리를 대신 받아주지 않는다. 만료 있는 URL 을 내주고 클라이언트가
 /// 스토리지와 직접 주고받게 한다. 수백 MB 짜리 앱이 서버 메모리와 대역폭을
 /// 거쳐가면 서버가 병목이 되고, 재시도할 때마다 그 비용을 다시 낸다.
-public struct ArtifactStorage: Sendable {
-    /// 만료 시각이 붙은 서명된 URL.
-    public struct Presigned: Sendable {
-        public var url: String
-        public var expiresAt: Date
-    }
-
+public struct ArtifactStorage: ArtifactStoring {
     public enum StorageError: Error, CustomStringConvertible {
         case invalidEndpoint(String)
         case objectMissing(key: String)
@@ -58,20 +77,16 @@ public struct ArtifactStorage: Sendable {
         "apps/\(appID.uuidString)/versions/\(versionID.uuidString)/\(kind.rawValue).zip"
     }
 
-    /// 이 키로 파일을 올릴 수 있는 URL. `PUT` 으로 보낸다.
-    public func uploadURL(key: String) async throws -> Presigned {
+    public func uploadURL(key: String) async throws -> PresignedURL {
         try await sign(key: key, method: .PUT)
     }
 
-    /// 이 키의 파일을 받을 수 있는 URL. `GET` 으로 보낸다.
-    public func downloadURL(key: String) async throws -> Presigned {
+    public func downloadURL(key: String) async throws -> PresignedURL {
         try await sign(key: key, method: .GET)
     }
 
-    /// 스토리지에 실제로 파일이 있는지 확인하고 크기를 읽는다.
-    ///
     /// 클라이언트가 "다 올렸다"고 말하는 것만 믿으면 빈 버전이 출시될 수 있다.
-    /// 없으면 nil 을 준다. 접근 실패는 그대로 던진다.
+    /// 접근 실패는 그대로 던진다.
     public func head(key: String) async throws -> Int64? {
         do {
             let output = try await s3.headObject(.init(bucket: bucket, key: key))
@@ -84,14 +99,14 @@ public struct ArtifactStorage: Sendable {
         }
     }
 
-    private func sign(key: String, method: HTTPMethod) async throws -> Presigned {
+    private func sign(key: String, method: HTTPMethod) async throws -> PresignedURL {
         let url = objectBase.appendingPathComponent(key)
         let signed = try await s3.signURL(
             url: url,
             httpMethod: method,
             expires: .seconds(Int64(ttl))
         )
-        return Presigned(url: signed.absoluteString, expiresAt: Date().addingTimeInterval(ttl))
+        return PresignedURL(url: signed.absoluteString, expiresAt: Date().addingTimeInterval(ttl))
     }
 
     /// `{엔드포인트}/{버킷}` 또는 `https://{버킷}.s3.{리전}.amazonaws.com` 을 만든다.
@@ -128,10 +143,10 @@ public struct ArtifactStorage: Sendable {
 
 extension Application {
     private struct ArtifactStorageKey: StorageKey {
-        typealias Value = ArtifactStorage
+        typealias Value = any ArtifactStoring
     }
 
-    public internal(set) var artifactStorage: ArtifactStorage {
+    public internal(set) var artifactStorage: any ArtifactStoring {
         get {
             guard let storage = storage[ArtifactStorageKey.self] else {
                 fatalError("ArtifactStorage 가 설정되기 전에 접근했습니다. configure(_:) 를 먼저 호출하세요.")
@@ -143,7 +158,7 @@ extension Application {
 }
 
 extension Request {
-    public var artifactStorage: ArtifactStorage {
+    public var artifactStorage: any ArtifactStoring {
         application.artifactStorage
     }
 }
