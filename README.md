@@ -54,6 +54,7 @@ Alley는 이 과정을 하나의 흐름으로 묶습니다.
 | `Sources/AlleyServer` | Vapor 기반 API 서버와 웹 콘솔 |
 | `Sources/AlleyWorkerCore` | 서명·공증 파이프라인 |
 | `Sources/AlleyStoreCore` | SwiftUI 스토어 앱 (macOS 전용) |
+| `Sources/AlleyCLICore` | CI 에서 버전을 올리는 `alley` 명령 |
 
 세 계층이 같은 Swift 타입을 공유하므로 API 스펙이 어긋나면 컴파일 단계에서 잡힙니다.
 
@@ -108,6 +109,25 @@ swift run alley-worker preflight
 서명 키는 로그인 키체인에 있고 그 키체인은 로그아웃 상태에서 잠겨 있으므로,
 시스템 데몬이 아니라 LaunchAgent 로 설치합니다. 로그는
 `~/Library/Logs/alley-worker.log` 에 쌓입니다.
+
+### CI 에서 올리기
+
+앱 상세 화면에서 배포 토큰을 발급한 뒤:
+
+```bash
+export ALLEY_SERVER_URL="https://store.example.com"
+export ALLEY_TOKEN="alleyd_..."
+
+swift build -c release --product alley
+alley upload build/MyApp.zip --version 1.2.0
+```
+
+토큰은 그 앱 하나에만 통합니다. 새어나가도 다른 앱은 열리지 않습니다
+([ADR-0015](docs/adr/0015-app-scoped-deploy-tokens.md)). 빌드 번호를 안 주면 서버의
+마지막 번호에 1을 더합니다.
+
+이미 서명·공증을 마친 빌드라면 `--signed --release` 로 올린 즉시 출시할 수 있습니다.
+미서명으로 올리면 서명 워커가 이어받으므로 그 자리에서 출시할 수 없습니다.
 
 ### 스토어 앱 빌드
 

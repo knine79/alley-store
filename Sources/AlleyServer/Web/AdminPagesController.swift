@@ -21,6 +21,8 @@ struct AdminPagesController: RouteCollection, Sendable {
         pages.get("workers", use: workerList)
         pages.post("workers", use: registerWorker)
         pages.post("workers", ":workerID", "revoke", use: revokeWorker)
+        pages.get("portal", use: portal)
+        pages.post("portal", "bundle-ids", use: registerBundleID)
     }
 
     /// 관리 화면의 첫 장은 설정이다. 역할 관리는 사람이 들어올 때마다 하는 일이 아니다.
@@ -213,6 +215,79 @@ struct AdminPagesController: RouteCollection, Sendable {
         ).get()
     }
 
+    // MARK: - 개발자 포털
+
+    /// 인증서 만료와 App ID 현황.
+    ///
+    /// 연동이 없거나 Apple 쪽이 답하지 않아도 화면은 뜬다. 무엇이 잘못됐는지 적어서
+    /// 보여주는 것이 이 화면의 절반이다.
+    @Sendable
+    func portal(request: Request) async throws -> View {
+        _ = try request.requireAdmin()
+        return try await renderPortal(error: nil, on: request)
+    }
+
+    @Sendable
+    func registerBundleID(request: Request) async throws -> Response {
+        let admin = try request.requireAdmin()
+        let values = try request.content.decode(BundleIDFormValues.self)
+
+        do {
+            _ = try await PortalRegistration.registerBundleID(
+                RegisterBundleIDRequest(
+                    identifier: values.identifier ?? "",
+                    name: values.name ?? ""
+                ),
+                using: try request.appStoreConnect(),
+                by: admin,
+                logger: request.logger
+            )
+        } catch let abort as any AbortError where abort.status.code < 500 {
+            let view = try await renderPortal(error: abort.reason, on: request)
+            return htmlResponse(view, status: abort.status)
+        } catch {
+            let view = try await renderPortal(error: describe(error), on: request)
+            return htmlResponse(view, status: .badGateway)
+        }
+        return request.redirect(to: "/admin/portal")
+    }
+
+    private func renderPortal(error: String?, on request: Request) async throws -> View {
+        var certificates: [CertificateRow] = []
+        var bundleIDs: [ASCBundleID] = []
+        var connectionError: String?
+
+        do {
+            let client = try request.appStoreConnect()
+            certificates = try await client.certificates()
+                .sorted { ($0.expiresAt ?? .distantFuture) < ($1.expiresAt ?? .distantFuture) }
+                .map { CertificateRow(certificate: $0) }
+            bundleIDs = try await client.bundleIDs().sorted { $0.identifier < $1.identifier }
+        } catch {
+            // 연동이 없거나 Apple 이 답하지 않는 경우다. 화면은 그대로 띄우고 이유만 적는다.
+            connectionError = describe(error)
+        }
+
+        let settings = try await request.storeSettings()
+        return try await request.view.render(
+            "admin-portal",
+            PortalPageContext(
+                page: try await request.pageContext(title: "개발자 포털"),
+                isConfigured: request.application.alleyConfig.appStoreConnect != nil,
+                certificates: certificates,
+                bundleIDs: bundleIDs,
+                suggestedWildcard: settings.bundleIDPrefix.map { "\($0).*" },
+                connectionError: connectionError,
+                error: error
+            )
+        ).get()
+    }
+
+    private func describe(_ error: any Error) -> String {
+        if let abort = error as? any AbortError { return abort.reason }
+        return String(describing: error)
+    }
+
     private func htmlResponse(_ view: View, status: HTTPStatus) -> Response {
         let response = Response(status: status)
         response.headers.contentType = .html
@@ -337,6 +412,49 @@ struct WorkerRow: Encodable {
 struct IssuedWorkerToken: Encodable {
     var name: String
     var token: String
+}
+
+struct BundleIDFormValues: Codable {
+    var identifier: String?
+    var name: String?
+}
+
+extension BundleIDFormValues: Content {}
+
+/// 화면에 뿌리는 인증서 한 줄.
+struct CertificateRow: Encodable {
+    var name: String
+    var type: String
+    var expires: String?
+    var daysLeft: Int?
+    /// 서명에 쓰는 인증서인지. 이게 만료되면 워커가 멈춘다.
+    var isDeveloperID: Bool
+    /// 만료됐거나 곧 만료된다. 화면에서 눈에 띄게 한다.
+    var needsAttention: Bool
+
+    init(certificate: ASCCertificate) {
+        self.name = certificate.name
+        self.type = certificate.type
+        self.expires = certificate.expiresAt.map { DateStyle.day.string(from: $0) }
+        let days = certificate.daysUntilExpiry()
+        self.daysLeft = days
+        self.isDeveloperID = certificate.isDeveloperID
+        // 인증서 갱신은 사람의 손이 여러 번 필요한 일이다. 한 달 전에는 알아야 한다.
+        self.needsAttention = certificate.isDeveloperID && (days ?? .max) < 30
+    }
+}
+
+struct PortalPageContext: Encodable {
+    var page: PageContext
+    var isConfigured: Bool
+    var certificates: [CertificateRow]
+    var bundleIDs: [ASCBundleID]
+    /// 스토어 설정의 프리픽스로 만든 와일드카드 제안값.
+    var suggestedWildcard: String?
+    /// Apple 과 이야기하지 못한 이유.
+    var connectionError: String?
+    /// 사람이 고칠 수 있는 실패.
+    var error: String?
 }
 
 struct WorkerListPageContext: Encodable {

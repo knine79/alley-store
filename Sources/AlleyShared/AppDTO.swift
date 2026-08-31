@@ -352,6 +352,88 @@ public struct CreatedDeployToken: Codable, Sendable {
     }
 }
 
+// MARK: - App Store Connect
+
+/// 개발자 포털의 인증서 하나.
+///
+/// 개인키는 여기 없다. 서버는 애초에 모른다(ADR-0002). "언제 만료되는가"만 본다.
+public struct ASCCertificate: Codable, Sendable, Identifiable, Equatable {
+    public var id: String
+    public var name: String
+    /// `DEVELOPER_ID_APPLICATION` 같은 Apple 쪽 분류.
+    public var type: String
+    public var serialNumber: String?
+    public var expiresAt: Date?
+
+    public init(
+        id: String,
+        name: String,
+        type: String,
+        serialNumber: String? = nil,
+        expiresAt: Date? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.type = type
+        self.serialNumber = serialNumber
+        self.expiresAt = expiresAt
+    }
+
+    /// 서명에 쓰는 인증서인지.
+    ///
+    /// 만료되면 워커가 서명을 못 한다. 다른 종류는 참고 정보다.
+    public var isDeveloperID: Bool {
+        type.uppercased().contains("DEVELOPER_ID")
+    }
+
+    /// 만료까지 남은 날. 이미 지났으면 음수.
+    public func daysUntilExpiry(from now: Date = Date()) -> Int? {
+        guard let expiresAt else { return nil }
+        return Calendar(identifier: .gregorian).dateComponents(
+            [.day], from: now, to: expiresAt
+        ).day
+    }
+}
+
+/// 개발자 포털에 등록된 App ID 하나.
+public struct ASCBundleID: Codable, Sendable, Identifiable, Equatable {
+    public var id: String
+    /// `com.example.tool` 또는 와일드카드 `com.example.*`
+    public var identifier: String
+    public var name: String
+    public var platform: String
+
+    public init(id: String, identifier: String, name: String, platform: String) {
+        self.id = id
+        self.identifier = identifier
+        self.name = name
+        self.platform = platform
+    }
+
+    public var isWildcard: Bool {
+        identifier.hasSuffix("*")
+    }
+
+    /// 이 와일드카드가 저 번들 ID 를 덮는지.
+    ///
+    /// `com.example.*` 는 `com.example.tool` 을 덮지만 `com.other.tool` 은 못 덮는다.
+    public func covers(_ bundleID: String) -> Bool {
+        guard isWildcard else { return identifier == bundleID }
+        let prefix = String(identifier.dropLast())
+        return bundleID.hasPrefix(prefix)
+    }
+}
+
+public struct RegisterBundleIDRequest: Codable, Sendable {
+    public var identifier: String
+    public var name: String
+
+    public init(identifier: String, name: String) {
+        self.identifier = identifier
+        self.name = name
+    }
+}
+
 /// 사용자 역할 변경 요청.
 public struct UpdateUserRoleRequest: Codable, Sendable {
     public var role: UserRole

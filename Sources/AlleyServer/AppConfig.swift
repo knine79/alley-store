@@ -13,6 +13,8 @@ public struct AppConfig: Sendable {
     public var storage: StorageConfig
     public var oauth: OAuthConfig
     public var security: SecurityConfig
+    /// App Store Connect API 연동. 설정하지 않으면 그 기능만 꺼진다.
+    public var appStoreConnect: AppStoreConnectConfig?
     /// 사용자와 워커가 접근하는 서버의 공개 주소. 콜백 URL 구성에 쓴다.
     public var publicBaseURL: String
 
@@ -70,6 +72,20 @@ public struct AppConfig: Sendable {
         public var clientSecret: String
         /// 공급자에 등록한 리다이렉트 URI.
         public var redirectURI: String
+    }
+
+    /// App Store Connect API 키.
+    ///
+    /// 셋 다 있어야 켜진다. 하나라도 없으면 연동 자체를 끈다. 절반만 설정된 상태로
+    /// 뜬 뒤 부를 때가 되어서야 실패하는 것보다, 처음부터 없다고 말하는 편이 낫다.
+    ///
+    /// 비밀값이라 환경변수에 남는다(ADR-0011). 개인키는 파일 경로가 아니라 내용을
+    /// 그대로 받는다. 컨테이너로 배포하면 파일을 넣는 것보다 시크릿을 주입하는 편이 쉽다.
+    public struct AppStoreConnectConfig: Sendable {
+        public var issuerID: String
+        public var keyID: String
+        /// `.p8` 파일의 내용. PEM 헤더를 포함한 그대로.
+        public var privateKeyPEM: String
     }
 
     public struct SecurityConfig: Sendable {
@@ -136,6 +152,23 @@ extension AppConfig {
             return value
         }
 
+        /// 셋이 다 있을 때만 켠다.
+        func appStoreConnectConfig() -> AppStoreConnectConfig? {
+            guard let issuer = optional("ASC_ISSUER_ID"),
+                  let keyID = optional("ASC_KEY_ID"),
+                  let key = optional("ASC_PRIVATE_KEY")
+            else {
+                return nil
+            }
+            // 시크릿 관리 도구가 줄바꿈을 \n 으로 바꿔 넣는 경우가 흔하다.
+            // PEM 은 줄바꿈이 의미를 가지므로 되돌린다.
+            return AppStoreConnectConfig(
+                issuerID: issuer,
+                keyID: keyID,
+                privateKeyPEM: key.replacingOccurrences(of: "\\n", with: "\n")
+            )
+        }
+
         return AppConfig(
             store: StoreConfig(
                 initialAdminEmails: list("INITIAL_ADMIN_EMAILS").map { $0.lowercased() },
@@ -168,6 +201,7 @@ extension AppConfig {
                 jwtSecret: try required("JWT_SECRET"),
                 sessionTTL: try integer("SESSION_TTL", default: 60 * 60 * 24 * 7)
             ),
+            appStoreConnect: appStoreConnectConfig(),
             publicBaseURL: try required("PUBLIC_BASE_URL")
         )
     }

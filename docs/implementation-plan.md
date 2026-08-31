@@ -6,7 +6,7 @@
 [ADR](adr/README.md)을 보세요.
 
 - 최종 갱신: 2026-08-31
-- 현재 상태: Phase 1-1 ~ 1-5 완료. 남은 것은 1-6 첫 배포 (이 레포 밖)
+- 현재 상태: Phase 1-1 ~ 1-5 완료, Phase 2 대부분 완료. 실제 자격증명이 필요한 검증만 남음
 
 ## 진행 현황
 
@@ -14,7 +14,7 @@
 | --- | --- | --- | --- |
 | Phase 0 | 프로젝트 셋업 | 0.5주 | 완료 |
 | Phase 1 | MVP: 코어 배포 루프 | 3~4주 | 진행 중 (1-1~1-5 완료, 실기기 검증 남음) |
-| Phase 2 | 발급 자동화 + CLI | 1~2주 | 대기 |
+| Phase 2 | 발급 자동화 + CLI | 1~2주 | 진행 중 (프로필 발급·실키 검증 남음) |
 | Phase 3 | 별점 + 피드백 + 알림 | 1~2주 | 대기 |
 | Phase 4 | 마무리 + 공개 준비 | 1~2주 | 대기 |
 
@@ -127,12 +127,34 @@ preflight 와 실제 `PUT` 양쪽에 헤더를 붙여줘서 [ADR-0009](adr/0009-
 - [ ] Google OAuth 클라이언트 발급 (운영용 리다이렉트 URI 추가)
 - [ ] 워커 설치, 파일럿 앱 1개로 전체 루프 검증
 
-## Phase 2. 발급 자동화 + CLI (1~2주)
+## Phase 2. 발급 자동화 + CLI (1~2주) — 대부분 완료
 
-- [ ] App Store Connect API 연동: 인증서 현황 조회, 특수 capability 앱용 explicit
-      App ID 등록, 필요 시 Developer ID 프로필 발급
-- [ ] 와일드카드 App ID 1회 등록 + 웹 콘솔 현황 표시
-- [ ] `alley-cli`: CI에서 버전 업로드 (`alley upload --app com.example.tool build.zip`)
+- [x] App Store Connect API 연동: 인증서 현황 조회, App ID 등록
+- [x] 와일드카드 App ID 등록 + 웹 콘솔 현황 표시 (`/admin/portal`)
+- [x] `alley-cli`: CI에서 버전 업로드
+- [x] 앱별 배포 토큰 ([ADR-0015](adr/0015-app-scoped-deploy-tokens.md))
+- [ ] Developer ID 프로필 발급
+- [ ] **실제 App Store Connect 키로 검증**
+
+CLI 는 배포 토큰으로 인증합니다. 토큰이 앱 하나에 묶여 있어서 앱 ID 를 넘길 필요가
+없습니다.
+
+```bash
+export ALLEY_SERVER_URL=https://store.example.com
+export ALLEY_TOKEN=alleyd_...        # 앱 상세 화면에서 발급
+alley upload build/MyApp.zip --version 1.2.0
+```
+
+빌드 번호를 안 주면 서버의 마지막 번호에 1을 더합니다. 종료 코드는 설정·인자 실수가
+2, 서버·전송 실패가 1입니다. 전자는 재시도해봐야 소용없습니다.
+
+**프로필 발급은 남겼습니다.** API 호출 자체보다 "발급한 프로필을 누구에게 어떻게
+전달하는가"가 문제입니다. 프로필은 서명 **이전에** 번들 안에 들어가야 하므로
+(설계 문서 §3) 워커가 아니라 앱을 빌드하는 개발자에게 가야 합니다. 그 흐름을 정하는
+것이 API 연동보다 큰 일이라 실제로 필요한 앱이 나올 때 정합니다.
+
+**App Store Connect 연동은 실제 키로 확인하지 못했습니다.** JWT 조립과 응답 해석,
+만료 판단은 테스트로 확인했지만, Apple 이 그 토큰을 받아주는지는 키가 있어야 압니다.
 
 ## Phase 3. 별점 + 피드백 + 알림 (1~2주)
 

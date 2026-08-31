@@ -1,0 +1,146 @@
+#extend("layout"):
+#export("content"):
+<div class="page-head">
+    <div>
+        <h1 class="page-title">개발자 포털</h1>
+        <p class="page-lead">
+            Apple 개발자 계정의 인증서와 App ID 현황입니다. 여기서 보기만 하고, 발급과
+            폐기는 Apple 화면에서 합니다. 서명 키는 이 서버에 오지 않습니다.
+        </p>
+    </div>
+    <div class="head-actions">
+        <a class="button" href="/admin/settings">스토어 설정</a>
+        <a class="button" href="/admin/workers">서명 워커</a>
+    </div>
+</div>
+
+#if(error):
+<p class="notice notice-error">#(error)</p>
+#endif
+
+#if(isConfigured == false):
+<div class="empty">
+    <p>App Store Connect 연동이 설정되지 않았습니다.</p>
+    <p class="empty-note">
+        서버 환경변수에 <code>ASC_ISSUER_ID</code>, <code>ASC_KEY_ID</code>,
+        <code>ASC_PRIVATE_KEY</code> 를 채우면 이 화면이 채워집니다. 셋 다 있어야 켜집니다.
+    </p>
+</div>
+#else:
+
+#if(connectionError):
+<p class="notice notice-error">
+    Apple 과 이야기하지 못했습니다.<br>#(connectionError)
+</p>
+#endif
+
+<section class="section">
+    <h2 class="section-title">인증서</h2>
+    #if(count(certificates) == 0):
+    <div class="empty">
+        <p>인증서를 가져오지 못했거나 등록된 것이 없습니다.</p>
+    </div>
+    #else:
+    <table class="table">
+        <thead>
+            <tr>
+                <th class="table-fill">이름</th>
+                <th class="table-tight">종류</th>
+                <th class="table-tight">만료</th>
+                <th class="table-tight">남은 기간</th>
+            </tr>
+        </thead>
+        <tbody>
+            #for(certificate in certificates):
+            <tr>
+                <td class="table-fill">
+                    <span class="table-strong">#(certificate.name)</span>
+                    #if(certificate.isDeveloperID):
+                    <span class="badge badge-released">서명용</span>
+                    #endif
+                </td>
+                <td class="table-tight table-muted">#(certificate.type)</td>
+                <td class="table-tight table-muted">#if(certificate.expires):#(certificate.expires)#else:—#endif</td>
+                <td class="table-tight">
+                    #if(certificate.needsAttention):
+                    <span class="badge badge-failed">#(certificate.daysLeft)일</span>
+                    #elseif(certificate.daysLeft):
+                    <span class="table-muted">#(certificate.daysLeft)일</span>
+                    #else:
+                    <span class="table-muted">—</span>
+                    #endif
+                </td>
+            </tr>
+            #endfor
+        </tbody>
+    </table>
+    <p class="field-note">
+        서명용 인증서가 만료되면 워커가 서명을 못 합니다. 갱신은 손이 여러 번 가는
+        일이라 30일 전부터 표시합니다.
+    </p>
+    #endif
+</section>
+
+<section class="section">
+    <h2 class="section-title">App ID</h2>
+    <p class="page-lead">
+        대부분의 내부 앱은 포털에 등록할 필요가 없습니다. 프로필이 필요하면 와일드카드
+        하나로 묶고, Push·iCloud·App Groups 같은 특수 capability 를 쓰는 앱만 따로
+        등록합니다.
+    </p>
+
+    #if(count(bundleIDs) == 0):
+    <div class="empty">
+        <p>등록된 App ID 가 없습니다.</p>
+        <p class="empty-note">그대로 두어도 서명과 공증만으로 배포됩니다.</p>
+    </div>
+    #else:
+    <table class="table">
+        <thead>
+            <tr>
+                <th class="table-fill">식별자</th>
+                <th class="table-tight">이름</th>
+                <th class="table-tight">형태</th>
+            </tr>
+        </thead>
+        <tbody>
+            #for(bundleID in bundleIDs):
+            <tr>
+                <td class="table-fill"><code>#(bundleID.identifier)</code></td>
+                <td class="table-tight table-muted">#(bundleID.name)</td>
+                <td class="table-tight">
+                    #if(bundleID.isWildcard):
+                    <span class="badge">와일드카드</span>
+                    #else:
+                    <span class="badge">개별</span>
+                    #endif
+                </td>
+            </tr>
+            #endfor
+        </tbody>
+    </table>
+    #endif
+
+    <form class="form" method="post" action="/admin/portal/bundle-ids">
+        <label class="field">
+            <span class="field-label">App ID</span>
+            <input class="input" type="text" name="identifier" required
+                   #if(suggestedWildcard):value="#(suggestedWildcard)"#endif
+                   placeholder="com.example.*"
+                   autocapitalize="off" autocorrect="off" spellcheck="false">
+            <span class="field-note">와일드카드는 맨 끝에만 올 수 있습니다.</span>
+        </label>
+        <label class="field">
+            <span class="field-label">이름</span>
+            <input class="input" type="text" name="name" required
+                   placeholder="사내 앱 공용">
+            <span class="field-note">Apple 화면의 목록에서 알아볼 이름입니다.</span>
+        </label>
+        <div class="form-actions">
+            <button class="button button-primary" type="submit">등록</button>
+        </div>
+    </form>
+</section>
+#endif
+#endexport
+#endextend
