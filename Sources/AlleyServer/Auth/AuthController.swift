@@ -220,14 +220,7 @@ public struct AuthController: RouteCollection, Sendable {
 
 // MARK: - 페이로드
 
-public struct TokenExchangeRequest: Content, Sendable {
-    public var code: String
-}
-
-public struct TokenExchangeResponse: Content, Sendable {
-    public var token: String
-    public var expiresIn: Int
-    public var user: UserDTO
-}
-
+// 타입 자체는 AlleyShared 에 있다. 스토어 앱이 같은 것을 디코딩한다.
+extension TokenExchangeRequest: Content {}
+extension TokenExchangeResponse: Content {}
 extension UserDTO: Content {}

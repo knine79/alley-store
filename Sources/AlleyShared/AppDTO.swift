@@ -279,6 +279,31 @@ public struct AddAppMemberRequest: Codable, Sendable {
     }
 }
 
+/// 스토어 앱이 일회용 코드를 세션 토큰으로 바꿀 때 보내는 요청.
+///
+/// 앱은 브라우저가 아니라 쿠키를 받을 수 없다. 그래서 로그인 콜백으로 코드만 받고,
+/// 그 코드를 이 요청으로 한 번 교환한다 (ADR-0008).
+public struct TokenExchangeRequest: Codable, Sendable {
+    public var code: String
+
+    public init(code: String) {
+        self.code = code
+    }
+}
+
+public struct TokenExchangeResponse: Codable, Sendable {
+    public var token: String
+    /// 토큰이 유효한 시간(초).
+    public var expiresIn: Int
+    public var user: UserDTO
+
+    public init(token: String, expiresIn: Int, user: UserDTO) {
+        self.token = token
+        self.expiresIn = expiresIn
+        self.user = user
+    }
+}
+
 /// 사용자 역할 변경 요청.
 public struct UpdateUserRoleRequest: Codable, Sendable {
     public var role: UserRole

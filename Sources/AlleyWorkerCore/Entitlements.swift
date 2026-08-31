@@ -1,3 +1,4 @@
+import AlleyProcess
 import Foundation
 
 /// 번들이 요구하는 권한과, 그것을 서명할 수 있는지에 대한 판단.

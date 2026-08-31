@@ -40,12 +40,17 @@ let package = Package(
             ]
         ),
 
+        // 외부 명령 실행. 워커는 codesign 과 notarytool 을, 스토어 앱은 설치 직전
+        // 검증을 위해 codesign 과 spctl 을 부른다. 같은 것을 두 번 만들 이유가 없다.
+        .target(name: "AlleyProcess"),
+
         // 워커의 실제 동작. 실행 파일과 나눠둔 이유는 테스트 때문이다. 실행 타깃은
         // main.swift 를 들고 있어서 테스트 타깃이 그대로 임포트하기 곤란하다.
         .target(
             name: "AlleyWorkerCore",
             dependencies: [
                 "AlleyShared",
+                "AlleyProcess",
                 .product(name: "Crypto", package: "swift-crypto"),
             ]
         ),
@@ -66,3 +71,15 @@ let package = Package(
         ),
     ]
 )
+
+// 스토어 앱은 SwiftUI 와 AppKit 을 쓴다. Linux 에서는 컴파일조차 되지 않으므로
+// 그 플랫폼에서는 타깃 자체를 만들지 않는다. CI 의 리눅스 잡은 서버와 공유 코드만
+// 짓고, 앱은 macOS 잡이 짓는다.
+#if os(macOS)
+package.products.append(.executable(name: "alley-store-app", targets: ["AlleyStore"]))
+package.targets.append(contentsOf: [
+    .target(name: "AlleyStoreCore", dependencies: ["AlleyShared", "AlleyProcess"]),
+    .executableTarget(name: "AlleyStore", dependencies: ["AlleyStoreCore"]),
+    .testTarget(name: "AlleyStoreTests", dependencies: ["AlleyStoreCore"]),
+])
+#endif

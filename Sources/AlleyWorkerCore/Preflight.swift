@@ -1,3 +1,4 @@
+import AlleyProcess
 import Foundation
 
 /// 워커 머신이 서명·공증을 수행할 준비가 됐는지 확인한다.
