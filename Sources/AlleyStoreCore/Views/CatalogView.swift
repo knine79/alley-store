@@ -78,6 +78,13 @@ struct CatalogView: View {
             }
         }
         .task { await model.refresh() }
+        .onChange(of: model.apps) { _, apps in
+            // 목록이 있는데 오른쪽이 비어 있으면 화면이 절반만 채워진 것처럼 보인다.
+            // 사용자가 고르기 전에도 볼 것이 있게 첫 앱을 미리 편다.
+            if selection == nil {
+                selection = apps.first?.id
+            }
+        }
     }
 }
 
