@@ -99,6 +99,33 @@ public enum Shell {
     }
 }
 
+extension Shell {
+    /// 명령을 별도 스레드에서 돌리고 결과를 기다린다.
+    ///
+    /// `run` 은 스레드를 붙잡는다. 공증 대기처럼 몇 분씩 걸리는 명령을 async 함수에서
+    /// 그대로 부르면 협력 스레드 풀 하나가 그동안 묶여서, 하트비트 같은 다른 작업이
+    /// 함께 멈춘다.
+    public static func runDetached(
+        _ executable: String,
+        _ arguments: [String],
+        currentDirectory: URL? = nil,
+        timeout: TimeInterval? = nil
+    ) async -> Result {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(
+                    returning: run(
+                        executable,
+                        arguments,
+                        currentDirectory: currentDirectory,
+                        timeout: timeout
+                    )
+                )
+            }
+        }
+    }
+}
+
 /// 두 파이프에서 동시에 들어오는 출력을 안전하게 모은다.
 private final class OutputCollector: @unchecked Sendable {
     private let lock = NSLock()

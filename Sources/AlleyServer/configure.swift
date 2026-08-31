@@ -17,6 +17,7 @@ public func configure(_ app: Application, config: AppConfig) async throws {
     await configureJWT(app, config: config.security)
     try configureStorage(app, config: config.storage)
 
+    configureContentCoders()
     app.views.use(.leaf)
     // 정적 파일 주소에 붙일 지문. 파일이 바뀌면 값이 바뀌어 브라우저가 새로 받는다.
     app.assetVersion = AssetVersion(publicDirectory: app.directory.publicDirectory)
@@ -27,6 +28,22 @@ public func configure(_ app: Application, config: AppConfig) async throws {
     app.routes.defaultMaxBodySize = "1mb"
 
     try routes(app)
+}
+
+/// JSON 의 날짜 형식.
+///
+/// Vapor 기본값은 기준 시각으로부터의 초를 담은 실수다. 사람이 읽을 수 없고, 다른
+/// 언어에서 해석하려면 Apple 의 기준 시각을 알아야 한다. 스토어 앱과 워커가 같은
+/// 형식을 읽어야 하고 이 API 는 언젠가 사내 다른 도구도 부르게 되므로 ISO-8601 로
+/// 고정한다.
+private func configureContentCoders() {
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+
+    ContentConfiguration.global.use(encoder: encoder, for: .json)
+    ContentConfiguration.global.use(decoder: decoder, for: .json)
 }
 
 private func configureDatabase(_ app: Application, config: AppConfig.DatabaseConfig) throws {

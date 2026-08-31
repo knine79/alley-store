@@ -1,12 +1,13 @@
 import AlleyShared
+import AlleyWorkerCore
 import Foundation
 
 /// 서명 워커 진입점.
 ///
-/// Phase 0 범위에서는 설정 로딩과 환경 점검(`preflight`)까지 제공한다.
-/// 잡 폴링 루프는 서버의 워커 API가 준비되는 Phase 1-3에서 붙인다.
+/// 실제 동작은 `AlleyWorkerCore` 에 있다. 여기서는 명령을 고르고 설정을 읽는다.
 enum Command: String {
     case preflight
+    case run
     case version
 
     static let usage = """
@@ -14,6 +15,7 @@ enum Command: String {
 
         명령:
           preflight   이 머신이 서명·공증을 수행할 준비가 됐는지 점검한다
+          run         잡을 기다렸다 처리하는 것을 반복한다 (launchd 가 부르는 명령)
           version     워커 버전을 출력한다
 
         필수 환경변수:
@@ -30,6 +32,24 @@ enum Command: String {
 }
 
 let workerVersion = "0.1.0"
+
+/// 로그를 한 줄씩 즉시 내보낸다.
+///
+/// `launchd` 가 표준 출력을 파일로 받는다. 버퍼에 남아 있으면 무슨 일이 일어나는지
+/// 실시간으로 볼 수 없고, 프로세스가 죽으면 그대로 사라진다.
+func emit(_ message: String) {
+    let stamp = ISO8601DateFormatter().string(from: Date())
+    FileHandle.standardOutput.write(Data("[\(stamp)] \(message)\n".utf8))
+}
+
+func loadConfig() -> WorkerConfig {
+    do {
+        return try WorkerConfig.load()
+    } catch {
+        FileHandle.standardError.write(Data("설정을 읽지 못했습니다: \(error)\n".utf8))
+        exit(1)
+    }
+}
 
 let arguments = CommandLine.arguments.dropFirst()
 
@@ -48,13 +68,7 @@ case .version:
     print("alley-worker \(workerVersion) (API v\(APIPath.currentAPIVersion))")
 
 case .preflight:
-    let config: WorkerConfig
-    do {
-        config = try WorkerConfig.load()
-    } catch {
-        FileHandle.standardError.write(Data("설정을 읽지 못했습니다: \(error)\n".utf8))
-        exit(1)
-    }
+    let config = loadConfig()
 
     print("워커 '\(config.name)' 환경 점검")
     print("서버: \(config.serverURL.absoluteString)")
@@ -74,4 +88,21 @@ case .preflight:
         FileHandle.standardError.write(Data("점검 \(failed)건이 실패했습니다.\n".utf8))
         exit(1)
     }
+
+case .run:
+    let config = loadConfig()
+
+    // 환경이 망가진 채로 잡을 가져가면, 잡 하나를 실패로 만들고 나서야 알게 된다.
+    // 시작할 때 한 번 점검하고 안 되면 아예 뜨지 않는다. launchd 가 다시 띄우면서
+    // 로그에 같은 이유가 반복되므로, 무엇이 문제인지 찾기도 쉽다.
+    let report = Preflight.run(config: config)
+    guard report.allPassed else {
+        for check in report.checks where !check.passed {
+            FileHandle.standardError.write(Data("✗ \(check.name): \(check.detail)\n".utf8))
+        }
+        FileHandle.standardError.write(Data("환경 점검에 실패해 시작하지 않습니다.\n".utf8))
+        exit(1)
+    }
+
+    await WorkerLoop(config: config, log: emit).run()
 }
