@@ -255,6 +255,32 @@ struct SigningJobQueueTests {
         }
     }
 
+    @Test("지시서를 만들지 못하면 잡을 큐로 되돌린다")
+    func returnsJobToQueueWhenStorageFails() async throws {
+        try await withMigratedApp { app in
+            let storage = app.useFakeStorage()
+            let (_, token) = try await app.makeWorker()
+            let (_, job) = try await seedPendingVersion(on: app)
+
+            // 스토리지가 죽으면 presigned URL 을 만들 수 없다. 잡은 이미 running 인데
+            // 워커는 아무것도 받지 못한 상태라, 그대로 두면 영원히 갇힌다.
+            storage.isUnavailable = true
+            try await app.testing().test(.GET, nextJobPath, headers: .bearer(token)) {
+                #expect($0.status == .internalServerError)
+            }
+
+            let stored = try #require(try await SigningJob.find(try job.requireID(), on: app.db))
+            #expect(stored.state == .queued)
+            #expect(stored.$worker.id == nil)
+
+            // 스토리지가 돌아오면 같은 잡이 다시 나간다.
+            storage.isUnavailable = false
+            try await app.testing().test(.GET, nextJobPath, headers: .bearer(token)) {
+                #expect($0.status == .ok)
+            }
+        }
+    }
+
     @Test("같은 버전을 두 번 큐에 넣지 않는다")
     func enqueueIsIdempotent() async throws {
         try await withMigratedApp { app in

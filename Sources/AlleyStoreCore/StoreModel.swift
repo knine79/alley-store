@@ -181,10 +181,7 @@ final class StoreModel {
                 throw StoreClient.ClientError.malformedResponse
             }
 
-            let archive = try await Downloader().download(
-                from: url,
-                expectedSize: ticket.fileSize
-            ) { [weak self] fraction in
+            let archive = try await Downloader.download(from: url) { [weak self] fraction in
                 Task { @MainActor in self?.progress[app.id] = .downloading(fraction) }
             }
             defer { try? FileManager.default.removeItem(at: archive) }

@@ -115,10 +115,22 @@ public struct WorkerController: RouteCollection, Sendable {
             return nil
         }
 
+        // 지시서를 만들다 실패하면(스토리지가 죽었다든지) 잡은 이미 running 이다.
+        // 그대로 두면 아무도 처리하지 않는 채로 갇힌다. 큐로 돌려놓고 오류를 알린다.
+        let ticket: SigningJobDTO
+        do {
+            ticket = try await self.ticket(for: job, on: request)
+        } catch {
+            job.state = .queued
+            job.$worker.id = nil
+            job.claimedAt = nil
+            try? await job.save(on: request.db)
+            throw error
+        }
+
         worker.currentJobID = jobID
         try await worker.save(on: request.db)
-
-        return try await ticket(for: job, on: request)
+        return ticket
     }
 
     /// 워커가 일을 끝내는 데 필요한 것만 담은 지시서.

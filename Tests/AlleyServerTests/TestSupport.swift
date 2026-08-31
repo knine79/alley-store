@@ -132,8 +132,12 @@ func withMigratedApp(
 /// 핵심 규칙이다. 그 규칙을 검증하려고 매번 MinIO 를 띄우는 대신 여기서 흉내낸다.
 /// presigned URL 도 형식만 맞춰 돌려준다. 테스트는 그 URL 로 실제 전송을 하지 않는다.
 final class FakeArtifactStorage: ArtifactStoring, @unchecked Sendable {
+    struct Unavailable: Error {}
+
     private let lock = NSLock()
     private var sizes: [String: Int64] = [:]
+    /// 스토리지가 죽은 상황을 흉내낸다.
+    var isUnavailable = false
 
     /// 누군가 이 키에 파일을 올렸다고 가정한다.
     func place(key: String, size: Int64 = 1024) {
@@ -143,14 +147,16 @@ final class FakeArtifactStorage: ArtifactStoring, @unchecked Sendable {
     }
 
     func uploadURL(key: String) async throws -> PresignedURL {
-        PresignedURL(
+        if isUnavailable { throw Unavailable() }
+        return PresignedURL(
             url: "https://storage.example/\(key)?upload=1",
             expiresAt: Date().addingTimeInterval(600)
         )
     }
 
     func downloadURL(key: String) async throws -> PresignedURL {
-        PresignedURL(
+        if isUnavailable { throw Unavailable() }
+        return PresignedURL(
             url: "https://storage.example/\(key)?download=1",
             expiresAt: Date().addingTimeInterval(600)
         )
