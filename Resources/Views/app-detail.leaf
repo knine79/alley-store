@@ -17,6 +17,23 @@
 <p class="body-text">#(app.details)</p>
 #endif
 
+#if(downloads):
+<div class="stat-row">
+    <div class="stat">
+        <span class="stat-value">#(downloads.total)</span>
+        <span class="stat-label">전체 다운로드</span>
+    </div>
+    <div class="stat">
+        <span class="stat-value">#(downloads.recent)</span>
+        <span class="stat-label">최근 #(downloads.recentDays)일</span>
+    </div>
+    <div class="stat">
+        <span class="stat-value">#(downloads.people)</span>
+        <span class="stat-label">받아간 사람</span>
+    </div>
+</div>
+#endif
+
 <section class="section">
     <div class="section-head">
         <h2 class="section-title">버전</h2>
@@ -40,6 +57,7 @@
                 <th class="table-tight">빌드</th>
                 <th class="table-tight">크기</th>
                 <th class="table-tight">올린 날짜</th>
+                <th class="table-tight">받음</th>
                 <th class="table-fill">상태</th>
                 #if(canUpload):
                 <th class="table-tight"><span class="visually-hidden">출시</span></th>
@@ -53,6 +71,7 @@
                 <td class="table-tight table-muted">#(version.buildNumber)</td>
                 <td class="table-tight table-muted">#if(version.fileSize):#(version.fileSize)#else:—#endif</td>
                 <td class="table-tight table-muted">#(version.createdAt)</td>
+                <td class="table-tight table-muted">#if(version.downloadCount):#(version.downloadCount)#else:—#endif</td>
                 <td class="table-fill">
                     <span class="badge badge-#(version.state)">#(version.stateName)</span>
                     #if(version.failureReason):

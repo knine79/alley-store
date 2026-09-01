@@ -1,0 +1,74 @@
+#extend("layout"):
+#export("content"):
+<div class="page-head">
+    <div>
+        <h1 class="page-title">통계</h1>
+        <p class="page-lead">
+            서버가 아는 것은 <strong>누군가 파일을 받아갔다</strong>는 사실까지입니다.
+            실제로 설치했는지, 지금도 쓰는지는 알 수 없습니다.
+        </p>
+    </div>
+    <div class="head-actions">
+        <a class="button" href="/admin/settings">스토어 설정</a>
+        <a class="button" href="/admin/workers">서명 워커</a>
+    </div>
+</div>
+
+<div class="stat-row">
+    <div class="stat">
+        <span class="stat-value">#(totalDownloads)</span>
+        <span class="stat-label">전체 다운로드</span>
+    </div>
+    <div class="stat">
+        <span class="stat-value">#(recentDownloads)</span>
+        <span class="stat-label">최근 #(recentDays)일</span>
+    </div>
+    <div class="stat">
+        <span class="stat-value">#(activePeople)</span>
+        <span class="stat-label">받아간 사람</span>
+    </div>
+</div>
+
+#if(count(apps) == 0):
+<div class="empty">
+    <p>아직 등록된 앱이 없습니다.</p>
+</div>
+#else:
+<table class="table">
+    <thead>
+        <tr>
+            <th class="table-fill">앱</th>
+            <th class="table-tight">전체</th>
+            <th class="table-tight">최근 #(recentDays)일</th>
+            <th class="table-tight">사람</th>
+            <th class="table-tight">별점</th>
+        </tr>
+    </thead>
+    <tbody>
+        #for(app in apps):
+        <tr>
+            <td class="table-fill">
+                <a href="/apps/#(app.id)" class="table-strong">#(app.name)</a>
+                <span class="table-note">#(app.bundleID)</span>
+            </td>
+            <td class="table-tight table-strong">#(app.total)</td>
+            <td class="table-tight table-muted">#(app.recent)</td>
+            <td class="table-tight table-muted">#(app.people)</td>
+            <td class="table-tight">
+                #if(app.rating):
+                <span class="rating-summary">★ #(app.rating)</span>
+                #else:
+                <span class="table-muted">—</span>
+                #endif
+            </td>
+        </tr>
+        #endfor
+    </tbody>
+</table>
+<p class="field-note">
+    같은 사람이 여러 번 받아도 "사람"은 하나로 셉니다. 다운로드가 0인 앱도 그대로
+    보여줍니다. 아무도 안 받는 앱이 목록에서 사라지면 그 사실을 알 수 없습니다.
+</p>
+#endif
+#endexport
+#endextend

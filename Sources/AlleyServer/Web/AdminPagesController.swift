@@ -21,6 +21,7 @@ struct AdminPagesController: RouteCollection, Sendable {
         pages.get("workers", use: workerList)
         pages.post("workers", use: registerWorker)
         pages.post("workers", ":workerID", "revoke", use: revokeWorker)
+        pages.get("stats", use: stats)
         pages.get("portal", use: portal)
         pages.post("portal", "bundle-ids", use: registerBundleID)
     }
@@ -211,6 +212,44 @@ struct AdminPagesController: RouteCollection, Sendable {
                 workers: try workers.map { try WorkerRow(worker: $0) },
                 issued: issued.map { IssuedWorkerToken(name: $0.worker.name, token: $0.token) },
                 error: error
+            )
+        ).get()
+    }
+
+    // MARK: - 통계
+
+    /// 무엇이 실제로 쓰이는가.
+    ///
+    /// 다운로드가 없는 앱도 0 으로 보여준다. 목록에서 사라지면 "아무도 안 받는 앱"이
+    /// 안 보이고, 그게 가장 알고 싶은 것 중 하나다.
+    @Sendable
+    func stats(request: Request) async throws -> View {
+        _ = try request.requireAdmin()
+        let overview = try await DownloadStats.overview(on: request.db)
+        let ratings = try await Feedback.summaries(
+            ofApps: overview.rows.map(\.appID),
+            on: request.db
+        )
+
+        return try await request.view.render(
+            "admin-stats",
+            StatsPageContext(
+                page: try await request.pageContext(title: "통계"),
+                recentDays: DownloadStats.recentDays,
+                totalDownloads: overview.totalDownloads,
+                recentDownloads: overview.recentDownloads,
+                activePeople: overview.activePeople,
+                apps: overview.rows.map { row in
+                    StatsRow(
+                        id: row.appID.uuidString,
+                        name: row.appName,
+                        bundleID: row.bundleID,
+                        total: row.total,
+                        recent: row.recent,
+                        people: row.people,
+                        rating: ratings[row.appID]?.displayAverage
+                    )
+                }
             )
         ).get()
     }
@@ -445,6 +484,27 @@ struct CertificateRow: Encodable {
         // 인증서 갱신은 사람의 손이 여러 번 필요한 일이다. 한 달 전에는 알아야 한다.
         self.needsAttention = certificate.isDeveloperID && (days ?? .max) < 30
     }
+}
+
+struct StatsRow: Encodable {
+    var id: String
+    var name: String
+    var bundleID: String
+    var total: Int
+    var recent: Int
+    /// 한 번이라도 받아간 사람 수.
+    var people: Int
+    var rating: String?
+}
+
+struct StatsPageContext: Encodable {
+    var page: PageContext
+    /// "최근"이 며칠인지. 화면에 그 숫자를 적어야 오해가 없다.
+    var recentDays: Int
+    var totalDownloads: Int
+    var recentDownloads: Int
+    var activePeople: Int
+    var apps: [StatsRow]
 }
 
 struct PortalPageContext: Encodable {

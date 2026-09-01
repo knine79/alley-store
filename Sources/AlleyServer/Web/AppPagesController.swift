@@ -216,6 +216,24 @@ struct AppPagesController: RouteCollection, Sendable {
             : [:]
 
         let settings = try await request.storeSettings()
+        // 올릴 권한이 있는 사람에게만 보여준다. 받는 사람에게는 쓸 데가 없는 숫자다.
+        var downloads: DownloadSummaryRow?
+        var perVersion: [UUID: Int] = [:]
+        if canUpload {
+            let summary = try await DownloadStats.summary(
+                ofApp: try app.requireID(), on: request.db
+            )
+            downloads = DownloadSummaryRow(
+                total: summary.total,
+                recent: summary.recent,
+                people: summary.people,
+                recentDays: DownloadStats.recentDays
+            )
+            perVersion = try await DownloadStats.perVersion(
+                ofApp: try app.requireID(), on: request.db
+            )
+        }
+
         let feedback = try await FeedbackPresentation.rows(
             ofApp: try app.requireID(),
             viewer: user,
@@ -237,10 +255,17 @@ struct AppPagesController: RouteCollection, Sendable {
                     latestReleased: nil,
                     rating: try await Feedback.summary(ofApp: app.requireID(), on: request.db)
                 ),
-                versions: try versions.map { try VersionRow(version: $0, log: logs[try $0.requireID()]) },
+                versions: try versions.map { version in
+                    try VersionRow(
+                        version: version,
+                        log: logs[try version.requireID()],
+                        downloadCount: perVersion[try version.requireID()]
+                    )
+                },
                 members: members,
                 deployTokens: deployTokens,
                 issuedToken: issuedToken,
+                downloads: downloads,
                 feedTokens: feedTokens,
                 issuedFeed: issuedFeed,
                 feedError: feedError,
@@ -580,8 +605,10 @@ struct VersionRow: Encodable {
     /// 서명 워커가 남긴 로그. 실패했을 때만 화면에 편다.
     var log: String?
     var canRetry: Bool
+    /// 이 버전을 받아간 횟수. 셀 수 없으면 nil.
+    var downloadCount: Int?
 
-    init(version: Version, log: String? = nil) throws {
+    init(version: Version, log: String? = nil, downloadCount: Int? = nil) throws {
         self.id = try version.requireID().uuidString
         self.shortVersion = version.shortVersion
         self.buildNumber = version.buildNumber
@@ -595,6 +622,7 @@ struct VersionRow: Encodable {
         self.failureReason = version.failureReason
         self.log = log
         self.canRetry = version.state == .failed
+        self.downloadCount = downloadCount
     }
 }
 
@@ -632,6 +660,8 @@ struct AppDetailContext: Encodable {
     var members: [AppMemberDTO]
     var deployTokens: [DeployTokenRow]
     var issuedToken: IssuedDeployToken?
+    /// 다운로드 요약. 올릴 권한이 없는 사람에게는 nil.
+    var downloads: DownloadSummaryRow?
     var feedTokens: [DeployTokenRow]
     var issuedFeed: IssuedFeedToken?
     var feedError: String?
@@ -713,6 +743,14 @@ struct DeployTokenRow: Encodable {
             isActive: token.isActive
         )
     }
+}
+
+/// 앱 하나의 다운로드 요약.
+struct DownloadSummaryRow: Encodable {
+    var total: Int
+    var recent: Int
+    var people: Int
+    var recentDays: Int
 }
 
 /// 방금 발급한 피드 주소. 토큰이 그 안에 들어 있다.

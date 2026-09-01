@@ -950,3 +950,37 @@ textarea.input {
     border-radius: var(--radius-small);
     object-fit: contain;
 }
+
+/* ── 숫자 요약 ───────────────────────────────────────────── */
+
+.stat-row {
+    display: flex;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-5);
+}
+
+.stat {
+    flex: 1;
+    min-width: 8rem;
+    padding: var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.stat-value {
+    display: block;
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1.2;
+    /* 숫자가 바뀔 때 폭이 흔들리지 않게 고정폭 숫자를 쓴다. */
+    font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+    display: block;
+    margin-top: var(--space-1);
+    font-size: 13px;
+    color: var(--text-muted);
+}
