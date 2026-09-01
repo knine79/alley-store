@@ -217,6 +217,76 @@ final class StoreModel {
         )
     }
 
+    // MARK: - 업데이트 확인
+
+    /// 배경에서 목록을 다시 읽는 주기.
+    ///
+    /// 사내 앱은 하루에 몇 번 올라온다. 자주 물어봐야 얻을 것이 없고, 창을 열어둔
+    /// 사람마다 요청이 나간다.
+    static let refreshInterval: Duration = .seconds(30 * 60)
+
+    /// 업데이트가 있는 앱 수. 창 제목에 붙인다.
+    var updateCount: Int {
+        apps.filter { state(of: $0) == .updateAvailable }.count
+    }
+
+    /// 스토어 앱 자신의 새 버전. 없으면 nil.
+    ///
+    /// 자기 자신도 이 스토어로 배포한다(설계 문서 §5.4). 다른 앱과 같은 방식으로
+    /// 찾되, 설치는 실행 중인 자기를 갈아끼우는 일이라 경로가 다르다.
+    var selfUpdate: AppDTO? {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return nil }
+        guard let entry = apps.first(where: { $0.bundleID == bundleID }) else { return nil }
+        return state(of: entry) == .updateAvailable ? entry : nil
+    }
+
+    /// 창이 열려 있는 동안 주기적으로 목록을 다시 읽는다.
+    func watchForUpdates() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: Self.refreshInterval)
+            guard !Task.isCancelled else { return }
+            await refresh()
+        }
+    }
+
+    /// 스토어 앱 자신을 새 버전으로 갈아끼운다.
+    ///
+    /// 받아서 검증하는 데까지는 다른 앱과 같다. 다른 점은 마지막에 스스로 종료한다는
+    /// 것이다. 이 함수가 돌아오면 앱은 곧 사라진다.
+    func updateSelf(_ app: AppDTO) async {
+        guard let client, let version = app.latestReleasedVersion else { return }
+        guard progress[app.id] == nil else { return }
+
+        errorMessage = nil
+        progress[app.id] = .downloading(0)
+        defer { progress[app.id] = nil }
+
+        do {
+            let ticket = try await client.downloadTicket(versionID: version.id)
+            guard let url = URL(string: ticket.downloadURL) else {
+                throw StoreClient.ClientError.malformedResponse
+            }
+
+            let archive = try await Downloader.download(from: url) { [weak self] fraction in
+                Task { @MainActor in self?.progress[app.id] = .downloading(fraction) }
+            }
+
+            progress[app.id] = .verifying
+            let unpacked = try await Installer().prepare(
+                archive: archive,
+                expectedSHA256: ticket.sha256
+            )
+
+            progress[app.id] = .installing
+            // 여기서부터는 되돌릴 수 없다. 앱이 곧 종료된다.
+            try SelfUpdate.replaceAndRelaunch(with: unpacked)
+        } catch StoreClient.ClientError.unauthorized {
+            signOut()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     // MARK: - 설치
 
     /// 최신 출시본을 받아 설치한다.

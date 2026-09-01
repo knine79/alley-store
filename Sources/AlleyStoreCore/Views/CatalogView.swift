@@ -50,6 +50,9 @@ struct CatalogView: View {
             }
         }
         .navigationTitle(meta.storeName)
+        .navigationSubtitle(
+            model.updateCount > 0 ? "업데이트 \(model.updateCount)개" : ""
+        )
         .toolbar {
             ToolbarItem(placement: .status) {
                 if let status = model.statusMessage {
@@ -78,6 +81,14 @@ struct CatalogView: View {
             }
         }
         .task { await model.refresh() }
+        // 창을 열어둔 채로 두는 사람이 있다. 목록이 어제 것으로 굳어 있으면
+        // 업데이트가 있어도 모른다.
+        .task { await model.watchForUpdates() }
+        .safeAreaInset(edge: .top) {
+            if let update = model.selfUpdate {
+                SelfUpdateBanner(app: update)
+            }
+        }
         .onChange(of: model.apps) { _, apps in
             // 목록이 있는데 오른쪽이 비어 있으면 화면이 절반만 채워진 것처럼 보인다.
             // 사용자가 고르기 전에도 볼 것이 있게 첫 앱을 미리 편다.
@@ -246,5 +257,50 @@ struct AppDetailView: View {
                     .controlSize(.large)
             }
         }
+    }
+}
+
+/// 스토어 앱 자신에게 새 버전이 있을 때 위에 뜨는 줄.
+///
+/// 목록 안에 섞어두면 자기 자신을 업데이트하는 것이 다른 앱을 받는 것과 같아 보인다.
+/// 실제로는 앱이 종료되고 다시 뜨므로 미리 알려야 한다.
+struct SelfUpdateBanner: View {
+    @Environment(StoreModel.self) private var model
+    let app: AppDTO
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "arrow.down.circle.fill")
+                .foregroundStyle(.tint)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(app.name) 새 버전이 있습니다")
+                    .font(.callout.weight(.medium))
+                if let version = app.latestReleasedVersion {
+                    Text("업데이트하면 앱이 다시 시작합니다 · \(version.shortVersion)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+
+            if let progress = model.progress[app.id] {
+                switch progress {
+                case .downloading(let fraction):
+                    ProgressView(value: fraction).frame(width: 80).controlSize(.small)
+                case .verifying, .installing:
+                    ProgressView().controlSize(.small)
+                }
+            } else {
+                Button("업데이트") {
+                    Task { await model.updateSelf(app) }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.thinMaterial)
+        .overlay(alignment: .bottom) { Divider() }
     }
 }

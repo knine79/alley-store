@@ -65,13 +65,32 @@ struct Installer {
         expectedSHA256: String?,
         replacing existing: InstalledApp?
     ) async throws -> Result {
+        let bundle = try await prepare(
+            archive: archive,
+            expectedSHA256: expectedSHA256,
+            comparingTeamWith: existing?.location
+        )
+        return try place(bundle, replacing: existing)
+    }
+
+    /// 검사까지만 하고 풀어놓은 번들을 돌려준다.
+    ///
+    /// 스토어 앱이 자기 자신을 갈아끼울 때 쓴다. 그 경로는 여기서 바로 옮기지 않고
+    /// 앱이 종료된 뒤에 교체하기 때문이다(`SelfUpdate`).
+    ///
+    /// **작업 디렉터리를 지우지 않는다.** 부르는 쪽이 그 번들을 계속 쓴다.
+    @discardableResult
+    func prepare(
+        archive: URL,
+        expectedSHA256: String?,
+        comparingTeamWith installed: URL? = nil
+    ) async throws -> URL {
         // 1. 받은 파일이 서버가 말한 그 파일인지.
         try BundleVerifier.verifyHash(of: archive, expected: expectedSHA256)
 
         let workspace = archive.deletingLastPathComponent()
             .appendingPathComponent("extracted-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: workspace) }
 
         let extraction = await Shell.runDetached(
             "/usr/bin/ditto",
@@ -90,12 +109,12 @@ struct Installer {
         // 3. 이미 깔린 앱과 같은 팀인지. 같은 번들 ID 로 바꿔치기하는 경로를 끊는다.
         let incomingTeam = await BundleVerifier.teamIdentifier(of: bundle)
         var installedTeam: String?
-        if let existing {
-            installedTeam = await BundleVerifier.teamIdentifier(of: existing.location)
+        if let installed {
+            installedTeam = await BundleVerifier.teamIdentifier(of: installed)
         }
         try BundleVerifier.verifyTeam(incoming: incomingTeam, installed: installedTeam)
 
-        return try place(bundle, replacing: existing)
+        return bundle
     }
 
     // MARK: - 자리 잡기
@@ -115,7 +134,14 @@ struct Installer {
     ///
     /// 실행 중인 앱을 덮어쓰면 그 앱이 이상하게 죽는다. 먼저 종료를 요청하고, 그래도
     /// 살아 있으면 설치를 멈춘다. 강제로 죽이지는 않는다. 저장하지 않은 작업이 있을 수 있다.
+    /// 옮기고 나면 풀어놓았던 자리를 치운다.
     private func place(_ bundle: URL, replacing existing: InstalledApp?) throws -> Result {
+        let workspace = bundle.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        return try move(bundle, replacing: existing)
+    }
+
+    private func move(_ bundle: URL, replacing existing: InstalledApp?) throws -> Result {
         let destination: URL
         if let existing {
             // 이미 있는 앱은 원래 자리를 지킨다. 사용자가 옮겨둔 곳이 있으면 그곳이다.
