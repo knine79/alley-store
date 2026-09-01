@@ -210,6 +210,7 @@ swift run alley-server serve
 
 | 문서 | 다루는 것 |
 | --- | --- |
+| [셀프호스팅 가이드](docs/self-hosting.md) | 조직에 올리는 절차. 처음이면 여기부터 |
 | [설계](docs/design.md) | 무엇을 왜 이렇게 만드는가. 아키텍처와 핵심 설계 |
 | [구현 계획](docs/implementation-plan.md) | 무엇을 언제 만드는가. 단계별 진행 현황 |
 | [ADR](docs/adr/README.md) | 개별 결정의 배경과 버려진 대안 |
@@ -217,4 +218,8 @@ swift run alley-server serve
 
 ## 라이선스
 
-미정.
+MIT. [LICENSE](LICENSE) 를 보세요.
+
+저작권 표시는 "Alley contributors" 로 둡니다. 특정 조직 이름을 넣지 않는 것은
+ADR-0003 의 원칙과 같습니다. 포크해서 쓰는 조직이 자기 이름으로 바꿀 이유가 없어야
+합니다.
