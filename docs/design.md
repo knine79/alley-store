@@ -244,6 +244,10 @@ SwiftUI 스토어 앱이 그대로 임포트해야 하기 때문입니다. HTTP 
 | `signing_jobs`   | version_id, 상태, worker_id, 로그, 시도 횟수                       |
 | `workers`        | 이름, 토큰 해시, 마지막 폴링 시각                                       |
 | `downloads`      | user_id, version_id, timestamp                             |
+| `deploy_tokens`  | app_id, 이름, 토큰 해시 (CI 업로드용, ADR-0015)                     |
+| `feed_tokens`    | app_id, 이름, 토큰 해시 (Sparkle 피드용, ADR-0017)                 |
+| `feedback`       | app_id, version_id, user_id, 별점, 글, 스크린샷, 익명 여부             |
+| `notification_targets` | app_id(nullable), 종류, 이름, 엔드포인트                     |
 
 
 버전 상태 머신:
@@ -377,11 +381,25 @@ GET /api/v1/apps/:id/appcast.xml
 토큰은 웹 콘솔에서 앱 단위로 발급·회전할 수 있게 합니다. 사용자 단위 다운로드
 이력이 남지 않는다는 한계가 있으므로, 이력이 중요한 앱은 경로 A를 씁니다.
 
+Sparkle은 내려받은 파일에 EdDSA 서명이 붙어 있어야 설치합니다. 그 서명은 서명 워커가
+만듭니다. 서버가 키를 갖지 않는 이유는 코드 서명 키를 서버에 두지 않는 것과 같습니다
+([ADR-0017](adr/0017-sparkle-feed-tokens.md)).
+
 #### 스토어 앱 자신의 업데이트
 
-스토어 앱은 Sparkle을 씁니다. 실행 중인 자기 자신을 교체하는 것은 별도 헬퍼
-프로세스가 필요한 까다로운 작업이고, Sparkle이 이미 해결해둔 문제를 다시 푸는 것은
-낭비입니다. Sparkle의 EdDSA 서명 검증도 그대로 활용합니다.
+**스토어 앱은 Sparkle을 쓰지 않습니다.** 처음에는 쓰려고 했지만, 만들고 보니 이미
+갖춘 것으로 충분했습니다. 스토어 앱은 앱을 받아 해시·서명·공증·Team ID를 검증하고
+`/Applications`에 놓는 코드를 이미 갖고 있습니다. Sparkle이 하는 일 중 남는 것은
+"실행 중인 자기 자신을 교체하는 것" 하나뿐인데, 그것은 앱이 종료된 뒤 번들을 바꾸고
+다시 띄우는 셸 스크립트 하나입니다.
+
+프레임워크를 하나 얹으면 번들에 XPC 서비스가 따라 들어오고, 그것들을 조립
+스크립트가 복사하고 서명해야 합니다([ADR-0014](adr/0014-store-app-without-xcode-project.md)의
+대가가 여기서 드러납니다). 스크립트 한 장으로 끝나는 일에 그 비용을 치를 이유가
+없다고 봤습니다.
+
+다른 앱들이 쓸 appcast는 서버가 그대로 내줍니다. 스토어 앱을 거치고 싶지 않은 앱은
+경로 B를 그대로 씁니다.
 
 ### 5.6 API 개요
 
@@ -401,6 +419,13 @@ GET   /api/v1/apps/:id/appcast.xml     # Sparkle 피드 (앱별 피드 토큰 �
 GET   /api/v1/worker/jobs/next         # 워커 long-poll (워커 토큰 인증)
 PATCH /api/v1/worker/jobs/:id          # 상태·로그 보고
 POST  /api/v1/admin/workers            # 워커 등록 토큰 발급
+POST  /api/v1/apps/:id/deploy-tokens   # CI 배포 토큰 발급 (ADR-0015)
+POST  /api/v1/apps/:id/feed-tokens     # Sparkle 피드 토큰 발급 (ADR-0017)
+GET   /api/v1/deploy/app               # 배포 토큰이 자기 앱을 확인
+GET   /api/v1/apps/:id/feedback        # 별점·피드백 목록
+POST  /api/v1/versions/:id/feedback    # 별점·피드백 남기기
+POST  /api/v1/apps/:id/notification-targets  # 알림 대상 등록
+GET   /api/v1/admin/portal/certificates      # 인증서 만료 현황 (ASC API)
 ```
 
 경로 상수는 `AlleyShared/APIPath.swift`에서만 정의합니다. 서버·워커·앱이 각자
