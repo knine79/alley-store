@@ -26,6 +26,15 @@ public protocol ArtifactStoring: Sendable {
     func downloadURL(key: String) async throws -> PresignedURL
     /// 스토리지에 실제로 파일이 있는지 확인하고 크기를 읽는다. 없으면 nil.
     func head(key: String) async throws -> Int64?
+
+    /// 작은 파일을 서버가 직접 올린다.
+    ///
+    /// **앱 바이너리에는 쓰지 않는다.** 그건 presigned URL 로 클라이언트가 직접
+    /// 올린다(ADR-0009). 이 경로는 피드백 스크린샷처럼 수 MB 짜리 파일용이다.
+    /// 왜 예외를 두었는지는 ADR-0016 에 있다.
+    func put(_ data: Data, to key: String, contentType: String?) async throws
+
+    func delete(key: String) async throws
 }
 
 /// S3 호환 오브젝트 스토리지 구현.
@@ -97,6 +106,21 @@ public struct ArtifactStorage: ArtifactStoring {
             // MinIO 는 HEAD 응답에 본문이 없어서 타입이 붙은 오류로 안 올 때가 있다.
             return nil
         }
+    }
+
+    public func put(_ data: Data, to key: String, contentType: String?) async throws {
+        _ = try await s3.putObject(
+            .init(
+                body: .init(bytes: data),
+                bucket: bucket,
+                contentType: contentType,
+                key: key
+            )
+        )
+    }
+
+    public func delete(key: String) async throws {
+        _ = try await s3.deleteObject(.init(bucket: bucket, key: key))
     }
 
     private func sign(key: String, method: HTTPMethod) async throws -> PresignedURL {

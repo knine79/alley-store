@@ -38,11 +38,17 @@ public struct AppController: RouteCollection, Sendable {
         let user = try request.requireUser()
         let apps = try await App.query(on: request.db).sort(\.$name).all()
         let latest = try await App.latestReleasedVersions(on: request.db)
+        // 앱마다 따로 세면 N+1 이 된다. 한 번에 모아 접는다.
+        let ratings = try await Feedback.summaries(
+            ofApps: apps.map { try $0.requireID() },
+            on: request.db
+        )
 
         return try apps.compactMap { app in
-            let released = latest[try app.requireID()]
+            let appID = try app.requireID()
+            let released = latest[appID]
             guard released != nil || user.role.canPublish else { return nil }
-            return try app.toDTO(latestReleased: released)
+            return try app.toDTO(latestReleased: released, rating: ratings[appID])
         }
     }
 
@@ -92,8 +98,10 @@ public struct AppController: RouteCollection, Sendable {
     func detail(request: Request) async throws -> AppDTO {
         _ = try request.requireUser()
         let app = try await request.findApp()
-        let latest = try await App.latestReleasedVersion(ofApp: try app.requireID(), on: request.db)
-        return try app.toDTO(latestReleased: latest)
+        let appID = try app.requireID()
+        let latest = try await App.latestReleasedVersion(ofApp: appID, on: request.db)
+        let rating = try await Feedback.summary(ofApp: appID, on: request.db)
+        return try app.toDTO(latestReleased: latest, rating: rating)
     }
 
     @Sendable

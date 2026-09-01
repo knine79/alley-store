@@ -77,7 +77,7 @@ extension App {
     ///
     /// 최신 출시본은 조회하는 쿼리가 따로 필요해서 호출자가 넘긴다.
     /// 목록 응답에서 앱마다 별도 쿼리를 돌리면 N+1 이 된다.
-    public func toDTO(latestReleased: Version? = nil) throws -> AppDTO {
+    public func toDTO(latestReleased: Version? = nil, rating: RatingSummary? = nil) throws -> AppDTO {
         AppDTO(
             id: try requireID(),
             bundleID: bundleID,
@@ -88,6 +88,7 @@ extension App {
             category: category,
             ownerID: $owner.id,
             latestReleasedVersion: try latestReleased?.toDTO(),
+            rating: rating,
             createdAt: createdAt ?? Date(),
             updatedAt: updatedAt ?? createdAt ?? Date()
         )

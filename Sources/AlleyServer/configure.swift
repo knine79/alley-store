@@ -27,6 +27,9 @@ public func configure(_ app: Application, config: AppConfig) async throws {
     // 서버가 큰 바디를 받을 일이 없다.
     app.routes.defaultMaxBodySize = "1mb"
 
+    // 조용해진 워커를 주기적으로 찾아 알린다.
+    app.lifecycle.use(WorkerWatchdog())
+
     try routes(app)
 }
 
@@ -76,6 +79,11 @@ private func configureMigrations(_ app: Application) {
 
     // CI 파이프라인이 쓰는 앱별 배포 토큰 (ADR-0015).
     app.migrations.add(CreateDeployToken())
+
+    // 별점·피드백과 알림 대상.
+    app.migrations.add(CreateFeedback())
+    app.migrations.add(CreateNotificationTarget())
+    app.migrations.add(AddWorkerAlertedAt())
 
     // 설정 행은 마이그레이션이 아니라 최초 접근 시점에 심는다 (ADR-0011).
     app.migrations.add(CreateStoreSettings())

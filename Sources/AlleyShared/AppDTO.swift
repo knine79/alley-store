@@ -58,6 +58,8 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
     public var ownerID: UUID
     /// 현재 조직에 출시된 최신 버전. 아직 출시본이 없으면 nil.
     public var latestReleasedVersion: VersionDTO?
+    /// 별점 요약. 목록에서도 보여주므로 앱과 함께 내려준다.
+    public var rating: RatingSummary?
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -71,6 +73,7 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
         category: String? = nil,
         ownerID: UUID,
         latestReleasedVersion: VersionDTO? = nil,
+        rating: RatingSummary? = nil,
         createdAt: Date,
         updatedAt: Date
     ) {
@@ -83,6 +86,7 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
         self.category = category
         self.ownerID = ownerID
         self.latestReleasedVersion = latestReleasedVersion
+        self.rating = rating
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -349,6 +353,150 @@ public struct CreatedDeployToken: Codable, Sendable {
     public init(token: DeployTokenDTO, value: String) {
         self.token = token
         self.value = value
+    }
+}
+
+// MARK: - 피드백
+
+/// 사용자가 버전 하나에 남긴 별점과 의견.
+///
+/// 별점과 글은 둘 다 선택이지만 하나는 있어야 한다. 별점만 주고 싶은 사람과
+/// 버그만 알리고 싶은 사람이 둘 다 있다.
+public struct FeedbackDTO: Codable, Sendable, Identifiable, Equatable {
+    public var id: UUID
+    public var appID: UUID
+    public var versionID: UUID
+    /// 어느 버전에 남긴 것인지 화면에 보여주려고 함께 내려준다.
+    public var versionName: String
+    /// 1~5. 글만 남겼으면 nil.
+    public var rating: Int?
+    public var body: String?
+    /// 첨부한 스크린샷을 받을 수 있는 만료 있는 URL. 없으면 nil.
+    public var screenshotURL: String?
+    /// 남긴 사람. 익명으로 남겼으면 nil.
+    public var author: UserDTO?
+    public var isAnonymous: Bool
+    /// 지금 보는 사람이 고치거나 지울 수 있는지.
+    public var isMine: Bool
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        id: UUID,
+        appID: UUID,
+        versionID: UUID,
+        versionName: String,
+        rating: Int? = nil,
+        body: String? = nil,
+        screenshotURL: String? = nil,
+        author: UserDTO? = nil,
+        isAnonymous: Bool = false,
+        isMine: Bool = false,
+        createdAt: Date,
+        updatedAt: Date
+    ) {
+        self.id = id
+        self.appID = appID
+        self.versionID = versionID
+        self.versionName = versionName
+        self.rating = rating
+        self.body = body
+        self.screenshotURL = screenshotURL
+        self.author = author
+        self.isAnonymous = isAnonymous
+        self.isMine = isMine
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+/// 앱 하나의 별점 요약.
+public struct RatingSummary: Codable, Sendable, Equatable {
+    /// 별점을 남긴 사람 수. 글만 남긴 것은 세지 않는다.
+    public var count: Int
+    /// 평균. 아무도 안 남겼으면 nil.
+    public var average: Double?
+
+    public init(count: Int, average: Double? = nil) {
+        self.count = count
+        self.average = average
+    }
+
+    /// 화면에 쓰는 한 자리 반올림. 3.25 는 "3.3".
+    ///
+    /// `%.1f` 에 그대로 맡기지 않는다. 그쪽은 짝수 반올림이라 3.25 가 "3.2" 가 되고,
+    /// 사람이 기대하는 사사오입과 어긋난다. 별점 0.1 이 큰 값은 아니지만 화면에 뜨는
+    /// 숫자가 손으로 계산한 것과 다르면 다른 것도 못 믿게 된다.
+    public var displayAverage: String? {
+        guard let average else { return nil }
+        return String(format: "%.1f", (average * 10).rounded() / 10)
+    }
+}
+
+public struct SubmitFeedbackRequest: Codable, Sendable {
+    public var rating: Int?
+    public var body: String?
+    /// 이름을 감출지. 서버는 누가 남겼는지 계속 알고 있다.
+    public var isAnonymous: Bool
+
+    public init(rating: Int? = nil, body: String? = nil, isAnonymous: Bool = false) {
+        self.rating = rating
+        self.body = body
+        self.isAnonymous = isAnonymous
+    }
+}
+
+// MARK: - 알림
+
+/// 알림을 보낼 곳.
+public struct NotificationTargetDTO: Codable, Sendable, Identifiable, Equatable {
+    public var id: UUID
+    /// 앱에 붙은 대상이면 그 앱. 전역 대상(워커 알림 등)이면 nil.
+    public var appID: UUID?
+    public var kind: NotificationChannelKind
+    /// 사람이 알아볼 이름. 웹훅 URL 자체는 비밀이라 내려주지 않는다.
+    public var name: String
+    public var createdAt: Date
+
+    public init(
+        id: UUID,
+        appID: UUID? = nil,
+        kind: NotificationChannelKind,
+        name: String,
+        createdAt: Date
+    ) {
+        self.id = id
+        self.appID = appID
+        self.kind = kind
+        self.name = name
+        self.createdAt = createdAt
+    }
+}
+
+/// 알림을 보내는 방식.
+///
+/// 지금은 웹훅 하나뿐이다. 메일을 붙이게 되면 여기 한 줄이 늘고 보내는 쪽이
+/// 갈린다. 채널을 타입으로 두는 이유가 그것이다.
+public enum NotificationChannelKind: String, Codable, Sendable, CaseIterable {
+    /// Slack Incoming Webhook.
+    case slack
+
+    public var displayName: String {
+        switch self {
+        case .slack: return "Slack"
+        }
+    }
+}
+
+public struct CreateNotificationTargetRequest: Codable, Sendable {
+    public var kind: NotificationChannelKind
+    public var name: String
+    public var endpoint: String
+
+    public init(kind: NotificationChannelKind = .slack, name: String, endpoint: String) {
+        self.kind = kind
+        self.name = name
+        self.endpoint = endpoint
     }
 }
 

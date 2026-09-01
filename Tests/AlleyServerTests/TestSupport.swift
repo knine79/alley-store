@@ -172,6 +172,22 @@ final class FakeArtifactStorage: ArtifactStoring, @unchecked Sendable {
         defer { lock.unlock() }
         return sizes[key]
     }
+
+    func put(_ data: Data, to key: String, contentType: String?) async throws {
+        if isUnavailable { throw Unavailable() }
+        place(key: key, size: Int64(data.count))
+    }
+
+    func delete(key: String) async throws {
+        // NSLock 은 async 함수 안에서 직접 잠글 수 없다. 잠그는 구간을 동기 함수로 뺀다.
+        forget(key)
+    }
+
+    private func forget(_ key: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        sizes[key] = nil
+    }
 }
 
 extension Application {

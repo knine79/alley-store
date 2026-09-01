@@ -41,6 +41,12 @@ public final class Worker: Model, @unchecked Sendable {
     @OptionalField(key: "revoked_at")
     public var revokedAt: Date?
 
+    /// 조용하다고 마지막으로 알린 시각.
+    ///
+    /// 같은 워커에 대해 5분마다 같은 말을 반복하면 아무도 안 읽게 된다.
+    @OptionalField(key: "alerted_at")
+    public var alertedAt: Date?
+
     @OptionalParent(key: "created_by")
     public var createdBy: User?
 
@@ -118,5 +124,25 @@ public struct CreateWorker: AsyncMigration {
 
     public func revert(on database: any Database) async throws {
         try await database.schema(Worker.schema).delete()
+    }
+}
+
+/// 조용해진 워커를 알렸는지 기록할 자리.
+///
+/// `CreateWorker` 를 고치지 않고 새로 만든다. 이미 마이그레이션을 돌린 데이터베이스는
+/// 그 파일을 다시 읽지 않으므로, 고쳐봐야 새로 만드는 사람에게만 반영된다.
+public struct AddWorkerAlertedAt: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        try await database.schema(Worker.schema)
+            .field("alerted_at", .datetime)
+            .update()
+    }
+
+    public func revert(on database: any Database) async throws {
+        try await database.schema(Worker.schema)
+            .deleteField("alerted_at")
+            .update()
     }
 }
