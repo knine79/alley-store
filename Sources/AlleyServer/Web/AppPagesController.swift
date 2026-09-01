@@ -28,6 +28,8 @@ struct AppPagesController: RouteCollection, Sendable {
         pages.post(":appID", "deploy-tokens", ":tokenID", "revoke", use: revokeDeployToken)
         pages.post(":appID", "feedback", use: submitFeedback)
         pages.post(":appID", "feedback", ":feedbackID", "delete", use: deleteFeedback)
+        pages.post(":appID", "feed-tokens", use: issueFeedToken)
+        pages.post(":appID", "feed-tokens", ":tokenID", "revoke", use: revokeFeedToken)
         pages.post(":appID", "notification-targets", use: addNotificationTarget)
         pages.post(
             ":appID", "notification-targets", ":targetID", "delete",
@@ -149,8 +151,10 @@ struct AppPagesController: RouteCollection, Sendable {
     func renderDetail(
         on request: Request,
         issuedToken: IssuedDeployToken?,
+        issuedFeed: IssuedFeedToken? = nil,
         feedbackError: String? = nil,
-        notificationError: String? = nil
+        notificationError: String? = nil,
+        feedError: String? = nil
     ) async throws -> View {
         let user = try request.requireUser()
         let app = try await request.findApp()
@@ -171,6 +175,22 @@ struct AppPagesController: RouteCollection, Sendable {
         }
 
         // 배포 토큰은 앱을 관리하는 사람만 본다. 멤버에게는 있는지조차 알릴 이유가 없다.
+        var feedTokens: [DeployTokenRow] = []
+        if canManage {
+            feedTokens = try await FeedToken.query(on: request.db)
+                .filter(\.$app.$id == app.requireID())
+                .sort(\.$name)
+                .all()
+                .map { token in
+                    DeployTokenRow(
+                        id: token.id?.uuidString ?? "",
+                        name: token.name,
+                        lastUsed: token.lastUsedAt.map { DateStyle.minute.string(from: $0) },
+                        isActive: token.isActive
+                    )
+                }
+        }
+
         var deployTokens: [DeployTokenRow] = []
         if canManage {
             deployTokens = try await DeployToken.query(on: request.db)
@@ -221,6 +241,9 @@ struct AppPagesController: RouteCollection, Sendable {
                 members: members,
                 deployTokens: deployTokens,
                 issuedToken: issuedToken,
+                feedTokens: feedTokens,
+                issuedFeed: issuedFeed,
+                feedError: feedError,
                 notificationTargets: targets,
                 feedback: feedback,
                 reviewableVersions: reviewable,
@@ -394,6 +417,52 @@ struct AppPagesController: RouteCollection, Sendable {
         )
     }
 
+    // MARK: - 피드 토큰
+
+    @Sendable
+    func issueFeedToken(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        try app.requireManageAccess(for: user)
+
+        let values = try request.content.decode(DeployTokenFormValues.self)
+        do {
+            let created = try await FeedTokenIssuing.issue(
+                named: values.name ?? "",
+                for: app,
+                by: user,
+                baseURL: request.application.alleyConfig.publicBaseURL,
+                on: request.db,
+                logger: request.logger
+            )
+            // 피드 주소에 토큰이 들어 있다. 이 화면을 벗어나면 다시 볼 수 없다.
+            let view = try await renderDetail(
+                on: request,
+                issuedToken: nil,
+                issuedFeed: IssuedFeedToken(name: created.token.name, feedURL: created.feedURL)
+            )
+            return htmlResponse(view, status: .created)
+        } catch let abort as any AbortError where abort.status.code < 500 {
+            let view = try await renderDetail(on: request, issuedToken: nil, feedError: abort.reason)
+            return htmlResponse(view, status: abort.status)
+        }
+    }
+
+    @Sendable
+    func revokeFeedToken(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        try app.requireManageAccess(for: user)
+
+        guard let tokenID = request.parameters.get("tokenID", as: UUID.self) else {
+            throw Abort(.badRequest, reason: "토큰 ID 형식이 올바르지 않습니다.")
+        }
+        try await FeedTokenIssuing.revoke(
+            tokenID, ofApp: app, by: user, on: request.db, logger: request.logger
+        )
+        return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
+    }
+
     // MARK: - 알림 대상
 
     @Sendable
@@ -563,6 +632,9 @@ struct AppDetailContext: Encodable {
     var members: [AppMemberDTO]
     var deployTokens: [DeployTokenRow]
     var issuedToken: IssuedDeployToken?
+    var feedTokens: [DeployTokenRow]
+    var issuedFeed: IssuedFeedToken?
+    var feedError: String?
     var notificationTargets: [NotificationTargetDTO]
     var feedback: [FeedbackRow]
     /// 지금 사람이 피드백을 남길 수 있는 버전들. 받아본 것만 들어온다.
@@ -626,12 +698,27 @@ struct DeployTokenRow: Encodable {
     var lastUsed: String?
     var isActive: Bool
 
-    init(token: DeployToken) throws {
-        self.id = token.id?.uuidString ?? ""
-        self.name = token.name
-        self.lastUsed = token.lastUsedAt.map { DateStyle.minute.string(from: $0) }
-        self.isActive = token.isActive
+    init(id: String, name: String, lastUsed: String?, isActive: Bool) {
+        self.id = id
+        self.name = name
+        self.lastUsed = lastUsed
+        self.isActive = isActive
     }
+
+    init(token: DeployToken) throws {
+        self.init(
+            id: token.id?.uuidString ?? "",
+            name: token.name,
+            lastUsed: token.lastUsedAt.map { DateStyle.minute.string(from: $0) },
+            isActive: token.isActive
+        )
+    }
+}
+
+/// 방금 발급한 피드 주소. 토큰이 그 안에 들어 있다.
+struct IssuedFeedToken: Encodable {
+    var name: String
+    var feedURL: String
 }
 
 /// 방금 발급한 토큰. 이 화면을 벗어나면 다시 볼 수 없다.

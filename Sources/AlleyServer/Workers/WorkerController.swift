@@ -252,6 +252,7 @@ public struct WorkerController: RouteCollection, Sendable {
             key: key,
             sha256: update.resultSHA256?.lowercased(),
             fileSize: size,
+            edSignature: update.resultEdSignature,
             on: request.db
         )
 
@@ -320,6 +321,7 @@ public struct WorkerController: RouteCollection, Sendable {
         key: String,
         sha256: String?,
         fileSize: Int64,
+        edSignature: String?,
         on database: any Database
     ) async throws {
         // 재시도하면 같은 키에 덮어쓴다. 행을 새로 만들면 유니크 제약에 걸린다.
@@ -331,17 +333,20 @@ public struct WorkerController: RouteCollection, Sendable {
             existing.storageKey = key
             existing.sha256 = sha256
             existing.fileSize = fileSize
+            existing.edSignature = edSignature
             try await existing.save(on: database)
             return
         }
 
-        try await Artifact(
+        let artifact = Artifact(
             versionID: versionID,
             kind: .signed,
             storageKey: key,
             sha256: sha256,
             fileSize: fileSize
-        ).save(on: database)
+        )
+        artifact.edSignature = edSignature
+        try await artifact.save(on: database)
     }
 }
 

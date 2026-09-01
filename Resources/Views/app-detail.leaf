@@ -282,6 +282,85 @@
 
 #if(canManage):
 <section class="section">
+    <h2 class="section-title">자동 업데이트 피드</h2>
+    <p class="page-lead">
+        앱에 Sparkle 을 넣으면 스토어 앱 없이도 스스로 업데이트합니다. 아래 주소를
+        앱의 <code>SUFeedURL</code> 에 넣으세요. 이 경로로 받은 것은
+        <strong>사용자별 다운로드 이력이 남지 않습니다.</strong>
+    </p>
+
+    #if(feedError):
+    <p class="notice notice-error">#(feedError)</p>
+    #endif
+
+    #if(issuedFeed):
+    <div class="token-box">
+        <p class="token-title">'#(issuedFeed.name)' 의 피드 주소</p>
+        <code class="token-value">#(issuedFeed.feedURL)</code>
+        <p class="token-note">
+            <strong>이 화면을 벗어나면 다시 볼 수 없습니다.</strong> 주소 안의 토큰은
+            해시로만 저장합니다. 이 주소를 아는 사람은 누구나 이 앱의 출시본을 받을 수
+            있으니 앱 설정 밖으로 흘리지 마세요.
+        </p>
+    </div>
+    #endif
+
+    #if(count(feedTokens) == 0):
+    <div class="empty">
+        <p>발급한 피드가 없습니다.</p>
+        <p class="empty-note">Sparkle 을 쓰지 않는 앱은 그대로 두면 됩니다.</p>
+    </div>
+    #else:
+    <table class="table">
+        <thead>
+            <tr>
+                <th class="table-fill">이름</th>
+                <th class="table-tight">마지막 사용</th>
+                <th class="table-tight">상태</th>
+                <th class="table-tight"><span class="visually-hidden">폐기</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            #for(token in feedTokens):
+            <tr>
+                <td class="table-fill table-strong">#(token.name)</td>
+                <td class="table-tight table-muted">#if(token.lastUsed):#(token.lastUsed)#else:쓰인 적 없음#endif</td>
+                <td class="table-tight">
+                    #if(token.isActive):
+                    <span class="badge">쓸 수 있음</span>
+                    #else:
+                    <span class="badge badge-failed">폐기됨</span>
+                    #endif
+                </td>
+                <td class="table-tight">
+                    #if(token.isActive):
+                    <form class="row-form" method="post"
+                          action="/apps/#(app.id)/feed-tokens/#(token.id)/revoke">
+                        <button class="button" type="submit">폐기</button>
+                    </form>
+                    #endif
+                </td>
+            </tr>
+            #endfor
+        </tbody>
+    </table>
+    #endif
+
+    <form class="form" method="post" action="/apps/#(app.id)/feed-tokens">
+        <label class="field">
+            <span class="field-label">피드 이름</span>
+            <input class="input" type="text" name="name" required placeholder="sparkle"
+                   autocapitalize="off" autocorrect="off" spellcheck="false">
+        </label>
+        <div class="form-actions">
+            <button class="button button-primary" type="submit">피드 주소 발급</button>
+        </div>
+    </form>
+</section>
+#endif
+
+#if(canManage):
+<section class="section">
     <h2 class="section-title">배포 토큰</h2>
     <p class="page-lead">
         CI 파이프라인이 이 앱에 버전을 올릴 때 쓰는 토큰입니다. 이 앱에만 통하고,

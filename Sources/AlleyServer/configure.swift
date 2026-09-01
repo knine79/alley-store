@@ -89,6 +89,10 @@ private func configureMigrations(_ app: Application) {
     // 표 자체는 여기서 만들고, 뒤에 붙는 열은 그다음에 온다.
     app.migrations.add(CreateStoreSettings())
     app.migrations.add(AddAnonymousFeedbackSetting())
+
+    // Sparkle 피드 (ADR-0017).
+    app.migrations.add(CreateFeedToken())
+    app.migrations.add(AddArtifactEdSignature())
 }
 
 /// 미들웨어 스택.

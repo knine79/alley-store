@@ -57,6 +57,21 @@ public enum APIPath {
         "\(deployTokens(ofApp: appID))/\(tokenID.uuidString)"
     }
 
+    /// Sparkle 이 읽는 appcast. 앱별 피드 토큰으로 인증한다 (ADR-0017).
+    public static func appcast(ofApp id: UUID) -> String {
+        "\(app(id))/appcast.xml"
+    }
+
+    /// 피드 토큰 목록·발급.
+    public static func feedTokens(ofApp id: UUID) -> String {
+        "\(app(id))/feed-tokens"
+    }
+
+    /// 피드 주소에 토큰을 싣는 질의 항목의 이름.
+    ///
+    /// Sparkle 은 우리가 만든 클라이언트가 아니라 헤더를 붙일 수 없다.
+    public static let feedTokenQueryItem = "token"
+
     /// 배포 토큰이 자기가 어느 앱의 것인지 확인하는 경로.
     ///
     /// CLI 는 앱 ID 를 모르고 토큰만 안다. 토큰이 스스로 밝히게 한다.

@@ -22,6 +22,8 @@ public struct SigningPipeline: Sendable {
         public var file: URL
         public var sha256: String
         public var size: Int64
+        /// Sparkle 용 EdDSA 서명. 키가 설정되지 않았으면 nil.
+        public var edSignature: String?
     }
 
     public enum PipelineError: Error, CustomStringConvertible {
@@ -91,7 +93,9 @@ public struct SigningPipeline: Sendable {
         let result = workspace.appendingPathComponent("signed.zip")
         try await zip(bundle.url, into: result)
 
-        let output = try describe(result)
+        var output = try describe(result)
+        output.edSignature = try sparkleSignature(for: result)
+
         try await client.upload(result, to: job.resultUploadURL)
         return output
     }
@@ -234,6 +238,16 @@ public struct SigningPipeline: Sendable {
 
     // MARK: - 결과
 
+    /// Sparkle 이 요구하는 서명. 키가 없으면 만들지 않는다.
+    ///
+    /// 키가 있는데 서명에 실패하면 잡 전체를 실패시킨다. 서명 없는 결과물을 올리면
+    /// appcast 를 쓰는 앱이 조용히 업데이트를 못 받게 되고, 그건 나중에 원인을 찾기
+    /// 가장 어려운 종류의 실패다.
+    private func sparkleSignature(for file: URL) throws -> String? {
+        guard let key = config.sparklePrivateKey else { return nil }
+        return try SparkleSignature.sign(file: file, privateKeyBase64: key)
+    }
+
     /// 올릴 파일의 크기와 해시.
     ///
     /// 해시는 스토어 앱이 설치 직전에 대조한다. 파일을 통째로 메모리에 올리지 않도록
@@ -252,7 +266,8 @@ public struct SigningPipeline: Sendable {
         return Output(
             file: file,
             sha256: hasher.finalize().map { String(format: "%02x", $0) }.joined(),
-            size: size
+            size: size,
+            edSignature: nil
         )
     }
 }

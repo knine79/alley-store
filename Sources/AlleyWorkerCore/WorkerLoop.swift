@@ -64,7 +64,8 @@ public struct WorkerLoop: Sendable {
                 SigningJobUpdate(
                     state: .succeeded,
                     resultSHA256: output.sha256,
-                    resultSize: output.size
+                    resultSize: output.size,
+                    resultEdSignature: output.edSignature
                 ),
                 for: job.id
             )

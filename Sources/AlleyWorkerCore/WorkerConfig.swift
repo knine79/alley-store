@@ -22,6 +22,12 @@ public struct WorkerConfig: Sendable {
     public var workDirectory: URL
     /// long-poll 한 번의 대기 시간(초).
     public var pollTimeout: Int
+    /// Sparkle 이 요구하는 EdDSA 서명에 쓸 개인키(base64, 32바이트 시드).
+    ///
+    /// 없으면 서명을 만들지 않는다. appcast 경로를 쓰지 않는 조직에는 필요 없는
+    /// 값이라 필수로 두지 않는다. 서명 인증서와 같은 이유로 이 머신에만 둔다
+    /// (ADR-0017).
+    public var sparklePrivateKey: String?
 
     public enum LoadError: Error, CustomStringConvertible {
         case missing(key: String)
@@ -78,7 +84,9 @@ public struct WorkerConfig: Sendable {
             signingIdentity: try required("ALLEY_SIGNING_IDENTITY"),
             notaryProfile: try required("ALLEY_NOTARY_PROFILE"),
             workDirectory: workDirectory,
-            pollTimeout: pollTimeout
+            pollTimeout: pollTimeout,
+            sparklePrivateKey: environment["ALLEY_SPARKLE_PRIVATE_KEY"]
+                .flatMap { $0.isEmpty ? nil : $0 }
         )
     }
 }

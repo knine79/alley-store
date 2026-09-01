@@ -42,6 +42,8 @@ public struct SigningJobUpdate: Codable, Sendable {
     /// 결과물 검증용. 서버가 업로드된 파일과 대조한다.
     public var resultSHA256: String?
     public var resultSize: Int64?
+    /// Sparkle 이 요구하는 EdDSA 서명. 워커에 키가 없으면 비어 있다 (ADR-0017).
+    public var resultEdSignature: String?
 
     public init(
         state: SigningJobState,
@@ -49,7 +51,8 @@ public struct SigningJobUpdate: Codable, Sendable {
         log: String? = nil,
         failureReason: String? = nil,
         resultSHA256: String? = nil,
-        resultSize: Int64? = nil
+        resultSize: Int64? = nil,
+        resultEdSignature: String? = nil
     ) {
         self.state = state
         self.phase = phase
@@ -57,6 +60,7 @@ public struct SigningJobUpdate: Codable, Sendable {
         self.failureReason = failureReason
         self.resultSHA256 = resultSHA256
         self.resultSize = resultSize
+        self.resultEdSignature = resultEdSignature
     }
 }
 

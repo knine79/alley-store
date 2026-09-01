@@ -471,6 +471,56 @@ public struct SubmitFeedbackRequest: Codable, Sendable {
     }
 }
 
+/// Sparkle 피드용 앱별 토큰.
+///
+/// 값은 여기 없다. 발급 직후 한 번만 내려간다 (ADR-0017).
+public struct FeedTokenDTO: Codable, Sendable, Identifiable, Equatable {
+    public var id: UUID
+    public var appID: UUID
+    public var name: String
+    public var lastUsedAt: Date?
+    public var revokedAt: Date?
+    public var createdAt: Date
+
+    public init(
+        id: UUID,
+        appID: UUID,
+        name: String,
+        lastUsedAt: Date? = nil,
+        revokedAt: Date? = nil,
+        createdAt: Date
+    ) {
+        self.id = id
+        self.appID = appID
+        self.name = name
+        self.lastUsedAt = lastUsedAt
+        self.revokedAt = revokedAt
+        self.createdAt = createdAt
+    }
+}
+
+public struct CreateFeedTokenRequest: Codable, Sendable {
+    public var name: String
+
+    public init(name: String) {
+        self.name = name
+    }
+}
+
+/// 피드 토큰을 발급한 직후에만 한 번 내려주는 응답.
+public struct CreatedFeedToken: Codable, Sendable {
+    public var token: FeedTokenDTO
+    public var value: String
+    /// 앱의 `SUFeedURL` 에 그대로 넣을 주소. 토큰이 들어 있다.
+    public var feedURL: String
+
+    public init(token: FeedTokenDTO, value: String, feedURL: String) {
+        self.token = token
+        self.value = value
+        self.feedURL = feedURL
+    }
+}
+
 // MARK: - 알림
 
 /// 알림을 보낼 곳.

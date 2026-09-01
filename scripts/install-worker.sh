@@ -13,6 +13,10 @@
 # 설정을 미리 환경변수로 넘기면 묻지 않는다:
 #   ALLEY_SERVER_URL, ALLEY_WORKER_TOKEN, ALLEY_SIGNING_IDENTITY,
 #   ALLEY_NOTARY_PROFILE, ALLEY_WORKER_NAME
+#
+# Sparkle 자동 업데이트를 쓰는 조직은 서명 키도 넣습니다 (ADR-0017):
+#   ALLEY_SPARKLE_PRIVATE_KEY  Ed25519 시드(base64). `openssl rand -base64 32`
+#                              앱의 SUPublicEDKey 에는 이 키의 공개키를 넣습니다.
 
 set -euo pipefail
 
@@ -103,6 +107,7 @@ if ! env \
     ALLEY_SIGNING_IDENTITY="$ALLEY_SIGNING_IDENTITY" \
     ALLEY_NOTARY_PROFILE="$ALLEY_NOTARY_PROFILE" \
     ALLEY_WORKER_NAME="$ALLEY_WORKER_NAME" \
+    ALLEY_SPARKLE_PRIVATE_KEY="${ALLEY_SPARKLE_PRIVATE_KEY:-}" \
     "$INSTALL_DIR/alley-worker" preflight
 then
     die "환경 점검에 실패했습니다. 위 항목을 고치고 다시 실행하세요."
@@ -134,6 +139,8 @@ cat > "$PLIST" <<PLIST_EOF
         <string>$ALLEY_NOTARY_PROFILE</string>
         <key>ALLEY_WORKER_NAME</key>
         <string>$ALLEY_WORKER_NAME</string>
+        <key>ALLEY_SPARKLE_PRIVATE_KEY</key>
+        <string>${ALLEY_SPARKLE_PRIVATE_KEY:-}</string>
     </dict>
     <key>RunAtLoad</key>
     <true/>

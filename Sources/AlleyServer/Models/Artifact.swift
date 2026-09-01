@@ -31,6 +31,14 @@ public final class Artifact: Model, @unchecked Sendable {
     @OptionalField(key: "file_size")
     public var fileSize: Int64?
 
+    /// Sparkle 이 요구하는 EdDSA(Ed25519) 서명.
+    ///
+    /// 서명 워커가 결과물에 대해 만들어 보고한다. 없으면 Sparkle 이 설치를 거부하므로
+    /// appcast 경로를 쓰는 앱은 이 값이 있어야 한다. 스토어 앱으로 받는 경로는
+    /// 이것과 무관하다(그쪽은 codesign 과 공증을 직접 확인한다).
+    @OptionalField(key: "ed_signature")
+    public var edSignature: String?
+
     @Timestamp(key: "created_at", on: .create)
     public var createdAt: Date?
 
@@ -84,5 +92,22 @@ public struct CreateArtifact: AsyncMigration {
     public func revert(on database: any Database) async throws {
         try await database.schema(Artifact.schema).delete()
         try await database.enum("artifact_kind").delete()
+    }
+}
+
+/// Sparkle 서명을 담을 자리.
+public struct AddArtifactEdSignature: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        try await database.schema(Artifact.schema)
+            .field("ed_signature", .string)
+            .update()
+    }
+
+    public func revert(on database: any Database) async throws {
+        try await database.schema(Artifact.schema)
+            .deleteField("ed_signature")
+            .update()
     }
 }

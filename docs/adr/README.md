@@ -24,6 +24,7 @@
 | [0014](0014-store-app-without-xcode-project.md) | 스토어 앱을 Xcode 프로젝트 없이 SwiftPM 과 조립 스크립트로 만든다 | 수락됨 | 2026-08-31 |
 | [0015](0015-app-scoped-deploy-tokens.md) | CI 는 앱 하나에 묶인 배포 토큰으로 올린다 | 수락됨 | 2026-08-31 |
 | [0016](0016-server-handles-small-uploads.md) | 피드백 스크린샷은 서버가 직접 받는다 | 수락됨 | 2026-09-01 |
+| [0017](0017-sparkle-feed-tokens.md) | Sparkle 피드는 앱별 읽기 전용 토큰을 주소에 실어 인증한다 | 수락됨 | 2026-09-01 |
 
 ## 언제 쓰나
 
