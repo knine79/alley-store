@@ -311,6 +311,7 @@ struct StoreSettingsFormValues: Codable {
     var bundleIDPrefix: String?
     /// 체크박스는 꺼져 있으면 아예 전송되지 않는다. 그래서 옵셔널이고 nil 이 곧 꺼짐이다.
     var enforceBundleIDPrefix: String?
+    var allowsAnonymousFeedback: String?
     var confirmOpenToAnyDomain: String?
 
     init(settings: StoreSettings) {
@@ -320,6 +321,7 @@ struct StoreSettingsFormValues: Codable {
         self.allowedEmailDomains = settings.allowedEmailDomains.joined(separator: ", ")
         self.bundleIDPrefix = settings.bundleIDPrefix
         self.enforceBundleIDPrefix = settings.enforceBundleIDPrefix ? "on" : nil
+        self.allowsAnonymousFeedback = settings.allowsAnonymousFeedback ? "on" : nil
         self.confirmOpenToAnyDomain = nil
     }
 
@@ -332,6 +334,7 @@ struct StoreSettingsFormValues: Codable {
             bundleIDPrefix: bundleIDPrefix ?? "",
             // 폼은 화면에 있는 모든 항목을 한 번에 보낸다. 체크가 없으면 껐다는 뜻이다.
             enforceBundleIDPrefix: enforceBundleIDPrefix != nil,
+            allowsAnonymousFeedback: allowsAnonymousFeedback != nil,
             confirmOpenToAnyDomain: confirmOpenToAnyDomain != nil
         )
     }

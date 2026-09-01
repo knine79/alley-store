@@ -164,6 +164,7 @@
             <span class="field-note">별점과 글 중 하나는 있어야 합니다.</span>
         </label>
 
+        #if(allowsAnonymousFeedback):
         <label class="check">
             <input type="checkbox" name="isAnonymous" value="on">
             <span>
@@ -171,6 +172,7 @@
                 <span class="check-note">화면에 이름이 뜨지 않습니다. 서버에는 기록이 남습니다.</span>
             </span>
         </label>
+        #endif
 
         <div class="form-actions">
             <button class="button button-primary" type="submit">남기기</button>

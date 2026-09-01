@@ -10,6 +10,8 @@ struct FeedbackSection: View {
     let app: AppDTO
     /// 남길 수 있는 버전. 설치한 버전이 없으면 nil 이다.
     let reviewableVersion: VersionDTO?
+    /// 익명 체크박스를 띄울지. 스토어 설정에서 온다.
+    let allowsAnonymous: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -24,7 +26,7 @@ struct FeedbackSection: View {
             }
 
             if let version = reviewableVersion {
-                FeedbackForm(app: app, version: version)
+                FeedbackForm(app: app, version: version, allowsAnonymous: allowsAnonymous)
             } else {
                 Text("받아본 버전에만 남길 수 있습니다.")
                     .font(.callout)
@@ -51,6 +53,7 @@ struct FeedbackForm: View {
     @Environment(StoreModel.self) private var model
     let app: AppDTO
     let version: VersionDTO
+    let allowsAnonymous: Bool
 
     @State private var rating: Int?
     @State private var text = ""
@@ -100,9 +103,11 @@ struct FeedbackForm: View {
                 }
 
             HStack {
-                Toggle("이름 숨기기", isOn: $isAnonymous)
-                    .toggleStyle(.checkbox)
-                    .help("화면에 이름이 뜨지 않습니다. 서버에는 기록이 남습니다.")
+                if allowsAnonymous {
+                    Toggle("이름 숨기기", isOn: $isAnonymous)
+                        .toggleStyle(.checkbox)
+                        .help("화면에 이름이 뜨지 않습니다. 서버에는 기록이 남습니다.")
+                }
                 Spacer()
                 Button("남기기", action: submit)
                     .buttonStyle(.borderedProminent)
@@ -125,7 +130,8 @@ struct FeedbackForm: View {
             let sent = await model.submitFeedback(
                 rating: rating,
                 body: trimmed.isEmpty ? nil : trimmed,
-                isAnonymous: isAnonymous,
+                // 설정이 꺼진 채로 체크가 남아 있으면 서버가 거절한다. 여기서 막는다.
+                isAnonymous: allowsAnonymous && isAnonymous,
                 versionID: version.id,
                 app: app
             )

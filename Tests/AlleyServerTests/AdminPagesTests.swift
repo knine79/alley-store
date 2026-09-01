@@ -77,9 +77,19 @@ struct StoreSettingsPageTests {
             let (_, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
 
             // 켜져 있는 설정이 꺼진 것처럼 보이면, 저장 버튼을 누르는 순간 실제로 꺼진다.
+            //
+            // 화면에 체크박스가 여럿이라 "checked" 가 있는지만 보면 안 된다.
+            // 줄바꿈을 접어서 그 입력 하나만 확인한다.
             try await app.testing().test(
                 .GET, "/admin/settings", headers: .sessionCookie(token)
-            ) { #expect($0.body.string.contains("checked") == enforced) }
+            ) { response in
+                let flat = response.body.string
+                    .split(whereSeparator: \.isWhitespace)
+                    .joined(separator: " ")
+                #expect(
+                    flat.contains(#"name="enforceBundleIDPrefix" value="on" checked"#) == enforced
+                )
+            }
         }
     }
 

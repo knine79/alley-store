@@ -195,6 +195,7 @@ struct AppPagesController: RouteCollection, Sendable {
             ? try await SigningJob.latestLogs(ofVersions: versions.map { try $0.requireID() }, on: request.db)
             : [:]
 
+        let settings = try await request.storeSettings()
         let feedback = try await FeedbackPresentation.rows(
             ofApp: try app.requireID(),
             viewer: user,
@@ -223,6 +224,7 @@ struct AppPagesController: RouteCollection, Sendable {
                 notificationTargets: targets,
                 feedback: feedback,
                 reviewableVersions: reviewable,
+                allowsAnonymousFeedback: settings.allowsAnonymousFeedback,
                 feedbackError: feedbackError,
                 notificationError: notificationError,
                 canUpload: canUpload,
@@ -328,6 +330,7 @@ struct AppPagesController: RouteCollection, Sendable {
                 ),
                 to: version,
                 by: user,
+                settings: try await request.storeSettings(),
                 on: request.db
             )
             await announce(entry, version: version, by: user, on: request)
@@ -564,6 +567,8 @@ struct AppDetailContext: Encodable {
     var feedback: [FeedbackRow]
     /// 지금 사람이 피드백을 남길 수 있는 버전들. 받아본 것만 들어온다.
     var reviewableVersions: [ReviewableVersion]
+    /// 익명 체크박스를 띄울지. 스토어 설정에서 온다.
+    var allowsAnonymousFeedback: Bool
     var feedbackError: String?
     var notificationError: String?
     var canUpload: Bool

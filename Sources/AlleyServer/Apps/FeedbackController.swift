@@ -67,6 +67,7 @@ public struct FeedbackController: RouteCollection, Sendable {
             payload,
             to: version,
             by: user,
+            settings: try await request.storeSettings(),
             on: request.db
         )
 
@@ -207,6 +208,7 @@ enum FeedbackSubmission {
         _ payload: SubmitFeedbackRequest,
         to version: Version,
         by user: User,
+        settings: StoreSettings,
         on database: any Database
     ) async throws -> Feedback {
         let body = payload.body?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -222,6 +224,11 @@ enum FeedbackSubmission {
         }
         guard version.state.isPubliclyVisible else {
             throw Abort(.conflict, reason: "아직 출시되지 않은 버전입니다.")
+        }
+        // 조용히 실명으로 바꾸지 않는다. 익명인 줄 알고 쓴 글에 이름이 붙는 것이
+        // 이 기능에서 가장 나쁜 실패다.
+        if payload.isAnonymous, !settings.allowsAnonymousFeedback {
+            throw Abort(.forbidden, reason: "이 스토어는 익명 피드백을 받지 않습니다.")
         }
 
         let userID = try user.requireID()

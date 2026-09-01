@@ -86,7 +86,9 @@ private func configureMigrations(_ app: Application) {
     app.migrations.add(AddWorkerAlertedAt())
 
     // 설정 행은 마이그레이션이 아니라 최초 접근 시점에 심는다 (ADR-0011).
+    // 표 자체는 여기서 만들고, 뒤에 붙는 열은 그다음에 온다.
     app.migrations.add(CreateStoreSettings())
+    app.migrations.add(AddAnonymousFeedbackSetting())
 }
 
 /// 미들웨어 스택.

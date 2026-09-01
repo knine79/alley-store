@@ -19,7 +19,8 @@ public struct StoreMeta: Codable, Sendable, Equatable {
     public var callbackURLScheme: String
     /// 서버가 지원하는 API 버전. 클라이언트 호환성 판단에 쓴다.
     public var apiVersion: Int
-
+    /// 피드백을 익명으로 남길 수 있는지. 스토어 앱이 이걸 보고 체크박스를 띄운다.
+    public var allowsAnonymousFeedback: Bool
 
     public init(
         storeName: String,
@@ -28,7 +29,8 @@ public struct StoreMeta: Codable, Sendable, Equatable {
         allowedEmailDomains: [String] = [],
         authorizationPath: String = APIPath.googleAuthorize,
         callbackURLScheme: String,
-        apiVersion: Int = APIPath.currentAPIVersion
+        apiVersion: Int = APIPath.currentAPIVersion,
+        allowsAnonymousFeedback: Bool = true
     ) {
         self.storeName = storeName
         self.logoURL = logoURL
@@ -37,6 +39,7 @@ public struct StoreMeta: Codable, Sendable, Equatable {
         self.authorizationPath = authorizationPath
         self.callbackURLScheme = callbackURLScheme
         self.apiVersion = apiVersion
+        self.allowsAnonymousFeedback = allowsAnonymousFeedback
     }
 }
 
@@ -51,6 +54,8 @@ public struct StoreSettingsDTO: Codable, Sendable, Equatable {
     public var allowedEmailDomains: [String]
     public var bundleIDPrefix: String?
     public var enforceBundleIDPrefix: Bool
+    /// 피드백을 익명으로 남길 수 있는지.
+    public var allowsAnonymousFeedback: Bool
     public var updatedAt: Date?
 
     public init(
@@ -60,6 +65,7 @@ public struct StoreSettingsDTO: Codable, Sendable, Equatable {
         allowedEmailDomains: [String] = [],
         bundleIDPrefix: String? = nil,
         enforceBundleIDPrefix: Bool = true,
+        allowsAnonymousFeedback: Bool = true,
         updatedAt: Date? = nil
     ) {
         self.storeName = storeName
@@ -68,6 +74,7 @@ public struct StoreSettingsDTO: Codable, Sendable, Equatable {
         self.allowedEmailDomains = allowedEmailDomains
         self.bundleIDPrefix = bundleIDPrefix
         self.enforceBundleIDPrefix = enforceBundleIDPrefix
+        self.allowsAnonymousFeedback = allowsAnonymousFeedback
         self.updatedAt = updatedAt
     }
 }
@@ -83,6 +90,8 @@ public struct UpdateStoreSettingsRequest: Codable, Sendable {
     public var allowedEmailDomains: [String]?
     public var bundleIDPrefix: String?
     public var enforceBundleIDPrefix: Bool?
+    /// 익명 피드백을 허용할지. 끄면 이름을 감춘 요청이 거절된다.
+    public var allowsAnonymousFeedback: Bool?
 
     /// 로그인 허용 도메인을 비우려면 이 값을 명시적으로 켜야 한다.
     ///
@@ -97,6 +106,7 @@ public struct UpdateStoreSettingsRequest: Codable, Sendable {
         allowedEmailDomains: [String]? = nil,
         bundleIDPrefix: String? = nil,
         enforceBundleIDPrefix: Bool? = nil,
+        allowsAnonymousFeedback: Bool? = nil,
         confirmOpenToAnyDomain: Bool? = nil
     ) {
         self.storeName = storeName
@@ -105,6 +115,7 @@ public struct UpdateStoreSettingsRequest: Codable, Sendable {
         self.allowedEmailDomains = allowedEmailDomains
         self.bundleIDPrefix = bundleIDPrefix
         self.enforceBundleIDPrefix = enforceBundleIDPrefix
+        self.allowsAnonymousFeedback = allowsAnonymousFeedback
         self.confirmOpenToAnyDomain = confirmOpenToAnyDomain
     }
 }

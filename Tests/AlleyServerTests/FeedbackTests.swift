@@ -490,3 +490,131 @@ struct FeedbackPageTests {
         }
     }
 }
+
+@Suite("익명 허용 설정")
+struct AnonymousPolicyTests {
+    @Test("기본은 익명을 받는다")
+    func allowsByDefault() async throws {
+        try await withMigratedApp { app in
+            let settings = try await StoreSettings.find(StoreSettings.singletonID, on: app.db)
+            // 이미 도는 스토어의 동작이 갑자기 바뀌지 않아야 한다.
+            #expect(settings?.allowsAnonymousFeedback != false)
+        }
+    }
+
+    @Test("끄면 익명 요청을 거절한다")
+    func rejectsAnonymousWhenDisabled() async throws {
+        try await withMigratedApp { app in
+            let setup = try await seedReleasedVersion(on: app)
+            let settings = try await StoreSettings.loadOrSeed(
+                on: app.db, seed: app.alleyConfig.store.seed, logger: app.logger
+            )
+            settings.allowsAnonymousFeedback = false
+            try await settings.save(on: app.db)
+
+            // 조용히 실명으로 바꾸지 않는다. 익명인 줄 알고 쓴 글에 이름이 붙는 것이
+            // 이 기능에서 가장 나쁜 실패다.
+            try await app.testing().test(
+                .POST, feedbackPath(setup.versionID), headers: .bearer(setup.readerToken),
+                beforeRequest: { request in
+                    try request.content.encode(
+                        SubmitFeedbackRequest(rating: 3, isAnonymous: true)
+                    )
+                }
+            ) { #expect($0.status == .forbidden) }
+
+            // 실명 피드백은 그대로 받는다.
+            try await app.testing().test(
+                .POST, feedbackPath(setup.versionID), headers: .bearer(setup.readerToken),
+                beforeRequest: { request in
+                    try request.content.encode(SubmitFeedbackRequest(rating: 3))
+                }
+            ) { #expect($0.status == .created) }
+        }
+    }
+
+    @Test("꺼도 이미 익명으로 남긴 글은 익명으로 남는다")
+    func keepsExistingAnonymity() async throws {
+        try await withMigratedApp { app in
+            let setup = try await seedReleasedVersion(on: app)
+            try await app.testing().test(
+                .POST, feedbackPath(setup.versionID), headers: .bearer(setup.readerToken),
+                beforeRequest: { request in
+                    try request.content.encode(
+                        SubmitFeedbackRequest(rating: 2, body: "느립니다", isAnonymous: true)
+                    )
+                }
+            ) { #expect($0.status == .created) }
+
+            let settings = try await StoreSettings.loadOrSeed(
+                on: app.db, seed: app.alleyConfig.store.seed, logger: app.logger
+            )
+            settings.allowsAnonymousFeedback = false
+            try await settings.save(on: app.db)
+
+            // 남길 때의 약속을 나중에 뒤집으면 그 사람이 쓴 것이 다른 뜻이 된다.
+            try await app.testing().test(
+                .GET, "/apps/\(setup.appID.uuidString)",
+                headers: .sessionCookie(setup.ownerToken)
+            ) { response in
+                #expect(response.body.string.contains("느립니다"))
+                #expect(!response.body.string.contains("받은 사람"))
+            }
+        }
+    }
+
+    @Test("끄면 화면에서 체크박스가 사라진다")
+    func hidesCheckboxWhenDisabled() async throws {
+        try await withMigratedApp { app in
+            let setup = try await seedReleasedVersion(on: app)
+            let path = "/apps/\(setup.appID.uuidString)"
+
+            try await app.testing().test(
+                .GET, path, headers: .sessionCookie(setup.readerToken)
+            ) { #expect($0.body.string.contains("이름을 숨깁니다")) }
+
+            let settings = try await StoreSettings.loadOrSeed(
+                on: app.db, seed: app.alleyConfig.store.seed, logger: app.logger
+            )
+            settings.allowsAnonymousFeedback = false
+            try await settings.save(on: app.db)
+
+            try await app.testing().test(
+                .GET, path, headers: .sessionCookie(setup.readerToken)
+            ) { #expect(!$0.body.string.contains("이름을 숨깁니다")) }
+        }
+    }
+
+    @Test("스토어 앱이 볼 수 있게 meta 에 실린다")
+    func metaCarriesPolicy() async throws {
+        try await withMigratedApp { app in
+            try await app.testing().test(.GET, APIPath.meta) { response in
+                let meta = try response.content.decode(StoreMeta.self)
+                #expect(meta.allowsAnonymousFeedback)
+            }
+        }
+    }
+
+    @Test("관리자 화면에서 끈다")
+    func adminTurnsItOff() async throws {
+        try await withMigratedApp { app in
+            let (_, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
+
+            // 체크박스를 빼고 보내면 껐다는 뜻이다.
+            try await app.testing().test(
+                .POST, "/admin/settings", headers: .form(cookie: token),
+                beforeRequest: { request in
+                    try request.content.encode(
+                        ["storeName": "Example Store", "allowedEmailDomains": "example.com"],
+                        as: .urlEncodedForm
+                    )
+                }
+            ) { #expect($0.status == .seeOther) }
+
+            let stored = try #require(
+                try await StoreSettings.find(StoreSettings.singletonID, on: app.db)
+            )
+            #expect(!stored.allowsAnonymousFeedback)
+        }
+    }
+}

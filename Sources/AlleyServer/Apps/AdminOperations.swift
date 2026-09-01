@@ -47,6 +47,9 @@ enum AdminOperations {
         if let enforce = payload.enforceBundleIDPrefix {
             settings.enforceBundleIDPrefix = enforce
         }
+        if let allowsAnonymous = payload.allowsAnonymousFeedback {
+            settings.allowsAnonymousFeedback = allowsAnonymous
+        }
 
         if let domains = payload.allowedEmailDomains {
             settings.allowedEmailDomains = try normalize(

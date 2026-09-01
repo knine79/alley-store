@@ -45,6 +45,16 @@ public final class StoreSettings: Model, @unchecked Sendable {
     @Field(key: "enforce_bundle_id_prefix")
     public var enforceBundleIDPrefix: Bool
 
+    /// 피드백을 익명으로 남길 수 있는지.
+    ///
+    /// 조직마다 답이 다르다. 이름이 붙으면 동료가 만든 앱에 낮은 점수를 주기 어렵고,
+    /// 익명이면 오너가 되물을 수 없다. 어느 쪽이 나은지는 그 조직의 문화가 정한다.
+    ///
+    /// **끄더라도 이미 익명으로 남긴 글은 익명으로 남는다.** 남길 때의 약속을
+    /// 나중에 뒤집으면 그 사람이 쓴 것이 다른 뜻이 된다.
+    @Field(key: "allows_anonymous_feedback")
+    public var allowsAnonymousFeedback: Bool
+
     /// 마지막으로 설정을 바꾼 사람. 로그인 도메인처럼 위험한 항목이 있어서
     /// 누가 건드렸는지는 남겨둔다.
     @OptionalParent(key: "updated_by")
@@ -61,7 +71,8 @@ public final class StoreSettings: Model, @unchecked Sendable {
         accentColor: String? = nil,
         allowedEmailDomains: [String] = [],
         bundleIDPrefix: String? = nil,
-        enforceBundleIDPrefix: Bool = true
+        enforceBundleIDPrefix: Bool = true,
+        allowsAnonymousFeedback: Bool = true
     ) {
         self.id = Self.singletonID
         self.storeName = storeName
@@ -70,6 +81,7 @@ public final class StoreSettings: Model, @unchecked Sendable {
         self.allowedEmailDomains = allowedEmailDomains
         self.bundleIDPrefix = bundleIDPrefix
         self.enforceBundleIDPrefix = enforceBundleIDPrefix
+        self.allowsAnonymousFeedback = allowsAnonymousFeedback
     }
 }
 
@@ -84,7 +96,8 @@ extension StoreSettings {
             logoURL: logoURL,
             accentColor: accentColor,
             allowedEmailDomains: allowedEmailDomains,
-            callbackURLScheme: callbackURLScheme
+            callbackURLScheme: callbackURLScheme,
+            allowsAnonymousFeedback: allowsAnonymousFeedback
         )
     }
 
@@ -96,6 +109,7 @@ extension StoreSettings {
             allowedEmailDomains: allowedEmailDomains,
             bundleIDPrefix: bundleIDPrefix,
             enforceBundleIDPrefix: enforceBundleIDPrefix,
+            allowsAnonymousFeedback: allowsAnonymousFeedback,
             updatedAt: updatedAt
         )
     }
@@ -122,5 +136,26 @@ public struct CreateStoreSettings: AsyncMigration {
 
     public func revert(on database: any Database) async throws {
         try await database.schema(StoreSettings.schema).delete()
+    }
+}
+
+/// 익명 피드백 허용 여부를 담을 자리.
+///
+/// `CreateStoreSettings` 를 고치지 않고 새로 만든다. 이미 마이그레이션을 돌린
+/// 데이터베이스는 그 파일을 다시 읽지 않는다.
+public struct AddAnonymousFeedbackSetting: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        try await database.schema(StoreSettings.schema)
+            // 기본은 허용이다. 이미 도는 스토어의 동작이 갑자기 바뀌지 않아야 한다.
+            .field("allows_anonymous_feedback", .bool, .required, .sql(.default(true)))
+            .update()
+    }
+
+    public func revert(on database: any Database) async throws {
+        try await database.schema(StoreSettings.schema)
+            .deleteField("allows_anonymous_feedback")
+            .update()
     }
 }

@@ -40,7 +40,7 @@ struct CatalogView: View {
             }
         } detail: {
             if let selected = model.apps.first(where: { $0.id == selection }) {
-                AppDetailView(app: selected)
+                AppDetailView(app: selected, meta: meta)
             } else {
                 ContentUnavailableView(
                     "앱을 고르세요",
@@ -144,6 +144,7 @@ struct InstallButton: View {
 struct AppDetailView: View {
     @Environment(StoreModel.self) private var model
     let app: AppDTO
+    let meta: StoreMeta
 
     private var installed: InstalledApp? {
         model.installed[app.bundleID]
@@ -196,7 +197,11 @@ struct AppDetailView: View {
                 }
 
                 Divider()
-                FeedbackSection(app: app, reviewableVersion: reviewableVersion)
+                FeedbackSection(
+                    app: app,
+                    reviewableVersion: reviewableVersion,
+                    allowsAnonymous: meta.allowsAnonymousFeedback
+                )
 
                 Spacer(minLength: 0)
             }
