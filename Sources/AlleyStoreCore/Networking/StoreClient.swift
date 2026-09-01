@@ -67,6 +67,23 @@ struct StoreClient: Sendable {
         try await get(APIPath.download(versionID: versionID), as: DownloadTicket.self)
     }
 
+    // MARK: - 피드백
+
+    func feedback(ofApp id: UUID) async throws -> [FeedbackDTO] {
+        try await get("\(APIPath.apiRoot)/apps/\(id.uuidString)/feedback", as: [FeedbackDTO].self)
+    }
+
+    func submitFeedback(
+        _ payload: SubmitFeedbackRequest,
+        versionID: UUID
+    ) async throws -> FeedbackDTO {
+        try await post(
+            "\(APIPath.apiRoot)/versions/\(versionID.uuidString)/feedback",
+            body: payload,
+            as: FeedbackDTO.self
+        )
+    }
+
     // MARK: - 보조
 
     private var decoder: JSONDecoder {

@@ -98,9 +98,14 @@ struct AppRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(app.name)
                     .font(.body.weight(.medium))
-                Text(model.state(of: app).summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text(model.state(of: app).summary)
+                    if let average = app.rating?.displayAverage {
+                        Text("★ \(average)")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
             Spacer()
             InstallButton(app: app)
@@ -190,18 +195,43 @@ struct AppDetailView: View {
                     }
                 }
 
+                Divider()
+                FeedbackSection(app: app, reviewableVersion: reviewableVersion)
+
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(24)
         }
+        .task(id: app.id) { await model.loadFeedback(for: app) }
+    }
+
+    /// 피드백을 남길 수 있는 버전.
+    ///
+    /// 받아본 버전에만 남길 수 있다(서버 규칙). 앱은 "지금 깔려 있는 것"만 알고
+    /// 있으므로, 깔려 있고 그것이 최신 출시본과 같을 때만 폼을 띄운다. 예전 버전을
+    /// 깔아둔 사람이 그 버전에 남기는 경로는 웹 콘솔에 있다.
+    private var reviewableVersion: VersionDTO? {
+        guard let installed = model.installed[app.bundleID],
+              let released = app.latestReleasedVersion,
+              installed.buildNumber == released.buildNumber
+        else {
+            return nil
+        }
+        return released
     }
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(app.name).font(.largeTitle.weight(.semibold))
-                Text(model.state(of: app).summary).foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Text(model.state(of: app).summary)
+                    if let rating = app.rating, let average = rating.displayAverage {
+                        Text("★ \(average) (\(rating.count))")
+                    }
+                }
+                .foregroundStyle(.secondary)
             }
             Spacer()
             if app.latestReleasedVersion == nil {

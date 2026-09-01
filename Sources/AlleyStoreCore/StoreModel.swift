@@ -156,6 +156,60 @@ final class StoreModel {
         }
     }
 
+    // MARK: - 피드백
+
+    /// 지금 상세를 보고 있는 앱의 피드백. 앱을 고를 때마다 새로 읽는다.
+    private(set) var feedback: [FeedbackDTO] = []
+    private(set) var isLoadingFeedback = false
+
+    /// 앱 하나의 피드백을 읽는다.
+    ///
+    /// 목록을 그릴 때 앱마다 미리 읽지 않는다. 대부분은 열어보지 않는 앱이고,
+    /// 목록 한 번에 요청이 앱 수만큼 나가면 서버가 그것부터 힘들어진다.
+    func loadFeedback(for app: AppDTO) async {
+        guard let client else { return }
+        feedback = []
+        isLoadingFeedback = true
+        defer { isLoadingFeedback = false }
+
+        do {
+            feedback = try await client.feedback(ofApp: app.id)
+        } catch StoreClient.ClientError.unauthorized {
+            signOut()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// 별점과 글을 남긴다.
+    func submitFeedback(
+        rating: Int?,
+        body: String?,
+        isAnonymous: Bool,
+        versionID: UUID,
+        app: AppDTO
+    ) async -> Bool {
+        guard let client else { return false }
+
+        do {
+            _ = try await client.submitFeedback(
+                SubmitFeedbackRequest(rating: rating, body: body, isAnonymous: isAnonymous),
+                versionID: versionID
+            )
+            await loadFeedback(for: app)
+            // 평균이 바뀌었으므로 목록도 다시 읽는다.
+            await refresh()
+            statusMessage = "\(app.name) 에 남겼습니다."
+            return true
+        } catch StoreClient.ClientError.unauthorized {
+            signOut()
+            return false
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     func state(of app: AppDTO) -> InstallState {
         InstallState.compare(
             installed: installed[app.bundleID],
