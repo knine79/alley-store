@@ -354,3 +354,139 @@ struct RatingSummaryTests {
         }
     }
 }
+
+@Suite("피드백 화면")
+struct FeedbackPageTests {
+    @Test("받아본 사람에게만 남기기 폼이 뜬다")
+    func formIsForDownloaders() async throws {
+        try await withMigratedApp { app in
+            let setup = try await seedReleasedVersion(on: app)
+            let (_, strangerToken) = try await app.makeUser(
+                email: "stranger@example.com", role: .user
+            )
+            let path = "/apps/\(setup.appID.uuidString)"
+
+            // 누를 수 없는 폼을 보여주고 거절하는 것보다 안 보이는 편이 낫다.
+            try await app.testing().test(
+                .GET, path, headers: .sessionCookie(strangerToken)
+            ) { #expect($0.body.string.contains("받아본 버전에만 남길 수 있습니다")) }
+
+            try await app.testing().test(
+                .GET, path, headers: .sessionCookie(setup.readerToken)
+            ) { #expect($0.body.string.contains("남기기")) }
+        }
+    }
+
+    @Test("화면에서 남기면 목록에 뜬다")
+    func submitsFromConsole() async throws {
+        try await withMigratedApp { app in
+            let setup = try await seedReleasedVersion(on: app)
+
+            try await app.testing().test(
+                .POST, "/apps/\(setup.appID.uuidString)/feedback",
+                headers: .form(cookie: setup.readerToken),
+                beforeRequest: { request in
+                    try request.content.encode(
+                        [
+                            "versionID": setup.versionID.uuidString,
+                            "rating": "5",
+                            "body": "빠릅니다.",
+                        ],
+                        as: .urlEncodedForm
+                    )
+                }
+            ) { #expect($0.status == .seeOther) }
+
+            try await app.testing().test(
+                .GET, "/apps/\(setup.appID.uuidString)",
+                headers: .sessionCookie(setup.readerToken)
+            ) { response in
+                let html = response.body.string
+                #expect(html.contains("빠릅니다."))
+                #expect(html.contains("받은 사람"))
+                // 평균이 제목 옆에 붙는다.
+                #expect(html.contains("5.0"))
+            }
+        }
+    }
+
+    @Test("익명으로 남기면 화면에 이름이 없다")
+    func consoleHidesAnonymousAuthor() async throws {
+        try await withMigratedApp { app in
+            let setup = try await seedReleasedVersion(on: app)
+
+            try await app.testing().test(
+                .POST, "/apps/\(setup.appID.uuidString)/feedback",
+                headers: .form(cookie: setup.readerToken),
+                beforeRequest: { request in
+                    try request.content.encode(
+                        [
+                            "versionID": setup.versionID.uuidString,
+                            "body": "느립니다.",
+                            "isAnonymous": "on",
+                        ],
+                        as: .urlEncodedForm
+                    )
+                }
+            ) { #expect($0.status == .seeOther) }
+
+            try await app.testing().test(
+                .GET, "/apps/\(setup.appID.uuidString)",
+                headers: .sessionCookie(setup.ownerToken)
+            ) { response in
+                let html = response.body.string
+                #expect(html.contains("느립니다."))
+                #expect(!html.contains("받은 사람"))
+                #expect(html.contains("익명"))
+            }
+        }
+    }
+
+    @Test("알림 대상은 관리하는 사람에게만 보인다")
+    func notificationSectionIsForManagers() async throws {
+        try await withMigratedApp { app in
+            let setup = try await seedReleasedVersion(on: app)
+
+            try await app.testing().test(
+                .GET, "/apps/\(setup.appID.uuidString)",
+                headers: .sessionCookie(setup.readerToken)
+            ) { #expect(!$0.body.string.contains("Slack 웹훅 주소")) }
+
+            try await app.testing().test(
+                .GET, "/apps/\(setup.appID.uuidString)",
+                headers: .sessionCookie(setup.ownerToken)
+            ) { #expect($0.body.string.contains("Slack 웹훅 주소")) }
+        }
+    }
+
+    @Test("화면에서 알림 대상을 붙인다")
+    func addsTargetFromConsole() async throws {
+        try await withMigratedApp { app in
+            let setup = try await seedReleasedVersion(on: app)
+
+            try await app.testing().test(
+                .POST, "/apps/\(setup.appID.uuidString)/notification-targets",
+                headers: .form(cookie: setup.ownerToken),
+                beforeRequest: { request in
+                    try request.content.encode(
+                        [
+                            "name": "팀 채널",
+                            "endpoint": "https://hooks.slack.com/services/T/B/x",
+                        ],
+                        as: .urlEncodedForm
+                    )
+                }
+            ) { #expect($0.status == .seeOther) }
+
+            try await app.testing().test(
+                .GET, "/apps/\(setup.appID.uuidString)",
+                headers: .sessionCookie(setup.ownerToken)
+            ) { response in
+                #expect(response.body.string.contains("팀 채널"))
+                // 주소 자체는 다시 보이지 않는다. 폼의 placeholder 와 헷갈리지 않도록
+                // 우리가 넣은 경로 조각으로 확인한다.
+                #expect(!response.body.string.contains("/services/T/B/x"))
+            }
+        }
+    }
+}

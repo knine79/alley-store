@@ -37,6 +37,9 @@
                 #else:
                 <span class="card-quiet">출시본 없음</span>
                 #endif
+                #if(app.ratingAverage):
+                <span class="rating-summary">★ #(app.ratingAverage) <span class="rating-count">(#(app.ratingCount))</span></span>
+                #endif
                 #if(app.category):<span class="card-category">#(app.category)</span>#endif
             </span>
         </a>

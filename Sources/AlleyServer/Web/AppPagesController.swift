@@ -26,6 +26,13 @@ struct AppPagesController: RouteCollection, Sendable {
         pages.post(":appID", "edit", use: submitEdit)
         pages.post(":appID", "deploy-tokens", use: issueDeployToken)
         pages.post(":appID", "deploy-tokens", ":tokenID", "revoke", use: revokeDeployToken)
+        pages.post(":appID", "feedback", use: submitFeedback)
+        pages.post(":appID", "feedback", ":feedbackID", "delete", use: deleteFeedback)
+        pages.post(":appID", "notification-targets", use: addNotificationTarget)
+        pages.post(
+            ":appID", "notification-targets", ":targetID", "delete",
+            use: removeNotificationTarget
+        )
     }
 
     // MARK: - 목록
@@ -38,10 +45,15 @@ struct AppPagesController: RouteCollection, Sendable {
 
         // 일반 사용자에게는 출시본이 있는 앱만 보인다. 받을 수 없는 앱이 목록에 뜨면
         // 왜 못 받는지 묻게 된다.
+        let ratings = try await Feedback.summaries(
+            ofApps: apps.map { try $0.requireID() },
+            on: request.db
+        )
         let rows: [AppRow] = try apps.compactMap { app in
-            let released = latest[try app.requireID()]
+            let appID = try app.requireID()
+            let released = latest[appID]
             guard released != nil || user.role.canPublish else { return nil }
-            return try AppRow(app: app, latestReleased: released)
+            return try AppRow(app: app, latestReleased: released, rating: ratings[appID])
         }
 
         return try await request.view.render(
@@ -134,7 +146,12 @@ struct AppPagesController: RouteCollection, Sendable {
     ///
     /// 방금 발급한 토큰이 있으면 함께 넘긴다. 서버는 해시만 갖고 있어서 다음 요청에는
     /// 보여줄 방법이 없다. 그래서 발급 직후에만 이 자리에 실린다.
-    func renderDetail(on request: Request, issuedToken: IssuedDeployToken?) async throws -> View {
+    func renderDetail(
+        on request: Request,
+        issuedToken: IssuedDeployToken?,
+        feedbackError: String? = nil,
+        notificationError: String? = nil
+    ) async throws -> View {
         let user = try request.requireUser()
         let app = try await request.findApp()
         try await app.$owner.load(on: request.db)
@@ -163,21 +180,51 @@ struct AppPagesController: RouteCollection, Sendable {
                 .map { try DeployTokenRow(token: $0) }
         }
 
+        var targets: [NotificationTargetDTO] = []
+        if canManage {
+            targets = try await NotificationTarget.query(on: request.db)
+                .filter(\.$app.$id == app.requireID())
+                .sort(\.$name)
+                .all()
+                .map { try $0.toDTO() }
+        }
+
         // 실패한 버전은 로그가 있어야 올린 사람이 스스로 고칠 수 있다.
         // 올릴 권한이 없는 사람에게는 보여줄 이유가 없다. 워커 환경이 드러난다.
         let logs = canUpload
             ? try await SigningJob.latestLogs(ofVersions: versions.map { try $0.requireID() }, on: request.db)
             : [:]
 
+        let feedback = try await FeedbackPresentation.rows(
+            ofApp: try app.requireID(),
+            viewer: user,
+            on: request
+        )
+        // 받아본 버전에만 남길 수 있다. 남길 곳이 없으면 폼을 띄우지 않는다.
+        let reviewable = try await FeedbackPresentation.reviewableVersions(
+            ofApp: try app.requireID(),
+            viewer: user,
+            on: request.db
+        )
+
         return try await request.view.render(
             "app-detail",
             AppDetailContext(
                 page: try await request.pageContext(title: app.name),
-                app: try AppRow(app: app, latestReleased: nil),
+                app: try AppRow(
+                    app: app,
+                    latestReleased: nil,
+                    rating: try await Feedback.summary(ofApp: app.requireID(), on: request.db)
+                ),
                 versions: try versions.map { try VersionRow(version: $0, log: logs[try $0.requireID()]) },
                 members: members,
                 deployTokens: deployTokens,
                 issuedToken: issuedToken,
+                notificationTargets: targets,
+                feedback: feedback,
+                reviewableVersions: reviewable,
+                feedbackError: feedbackError,
+                notificationError: notificationError,
                 canUpload: canUpload,
                 canManage: canManage
             )
@@ -251,6 +298,149 @@ struct AppPagesController: RouteCollection, Sendable {
         return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
     }
 
+    // MARK: - 피드백
+
+    @Sendable
+    func submitFeedback(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        let values = try request.content.decode(FeedbackFormValues.self)
+
+        // 폼이 어느 버전에 남기는지 함께 보낸다. 주소에 버전을 박으면 고른 값과
+        // 어긋나고, 그걸 맞추려면 스크립트가 필요해진다.
+        guard let versionID = values.versionID.flatMap(UUID.init(uuidString:)),
+              let version = try await Version.query(on: request.db)
+                  .filter(\.$id == versionID)
+                  .filter(\.$app.$id == app.requireID())
+                  .with(\.$app)
+                  .first()
+        else {
+            throw Abort(.badRequest, reason: "어느 버전에 남길지 고르세요.")
+        }
+
+        do {
+            let entry = try await FeedbackSubmission.submit(
+                SubmitFeedbackRequest(
+                    rating: Int(values.rating ?? ""),
+                    body: values.body,
+                    // 체크박스는 꺼져 있으면 아예 전송되지 않는다.
+                    isAnonymous: values.isAnonymous != nil
+                ),
+                to: version,
+                by: user,
+                on: request.db
+            )
+            await announce(entry, version: version, by: user, on: request)
+        } catch let abort as any AbortError where abort.status.code < 500 {
+            let view = try await renderDetail(
+                on: request, issuedToken: nil, feedbackError: abort.reason
+            )
+            return htmlResponse(view, status: abort.status)
+        }
+        return request.redirect(to: "/apps/\(version.$app.id.uuidString)#feedback")
+    }
+
+    @Sendable
+    func deleteFeedback(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        guard let feedbackID = request.parameters.get("feedbackID", as: UUID.self),
+              let entry = try await Feedback.find(feedbackID, on: request.db),
+              entry.$app.id == (try app.requireID())
+        else {
+            throw Abort(.notFound, reason: "피드백을 찾을 수 없습니다.")
+        }
+
+        let isMine = try entry.$user.id == user.requireID()
+        let canManage = try app.canManage(user)
+        guard isMine || canManage else {
+            throw Abort(.forbidden, reason: "이 피드백을 지울 권한이 없습니다.")
+        }
+
+        if let key = entry.screenshotKey {
+            try? await request.artifactStorage.delete(key: key)
+        }
+        try await entry.delete(on: request.db)
+        if !isMine {
+            request.logger.notice(
+                "남의 피드백을 지웠습니다 [앱: \(app.bundleID), 지운 사람: \(user.email)]"
+            )
+        }
+        return request.redirect(to: "/apps/\(try app.requireID().uuidString)#feedback")
+    }
+
+    /// 앱에 붙은 알림 대상에게 알린다.
+    private func announce(
+        _ entry: Feedback,
+        version: Version,
+        by user: User,
+        on request: Request
+    ) async {
+        let stars = entry.rating.map { String(repeating: "★", count: $0) } ?? ""
+        let who = entry.isAnonymous ? "익명" : user.name
+        await request.notifier.notify(
+            app: version.$app.id,
+            message: NotificationMessage(
+                title: "\(version.app.name) \(version.shortVersion) (\(version.buildNumber)) 에 새 피드백",
+                body: [stars, entry.body, "— \(who)"]
+                    .compactMap { $0 }
+                    .filter { !$0.isEmpty }
+                    .joined(separator: "\n"),
+                link: request.consoleLink("/apps/\(version.$app.id.uuidString)")
+            )
+        )
+    }
+
+    // MARK: - 알림 대상
+
+    @Sendable
+    func addNotificationTarget(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        try app.requireManageAccess(for: user)
+
+        let values = try request.content.decode(NotificationTargetFormValues.self)
+        do {
+            _ = try await NotificationTargets.create(
+                CreateNotificationTargetRequest(
+                    name: values.name ?? "",
+                    endpoint: values.endpoint ?? ""
+                ),
+                appID: try app.requireID(),
+                by: user,
+                on: request.db,
+                logger: request.logger
+            )
+        } catch let abort as any AbortError where abort.status.code < 500 {
+            let view = try await renderDetail(
+                on: request, issuedToken: nil, notificationError: abort.reason
+            )
+            return htmlResponse(view, status: abort.status)
+        }
+        return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
+    }
+
+    @Sendable
+    func removeNotificationTarget(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        try app.requireManageAccess(for: user)
+
+        try await NotificationTargets.remove(
+            try request.targetID(),
+            appID: try app.requireID(),
+            on: request.db
+        )
+        return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
+    }
+
+    private func htmlResponse(_ view: View, status: HTTPStatus) -> Response {
+        let response = Response(status: status)
+        response.headers.contentType = .html
+        response.body = .init(buffer: view.data)
+        return response
+    }
+
     private func loadMembers(of app: App, on database: any Database) async throws -> [AppMemberDTO] {
         let ownerID = app.$owner.id
         let members = try await AppMember.query(on: database)
@@ -280,8 +470,11 @@ struct AppRow: Encodable {
     var category: String?
     var ownerEmail: String
     var latestReleasedVersion: String?
+    /// 별점 평균. 아무도 안 남겼으면 nil.
+    var ratingAverage: String?
+    var ratingCount: Int
 
-    init(app: App, latestReleased: Version?) throws {
+    init(app: App, latestReleased: Version?, rating: RatingSummary? = nil) throws {
         self.id = try app.requireID().uuidString
         self.bundleID = app.bundleID
         self.name = app.name
@@ -291,6 +484,8 @@ struct AppRow: Encodable {
         // 목록에서 오너를 함께 읽어두므로 여기서 관계를 만지지 않는다.
         self.ownerEmail = app.$owner.value?.email ?? ""
         self.latestReleasedVersion = latestReleased?.shortVersion
+        self.ratingAverage = rating?.displayAverage
+        self.ratingCount = rating?.count ?? 0
     }
 }
 
@@ -365,8 +560,53 @@ struct AppDetailContext: Encodable {
     var members: [AppMemberDTO]
     var deployTokens: [DeployTokenRow]
     var issuedToken: IssuedDeployToken?
+    var notificationTargets: [NotificationTargetDTO]
+    var feedback: [FeedbackRow]
+    /// 지금 사람이 피드백을 남길 수 있는 버전들. 받아본 것만 들어온다.
+    var reviewableVersions: [ReviewableVersion]
+    var feedbackError: String?
+    var notificationError: String?
     var canUpload: Bool
     var canManage: Bool
+}
+
+struct FeedbackFormValues: Codable {
+    var versionID: String?
+    var rating: String?
+    var body: String?
+    var isAnonymous: String?
+}
+
+extension FeedbackFormValues: Content {}
+
+struct NotificationTargetFormValues: Codable {
+    var name: String?
+    var endpoint: String?
+}
+
+extension NotificationTargetFormValues: Content {}
+
+/// 화면에 그리는 피드백 한 줄.
+struct FeedbackRow: Encodable {
+    var id: String
+    var versionName: String
+    var rating: Int?
+    /// 별을 문자열로 미리 만든다. 템플릿에서 반복을 돌리는 것보다 읽기 쉽다.
+    var stars: String?
+    var body: String?
+    var screenshotURL: String?
+    var authorName: String?
+    var isAnonymous: Bool
+    var isMine: Bool
+    var createdAt: String
+    /// 지금 보는 사람이 지울 수 있는지.
+    var canDelete: Bool
+}
+
+/// 피드백을 남길 수 있는 버전 하나.
+struct ReviewableVersion: Encodable {
+    var id: String
+    var name: String
 }
 
 struct DeployTokenFormValues: Codable {

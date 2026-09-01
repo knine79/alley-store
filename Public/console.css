@@ -851,3 +851,102 @@ textarea.input {
     white-space: pre-wrap;
     word-break: break-word;
 }
+
+/* ── 별점 ────────────────────────────────────────────────── */
+
+.rating-summary {
+    color: var(--accent);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.rating-count {
+    color: var(--text-muted);
+    font-weight: 400;
+    font-size: 13px;
+}
+
+/* 별 다섯 개를 가로로 늘어놓는다. 세로로 쌓이면 폼이 길어진다. */
+.rating-input {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
+.rating-option {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-small);
+    background: var(--surface);
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.rating-option:has(input:checked) {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.rating-option input {
+    accent-color: var(--accent);
+}
+
+/* ── 피드백 목록 ─────────────────────────────────────────── */
+
+.feedback-list {
+    list-style: none;
+    margin: var(--space-5) 0 0;
+    padding: 0;
+    display: grid;
+    gap: var(--space-3);
+}
+
+.feedback {
+    padding: var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.feedback-head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    font-size: 13px;
+}
+
+.feedback-stars {
+    color: var(--accent);
+    font-size: 14px;
+    letter-spacing: 0.05em;
+}
+
+.feedback-who {
+    font-weight: 500;
+    font-size: 14px;
+}
+
+/* 지우기 버튼은 오른쪽 끝으로 민다. 글보다 눈에 띌 이유가 없다. */
+.feedback-delete {
+    margin-left: auto;
+}
+
+.feedback-body {
+    margin: var(--space-2) 0 0;
+    white-space: pre-wrap;
+}
+
+/* 스크린샷은 원본이 크다. 목록 안에서는 줄여 두고 누르면 원본을 연다. */
+.feedback-shot {
+    display: block;
+    margin-top: var(--space-3);
+    max-width: 100%;
+    max-height: 18rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-small);
+    object-fit: contain;
+}

@@ -5,6 +5,9 @@
 <div class="title-row">
     <h1 class="page-title">#(app.name)</h1>
     <code class="title-id">#(app.bundleID)</code>
+    #if(app.ratingAverage):
+    <span class="rating-summary">★ #(app.ratingAverage) <span class="rating-count">(#(app.ratingCount))</span></span>
+    #endif
 </div>
 
 #if(app.summary):
@@ -104,6 +107,174 @@
     #if(canManage):
     <p class="field-note">멤버 추가와 제거는 아직 API 로만 됩니다.</p>
     #endif
+</section>
+#endif
+
+<section class="section" id="feedback">
+    <div class="section-head">
+        <h2 class="section-title">피드백</h2>
+        #if(app.ratingAverage):
+        <span class="table-muted">별점 #(app.ratingAverage) · #(app.ratingCount)명</span>
+        #endif
+    </div>
+
+    #if(feedbackError):
+    <p class="notice notice-error">#(feedbackError)</p>
+    #endif
+
+    #if(count(reviewableVersions) == 0):
+    <p class="field-note">받아본 버전에만 남길 수 있습니다.</p>
+    #else:
+    <form class="form" method="post" action="/apps/#(app.id)/feedback">
+        <label class="field">
+            <span class="field-label">버전</span>
+            <select class="input select" name="versionID">
+                #for(version in reviewableVersions):
+                <option value="#(version.id)">#(version.name)</option>
+                #endfor
+            </select>
+            <span class="field-note">받아본 출시본만 고를 수 있습니다.</span>
+        </label>
+
+        <fieldset class="field choice-group">
+            <legend class="field-label">별점 <span class="field-optional">선택</span></legend>
+            <div class="rating-input">
+                <label class="rating-option">
+                    <input type="radio" name="rating" value="1"><span>1</span>
+                </label>
+                <label class="rating-option">
+                    <input type="radio" name="rating" value="2"><span>2</span>
+                </label>
+                <label class="rating-option">
+                    <input type="radio" name="rating" value="3"><span>3</span>
+                </label>
+                <label class="rating-option">
+                    <input type="radio" name="rating" value="4"><span>4</span>
+                </label>
+                <label class="rating-option">
+                    <input type="radio" name="rating" value="5"><span>5</span>
+                </label>
+            </div>
+        </fieldset>
+
+        <label class="field">
+            <span class="field-label">하고 싶은 말 <span class="field-optional">선택</span></span>
+            <textarea class="input" name="body" rows="3"
+                      placeholder="무엇이 좋았고 무엇이 불편했는지"></textarea>
+            <span class="field-note">별점과 글 중 하나는 있어야 합니다.</span>
+        </label>
+
+        <label class="check">
+            <input type="checkbox" name="isAnonymous" value="on">
+            <span>
+                <span class="check-name">이름을 숨깁니다</span>
+                <span class="check-note">화면에 이름이 뜨지 않습니다. 서버에는 기록이 남습니다.</span>
+            </span>
+        </label>
+
+        <div class="form-actions">
+            <button class="button button-primary" type="submit">남기기</button>
+        </div>
+    </form>
+    #endif
+
+    #if(count(feedback) == 0):
+    <div class="empty">
+        <p>아직 남긴 사람이 없습니다.</p>
+    </div>
+    #else:
+    <ul class="feedback-list">
+        #for(entry in feedback):
+        <li class="feedback">
+            <div class="feedback-head">
+                #if(entry.stars):
+                <span class="feedback-stars">#(entry.stars)</span>
+                #endif
+                <span class="feedback-who">
+                    #if(entry.authorName):#(entry.authorName)#else:익명#endif
+                </span>
+                <span class="table-muted">#(entry.versionName)</span>
+                <span class="table-muted">#(entry.createdAt)</span>
+                #if(entry.canDelete):
+                <form class="row-form feedback-delete" method="post"
+                      action="/apps/#(app.id)/feedback/#(entry.id)/delete">
+                    <button class="button button-quiet" type="submit">지우기</button>
+                </form>
+                #endif
+            </div>
+            #if(entry.body):
+            <p class="feedback-body">#(entry.body)</p>
+            #endif
+            #if(entry.screenshotURL):
+            <a href="#(entry.screenshotURL)" target="_blank" rel="noopener">
+                <img class="feedback-shot" src="#(entry.screenshotURL)" alt="첨부한 스크린샷">
+            </a>
+            #endif
+        </li>
+        #endfor
+    </ul>
+    #endif
+</section>
+
+#if(canManage):
+<section class="section">
+    <h2 class="section-title">알림</h2>
+    <p class="page-lead">
+        이 앱에 새 피드백이 오면 알릴 곳입니다. Slack 채널 설정에서 Incoming Webhook
+        주소를 받아 넣으세요.
+    </p>
+
+    #if(notificationError):
+    <p class="notice notice-error">#(notificationError)</p>
+    #endif
+
+    #if(count(notificationTargets) == 0):
+    <div class="empty">
+        <p>알림 대상이 없습니다. 피드백이 와도 아무도 모릅니다.</p>
+    </div>
+    #else:
+    <table class="table">
+        <thead>
+            <tr>
+                <th class="table-fill">이름</th>
+                <th class="table-tight">채널</th>
+                <th class="table-tight"><span class="visually-hidden">삭제</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            #for(target in notificationTargets):
+            <tr>
+                <td class="table-fill table-strong">#(target.name)</td>
+                <td class="table-tight table-muted">Slack</td>
+                <td class="table-tight">
+                    <form class="row-form" method="post"
+                          action="/apps/#(app.id)/notification-targets/#(target.id)/delete">
+                        <button class="button" type="submit">삭제</button>
+                    </form>
+                </td>
+            </tr>
+            #endfor
+        </tbody>
+    </table>
+    #endif
+
+    <form class="form" method="post" action="/apps/#(app.id)/notification-targets">
+        <label class="field">
+            <span class="field-label">이름</span>
+            <input class="input" type="text" name="name" required placeholder="팀 채널"
+                   autocapitalize="off" autocorrect="off" spellcheck="false">
+        </label>
+        <label class="field">
+            <span class="field-label">Slack 웹훅 주소</span>
+            <input class="input" type="url" name="endpoint" required
+                   placeholder="https://hooks.slack.com/services/..."
+                   autocapitalize="off" autocorrect="off" spellcheck="false">
+            <span class="field-note">저장하면 다시 보이지 않습니다. 이 주소 자체가 채널에 글을 쓸 수 있는 자격증명입니다.</span>
+        </label>
+        <div class="form-actions">
+            <button class="button button-primary" type="submit">추가</button>
+        </div>
+    </form>
 </section>
 #endif
 

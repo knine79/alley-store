@@ -197,6 +197,20 @@ public struct CreateVersionRequest: Codable, Sendable {
         self.minimumOSVersion = minimumOSVersion
         self.uploadKind = uploadKind
     }
+
+    /// `uploadKind` 를 안 보내면 미서명으로 본다. 대부분이 그 경우다.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.shortVersion = try container.decode(String.self, forKey: .shortVersion)
+        self.buildNumber = try container.decode(Int.self, forKey: .buildNumber)
+        self.releaseNotes = try container.decodeIfPresent(String.self, forKey: .releaseNotes)
+        self.minimumOSVersion = try container.decodeIfPresent(
+            String.self, forKey: .minimumOSVersion
+        )
+        self.uploadKind = try container.decodeIfPresent(
+            UploadKind.self, forKey: .uploadKind
+        ) ?? .unsigned
+    }
 }
 
 /// 버전 생성 응답. 클라이언트는 이 URL로 바이너리를 직접 올린다.
@@ -444,6 +458,17 @@ public struct SubmitFeedbackRequest: Codable, Sendable {
         self.body = body
         self.isAnonymous = isAnonymous
     }
+
+    /// 안 보낸 항목은 기본값으로 본다.
+    ///
+    /// 기본 합성 디코더는 `Bool` 을 필수로 본다. 그러면 `{"rating": 5}` 처럼 당연해
+    /// 보이는 요청이 400 으로 떨어진다. 초기값이 있는 항목은 없어도 되게 한다.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.rating = try container.decodeIfPresent(Int.self, forKey: .rating)
+        self.body = try container.decodeIfPresent(String.self, forKey: .body)
+        self.isAnonymous = try container.decodeIfPresent(Bool.self, forKey: .isAnonymous) ?? false
+    }
 }
 
 // MARK: - 알림
@@ -497,6 +522,16 @@ public struct CreateNotificationTargetRequest: Codable, Sendable {
         self.kind = kind
         self.name = name
         self.endpoint = endpoint
+    }
+
+    /// 채널을 안 밝히면 Slack 으로 본다. 지금은 그것뿐이다.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.kind = try container.decodeIfPresent(
+            NotificationChannelKind.self, forKey: .kind
+        ) ?? .slack
+        self.name = try container.decode(String.self, forKey: .name)
+        self.endpoint = try container.decode(String.self, forKey: .endpoint)
     }
 }
 
