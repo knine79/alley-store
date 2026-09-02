@@ -211,8 +211,10 @@ struct AppPagesController: RouteCollection, Sendable {
 
         // 실패한 버전은 로그가 있어야 올린 사람이 스스로 고칠 수 있다.
         // 올릴 권한이 없는 사람에게는 보여줄 이유가 없다. 워커 환경이 드러난다.
-        let logs = canUpload
-            ? try await SigningJob.latestLogs(ofVersions: versions.map { try $0.requireID() }, on: request.db)
+        let reports = canUpload
+            ? try await SigningJob.latestReports(
+                ofVersions: versions.map { try $0.requireID() }, on: request.db
+            )
             : [:]
 
         let settings = try await request.storeSettings()
@@ -258,7 +260,7 @@ struct AppPagesController: RouteCollection, Sendable {
                 versions: try versions.map { version in
                     try VersionRow(
                         version: version,
-                        log: logs[try version.requireID()],
+                        report: reports[try version.requireID()],
                         downloadCount: perVersion[try version.requireID()]
                     )
                 },
@@ -603,7 +605,16 @@ struct VersionRow: Encodable {
     var createdAt: String
     var failureReason: String?
     /// 서명 워커가 남긴 로그. 실패했을 때만 화면에 편다.
+    ///
+    /// 단계마다 쌓인다. 실패 메시지 바로 위에 그 직전 단계가 무엇을 하고 있었는지가
+    /// 있어야 원인을 찾을 수 있다 (ADR-0023).
     var log: String?
+    /// 무엇 때문에 실패했는지 한 줄로. 갈래를 모르면 nil.
+    var failureTitle: String?
+    /// 무엇을 해야 하는지.
+    var failureAdvice: String?
+    /// 지원 문의에 적을 코드. 문장 옆에 작게 보여준다.
+    var failureCode: String?
     var canRetry: Bool
     /// 이 버전을 받아간 횟수. 셀 수 없으면 nil.
     var downloadCount: Int?
@@ -613,7 +624,11 @@ struct VersionRow: Encodable {
     /// 확인할 수 있어야 한다. 안 올렸으면 nil 이고 화면에 아무것도 나오지 않는다.
     var entitlementKeys: String?
 
-    init(version: Version, log: String? = nil, downloadCount: Int? = nil) throws {
+    init(
+        version: Version,
+        report: SigningJob.Report? = nil,
+        downloadCount: Int? = nil
+    ) throws {
         self.id = try version.requireID().uuidString
         self.shortVersion = version.shortVersion
         self.buildNumber = version.buildNumber
@@ -625,7 +640,11 @@ struct VersionRow: Encodable {
         self.fileSize = version.bestArtifact?.fileSize.map(ByteCount.humanReadable)
         self.createdAt = DateStyle.day.string(from: version.createdAt ?? Date())
         self.failureReason = version.failureReason
-        self.log = log
+        self.log = report?.log
+        // 코드를 그대로 내보내지 않는다. 사람이 읽는 문장과 함께만 보여준다 (ADR-0023).
+        self.failureTitle = report?.failureCode.map(SigningFailureGuidance.title)
+        self.failureAdvice = report?.failureCode.map(SigningFailureGuidance.whatToDo)
+        self.failureCode = report?.failureCode?.rawValue
         self.canRetry = version.state == .failed
         self.downloadCount = downloadCount
 

@@ -172,7 +172,9 @@ public struct WorkerController: RouteCollection, Sendable {
 
         job.heartbeatAt = Date()
         if let phase = update.phase { job.phase = phase }
-        if let log = update.log { job.log = log }
+        // 덮어쓰지 않고 쌓는다. 실패했을 때 정작 필요한 것은 그 직전 단계의 로그다
+        // (ADR-0023).
+        if let log = update.log { job.append(log, phase: job.phase) }
 
         switch update.state {
         case .running:
@@ -180,7 +182,7 @@ public struct WorkerController: RouteCollection, Sendable {
         case .succeeded:
             try await finishSuccessfully(job, update: update, on: request)
         case .failed:
-            try await fail(job, reason: update.failureReason, on: request)
+            try await fail(job, reason: update.failureReason, code: update.failureCode, on: request)
         case .queued:
             throw Abort(.badRequest, reason: "워커가 잡을 다시 큐로 되돌릴 수는 없습니다.")
         }
@@ -246,7 +248,13 @@ public struct WorkerController: RouteCollection, Sendable {
         // 워커가 "다 올렸다"고 말하는 것만 믿지 않는다. 여기서 확인하지 않으면
         // 아무것도 안 올라간 버전이 배포 준비됨으로 넘어간다.
         guard let size = try await request.artifactStorage.head(key: key), size > 0 else {
-            try await fail(job, reason: "서명 결과물이 스토리지에 올라오지 않았습니다.", on: request)
+            // 워커가 아니라 서버가 판정한 실패라 갈래가 없다. 다시 내보내지 않는다.
+            try await fail(
+                job,
+                reason: "서명 결과물이 스토리지에 올라오지 않았습니다.",
+                code: nil,
+                on: request
+            )
             return
         }
 
@@ -269,11 +277,32 @@ public struct WorkerController: RouteCollection, Sendable {
         job.state = .succeeded
         job.phase = nil
         job.failureReason = nil
+        // 앞선 시도에서 일시적 실패로 되돌아온 잡이라면 갈래가 남아 있다. 성공했으니 지운다.
+        job.failureCode = nil
         job.finishedAt = Date()
     }
 
-    private func fail(_ job: SigningJob, reason: String?, on request: Request) async throws {
+    /// 워커가 보고한 실패를 처리한다.
+    ///
+    /// 갈래(`code`)가 다시 해볼 만하다고 말하고 시도 상한이 남았으면 큐로 되돌린다.
+    /// 그렇지 않으면 실패로 확정한다. 판단은 `SigningRetryPolicy` 한 곳에 있다
+    /// (ADR-0023).
+    ///
+    /// `code` 가 nil 인 경우는 둘이다. 이 필드를 모르는 예전 워커가 보고했거나, 서버가
+    /// 스스로 실패를 판정했거나(결과물이 안 올라온 경우). 둘 다 다시 내보내지 않는다.
+    private func fail(
+        _ job: SigningJob,
+        reason: String?,
+        code: SigningFailureCode?,
+        on request: Request
+    ) async throws {
         let reason = reason ?? "워커가 이유를 남기지 않고 실패를 보고했습니다."
+        job.failureCode = code
+
+        if SigningRetryPolicy.verdict(reported: code, attempt: job.attempt) == .requeue {
+            requeue(job, reason: reason, on: request)
+            return
+        }
 
         // 실패한 버전은 다시 올리는 것으로 되살린다(failed → uploaded).
         // 이미 다른 상태로 옮겨간 버전까지 억지로 끌어내리지는 않는다.
@@ -286,7 +315,26 @@ public struct WorkerController: RouteCollection, Sendable {
         job.failureReason = reason
         job.finishedAt = Date()
         request.logger.warning(
-            "서명 실패 [버전: \(job.$version.id), 이유: \(reason)]"
+            "서명 실패 [버전: \(job.$version.id), 코드: \(code?.rawValue ?? "없음"), 이유: \(reason)]"
+        )
+    }
+
+    /// 다시 해볼 만한 실패라 잡을 큐에 돌려놓는다.
+    ///
+    /// 버전 상태는 건드리지 않는다. `signing` 과 `notarizing` 은 워커가 다시 가져갈 수
+    /// 있는 상태다. 여기서 `failed` 로 끌어내리면 다음 워커가 잡을 집어도 클레임에서
+    /// 튕긴다. 멈춘 잡을 되돌릴 때와 같은 규칙이다 (ADR-0018).
+    private func requeue(_ job: SigningJob, reason: String, on request: Request) {
+        job.attempt += 1
+        job.state = .queued
+        job.$worker.id = nil
+        job.claimedAt = nil
+        job.heartbeatAt = nil
+        job.phase = nil
+        job.failureReason = reason
+        job.append("다시 해볼 만한 실패라 큐로 되돌렸습니다. 시도 \(job.attempt) 회차로 다시 나갑니다.")
+        request.logger.warning(
+            "서명 잡을 큐로 되돌립니다 [버전: \(job.$version.id), 시도: \(job.attempt), 이유: \(reason)]"
         )
     }
 

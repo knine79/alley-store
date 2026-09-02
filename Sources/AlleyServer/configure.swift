@@ -112,6 +112,9 @@ private func configureMigrations(_ app: Application) {
 
     // 업로더가 함께 올리는 entitlements (ADR-0020).
     app.migrations.add(AddVersionEntitlements())
+
+    // 서명 실패의 갈래 (ADR-0023).
+    app.migrations.add(AddSigningJobFailureCode())
 }
 
 /// 미들웨어 스택.

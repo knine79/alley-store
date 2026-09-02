@@ -48,7 +48,7 @@ struct StalledJobVerdictTests {
     func giveUpAtLimit() {
         let repeated = job(
             state: .running,
-            attempt: StalledJobSweep.maximumAttempts,
+            attempt: SigningRetryPolicy.maximumAttempts,
             heartbeat: now.addingTimeInterval(-3600)
         )
         // 되돌리기만 하면 특정 빌드에서 죽는 워커가 큐를 무한히 돈다.
@@ -150,7 +150,7 @@ struct StalledJobSweepTests {
         try await withMigratedApp { app in
             app.useFakeStorage()
             let (_, _, version, job) = try await stalledJob(
-                on: app, attempt: StalledJobSweep.maximumAttempts
+                on: app, attempt: SigningRetryPolicy.maximumAttempts
             )
 
             await StalledJobSweep.run(on: app)

@@ -23,26 +23,16 @@ public enum StalledJobSweep {
     static let stallThreshold: TimeInterval = 15 * 60
     /// 확인 주기.
     static let checkInterval: Duration = .seconds(300)
-    /// 같은 잡을 몇 번까지 내보낼지.
-    ///
-    /// 되돌리기만 하면 워커가 특정 빌드에서 죽는 경우에 큐를 무한히 도는 잡이 생긴다.
-    /// 세 번이면 "저 워커 한 대가 그때 재부팅됐다" 정도의 우연은 넘어가고, 매번 죽는
-    /// 빌드는 사람에게 넘어간다.
-    static let maximumAttempts = 3
-
-    /// 멈춘 잡을 어떻게 할 것인가.
-    enum Verdict: Equatable {
-        /// 큐로 되돌린다. 다음 워커가 가져간다.
-        case requeue
-        /// 시도 상한을 넘겼다. 실패로 확정하고 사람에게 넘긴다.
-        case giveUp
-    }
 
     /// 이 잡이 멈춘 것인지, 멈췄다면 어떻게 할 것인지.
     ///
     /// 시각을 인자로 받는 순수 함수로 둔다. "15분 전에 하트비트가 끊긴 잡"을
     /// 데이터베이스와 시계 없이 확인할 수 있어야 한다.
-    static func verdict(for job: SigningJob, now: Date) -> Verdict? {
+    ///
+    /// 여기 오는 잡은 **워커가 아무 말 없이 사라진 잡**이다. 실패를 보고한 잡은 그
+    /// 자리에서 이미 처리됐다(`WorkerController.fail`). 그래서 대개 실패 갈래가 없고,
+    /// 판단은 시도 상한만 본다. 둘의 차이는 `SigningRetryPolicy` 에 적어뒀다.
+    static func verdict(for job: SigningJob, now: Date) -> SigningRetryPolicy.Verdict? {
         // 큐에서 기다리거나 이미 끝난 잡은 멈춘 것이 아니다.
         guard job.state == .running else { return nil }
 
@@ -51,7 +41,10 @@ public enum StalledJobSweep {
         guard let lastSign = job.heartbeatAt ?? job.claimedAt ?? job.createdAt else { return nil }
         guard now.timeIntervalSince(lastSign) > stallThreshold else { return nil }
 
-        return job.attempt >= maximumAttempts ? .giveUp : .requeue
+        return SigningRetryPolicy.verdict(
+            stalledAttempt: job.attempt,
+            lastReported: job.failureCode
+        )
     }
 
     /// 멈춘 잡을 한 번 훑는다.
@@ -79,18 +72,19 @@ public enum StalledJobSweep {
                 job.phase = nil
                 // 올린 사람이 보는 곳에도 남긴다. 버전 상세의 로그가 워커가 남긴
                 // 마지막 줄에서 멈춰 있으면 왜 다시 서명 중인지 알 수 없다.
-                job.log = appending(
+                job.append(
                     "워커 응답이 끊겨 잡을 큐로 되돌렸습니다. 시도 \(job.attempt) 회차로 다시 나갑니다.",
-                    to: job.log
+                    at: now
                 )
                 logger.warning("멈춘 서명 잡을 큐로 되돌립니다 [잡: \(jobID), 시도: \(job.attempt)]")
 
             case .giveUp:
-                let reason = "워커가 \(job.attempt) 번 가져갔지만 끝내지 못했습니다. 서명 워커 상태를 확인하세요."
+                let reason = giveUpReason(for: job)
                 job.state = .failed
                 job.failureReason = reason
                 job.finishedAt = now
                 job.phase = nil
+                job.append(reason, at: now)
                 // 버전도 실패로 확정한다. 그래야 올린 사람이 다시 올려 되살릴 수 있다.
                 if job.version.state.canTransition(to: .failed) {
                     try? job.version.transition(to: .failed, reason: reason)
@@ -121,8 +115,16 @@ public enum StalledJobSweep {
         try? await worker.save(on: database)
     }
 
-    private static func appending(_ note: String, to log: String?) -> String {
-        guard let log, !log.isEmpty else { return note }
-        return log + "\n" + note
+    /// 포기할 때 사람에게 하는 말.
+    ///
+    /// 앞선 시도에서 워커가 갈래를 남겼으면 그것을 쓴다. "워커가 세 번 가져갔지만
+    /// 끝내지 못했습니다"만 남으면 무엇을 봐야 하는지 아무것도 알려주지 못한다.
+    private static func giveUpReason(for job: SigningJob) -> String {
+        let attempts = "워커가 \(job.attempt) 번 가져갔지만 끝내지 못했습니다."
+        guard let code = job.failureCode else {
+            return "\(attempts) 서명 워커 상태를 확인하세요."
+        }
+        return "\(attempts) 마지막으로 알려진 원인: \(SigningFailureGuidance.title(code)). "
+            + SigningFailureGuidance.whatToDo(code)
     }
 }

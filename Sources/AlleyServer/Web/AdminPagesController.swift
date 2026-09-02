@@ -474,6 +474,14 @@ struct SigningJobRow: Encodable {
     var lastSeen: String?
     /// 실패 이유. 왜 멈췄는지가 여기 남는다.
     var note: String?
+    /// 무엇 때문인지 한 줄로. 갈래를 모르면 nil.
+    var failureTitle: String?
+    /// 무엇을 해야 하는지.
+    var failureAdvice: String?
+    /// 지원 문의에 적을 코드. 문장 옆에 작게 보여준다.
+    var failureCode: String?
+    /// 쌓아둔 단계별 로그. 실패 직전에 무엇을 하고 있었는지가 여기 있다.
+    var log: String?
 
     init(job: SigningJob) {
         let version = job.$version.value
@@ -483,6 +491,11 @@ struct SigningJobRow: Encodable {
         self.attempt = job.attempt
         self.lastSeen = (job.heartbeatAt ?? job.claimedAt).map { DateStyle.minute.string(from: $0) }
         self.note = job.failureReason
+        // 코드를 그대로 내보내지 않는다. 사람이 읽는 문장과 함께만 보여준다 (ADR-0023).
+        self.failureTitle = job.failureCode.map(SigningFailureGuidance.title)
+        self.failureAdvice = job.failureCode.map(SigningFailureGuidance.whatToDo)
+        self.failureCode = job.failureCode?.rawValue
+        self.log = (job.log?.isEmpty == false) ? job.log : nil
     }
 
     private static func stateName(_ state: SigningJobState) -> String {

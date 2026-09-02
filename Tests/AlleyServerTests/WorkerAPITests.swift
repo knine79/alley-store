@@ -447,8 +447,9 @@ struct SigningJobReportTests {
             #expect(stored.state == .failed)
             #expect(stored.failureReason == "서명 identity 를 찾지 못했습니다.")
 
+            // 로그는 덮어쓰지 않고 쌓이므로 줄머리가 붙는다 (ADR-0023).
             let storedJob = try #require(try await SigningJob.find(try job.requireID(), on: app.db))
-            #expect(storedJob.log == "codesign: 오류")
+            #expect(storedJob.log?.contains("codesign: 오류") == true)
         }
     }
 
