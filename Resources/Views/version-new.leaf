@@ -68,6 +68,16 @@
         <span class="field-note"><code>.app</code> 번들은 디렉터리라 그대로 올릴 수 없습니다. zip 으로 압축해서 올리세요.</span>
     </label>
 
+    <label class="field">
+        <span class="field-label">entitlements <span class="field-optional">선택</span></span>
+        <input class="input" type="file" name="entitlements"
+               accept=".plist,.entitlements,text/xml,application/xml">
+        <span class="field-note">
+            서명할 때 붙일 권한 목록입니다. #(entitlementsWhenNeeded)
+        </span>
+        <span class="field-note">#(entitlementsWhereToFind)</span>
+    </label>
+
     <div class="progress-row" id="upload-progress" hidden>
         <progress class="progress" id="upload-bar" max="100" value="0"></progress>
         <span class="progress-label" id="upload-status">준비 중…</span>

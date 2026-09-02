@@ -607,6 +607,11 @@ struct VersionRow: Encodable {
     var canRetry: Bool
     /// 이 버전을 받아간 횟수. 셀 수 없으면 nil.
     var downloadCount: Int?
+    /// 무엇으로 서명했는지. 업로더가 준 entitlements 의 키를 한 줄씩 늘어놓는다.
+    ///
+    /// 비밀이 아니다. 앱이 실행되자마자 죽을 때 "권한이 붙긴 했나"를 화면에서 바로
+    /// 확인할 수 있어야 한다. 안 올렸으면 nil 이고 화면에 아무것도 나오지 않는다.
+    var entitlementKeys: String?
 
     init(version: Version, log: String? = nil, downloadCount: Int? = nil) throws {
         self.id = try version.requireID().uuidString
@@ -623,6 +628,9 @@ struct VersionRow: Encodable {
         self.log = log
         self.canRetry = version.state == .failed
         self.downloadCount = downloadCount
+
+        let keys = version.entitlements.map(EntitlementsPlist.keys(of:)) ?? []
+        self.entitlementKeys = keys.isEmpty ? nil : keys.joined(separator: "\n")
     }
 }
 

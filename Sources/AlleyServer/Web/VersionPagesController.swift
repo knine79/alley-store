@@ -41,7 +41,11 @@ struct VersionPagesController: RouteCollection, Sendable {
                 // 마지막 번호가 몇이었는지 확인하러 목록으로 돌아가게 할 이유가 없다.
                 suggestedBuildNumber: try await nextBuildNumber(ofApp: appID, on: request.db),
                 createVersionPath: APIPath.versions(ofApp: appID),
-                versionRootPath: "\(APIPath.apiRoot)/versions"
+                versionRootPath: "\(APIPath.apiRoot)/versions",
+                // 안내 문구는 CLI·워커와 같은 곳에서 가져온다. 화면마다 다르게 쓰면
+                // 읽는 사람이 같은 문제를 매번 처음 보게 된다.
+                entitlementsWhenNeeded: EntitlementsGuidance.whenNeeded,
+                entitlementsWhereToFind: EntitlementsGuidance.whereToFind
             )
         ).get()
     }
@@ -145,4 +149,8 @@ struct VersionFormContext: Encodable {
     var createVersionPath: String
     /// 만든 버전의 완료 통지 경로를 조립할 뿌리. `<root>/<id>/complete` 가 된다.
     var versionRootPath: String
+    /// entitlements 가 언제 필요한지. `EntitlementsGuidance` 에서 온다.
+    var entitlementsWhenNeeded: String
+    /// 그 파일을 어디서 얻는지.
+    var entitlementsWhereToFind: String
 }

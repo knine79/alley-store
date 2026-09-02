@@ -58,7 +58,10 @@
             buildNumber: Number(form.elements.buildNumber.value),
             uploadKind: form.querySelector("input[name=uploadKind]:checked").value,
             releaseNotes: emptyToNull(form.elements.releaseNotes.value),
-            minimumOSVersion: emptyToNull(form.elements.minimumOSVersion.value)
+            minimumOSVersion: emptyToNull(form.elements.minimumOSVersion.value),
+            // entitlements 는 보통 1KB 도 되지 않아 요청 본문에 그대로 싣는다.
+            // 이것 하나 때문에 presigned 세 단계를 또 만들 이유가 없다 (ADR-0016 의 선례).
+            entitlements: await readEntitlements()
         };
 
         var response = await fetch(form.dataset.createUrl, {
@@ -70,6 +73,19 @@
         });
         if (!response.ok) throw new Error(await reasonOf(response));
         return await response.json();
+    }
+
+    /*
+     * 고른 entitlements plist 를 텍스트로 읽는다. 안 골랐으면 null 이다.
+     *
+     * 형식 검사는 서버가 한다. 여기서 한 번 더 하면 같은 규칙이 두 군데 살게 되고,
+     * 브라우저 쪽만 낡는다.
+     */
+    async function readEntitlements() {
+        var input = form.elements.entitlements;
+        var file = input && input.files[0];
+        if (!file) return null;
+        return await file.text();
     }
 
     /*
