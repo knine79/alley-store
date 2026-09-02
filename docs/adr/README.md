@@ -30,6 +30,7 @@
 | [0020](0020-uploader-provides-entitlements.md) | entitlements 는 업로더가 버전과 함께 올린다 | 수락됨 | 2026-09-02 |
 | [0021](0021-publish-server-container-image.md) | 서버를 컨테이너 이미지로 발행한다 | 수락됨 | 2026-09-02 |
 | [0022](0022-worker-as-signed-app-bundle.md) | 서명 워커를 서명·공증된 `.app` 번들로 배포한다 | 수락됨 | 2026-09-02 |
+| [0023](0023-signing-failure-codes.md) | 서명 실패에 오류 코드를 붙인다 | 수락됨 | 2026-09-02 |
 
 ## 언제 쓰나
 
