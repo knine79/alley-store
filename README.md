@@ -71,7 +71,7 @@ Alley 를 굴리려면 컴퓨터가 두 종류 필요합니다. 하는 일이 �
 
 서명 워커가 따로 있는 이유는 **서명에 쓰는 개인키를 서버에 두지 않기 위해서**입니다.
 그 키를 가진 사람은 회사 이름으로 아무 앱이나 배포할 수 있습니다. 서버는 인터넷에
-열려 있으니 키를 거기 두지 않습니다 ([ADR-0002](docs/adr/0002-signing-worker.md)).
+열려 있으니 키를 거기 두지 않습니다 ([ADR-0002](docs/adr/0002-pull-based-signing-worker.md)).
 
 ### 서버 실행
 
@@ -122,7 +122,7 @@ docker compose up -d
 아니라 LaunchAgent 로 설치합니다.
 
 공증 자격증명 저장을 포함한 전체 절차는
-[셀프호스팅 가이드](docs/self-hosting.md#3-서명-워커-설치)에 있습니다.
+[설치 가이드](docs/setup.md#4-서명-워커-설치)에 있습니다.
 
 ### CI 에서 올리기
 
@@ -224,7 +224,9 @@ swift run alley-server serve
 
 | 문서 | 다루는 것 |
 | --- | --- |
-| [셀프호스팅 가이드](docs/self-hosting.md) | 조직에 올리는 절차. 처음이면 여기부터 |
+| [설치 가이드](docs/setup.md) | 조직에 올리는 절차. 처음이면 여기부터 |
+| [운영 가이드](docs/operations.md) | 올린 뒤에 하는 일. 업그레이드·백업·문제 해결 |
+| [Sparkle 서명키](docs/sparkle.md) | appcast 로 스스로 업데이트하는 앱을 배포할 때만 |
 | [설계](docs/design.md) | 무엇을 왜 이렇게 만드는가. 아키텍처와 핵심 설계 |
 | [구현 계획](docs/implementation-plan.md) | 무엇을 언제 만드는가. 단계별 진행 현황 |
 | [ADR](docs/adr/README.md) | 개별 결정의 배경과 버려진 대안 |
