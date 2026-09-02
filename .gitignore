@@ -30,6 +30,8 @@ AuthKey_*.p8
 .env
 .env.*
 !.env.example
+# docker-compose.override.yml 은 로컬 개발 빌드 설정이라 커밋합니다.
+# 자기 머신에만 둘 구성은 *.local.yml 로 만들고 COMPOSE_FILE 에 얹으세요.
 *.local.yml
 
 # 워커 작업 디렉터리
