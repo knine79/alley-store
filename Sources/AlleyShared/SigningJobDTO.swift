@@ -44,8 +44,17 @@ public struct SigningJobUpdate: Codable, Sendable {
     /// 진행 중인 단계. UI에 그대로 노출한다.
     public var phase: SigningPhase?
     /// 사람이 읽는 로그. 실패 원인 파악에 쓴다.
+    ///
+    /// 서버는 이것을 덮어쓰지 않고 잡 로그 끝에 붙인다. 실패 직전 단계의 로그가
+    /// 원인 파악에 가장 필요한데, 덮어쓰면 그것이 사라진다 (ADR-0023).
     public var log: String?
     public var failureReason: String?
+    /// 실패의 갈래. 서버가 재시도 여부를 이것으로 판단한다 (ADR-0023).
+    ///
+    /// 옵셔널이라 합성 디코더가 `decodeIfPresent` 로 읽는다. 이 필드를 모르는 예전
+    /// 워커가 보낸 보고도 그대로 받아들인다. 그때는 nil 이고, 서버는 "워커가 실패를
+    /// 보고했지만 갈래는 모른다"로 다룬다.
+    public var failureCode: SigningFailureCode?
     /// 결과물 검증용. 서버가 업로드된 파일과 대조한다.
     public var resultSHA256: String?
     public var resultSize: Int64?
@@ -57,6 +66,7 @@ public struct SigningJobUpdate: Codable, Sendable {
         phase: SigningPhase? = nil,
         log: String? = nil,
         failureReason: String? = nil,
+        failureCode: SigningFailureCode? = nil,
         resultSHA256: String? = nil,
         resultSize: Int64? = nil,
         resultEdSignature: String? = nil
@@ -65,6 +75,7 @@ public struct SigningJobUpdate: Codable, Sendable {
         self.phase = phase
         self.log = log
         self.failureReason = failureReason
+        self.failureCode = failureCode
         self.resultSHA256 = resultSHA256
         self.resultSize = resultSize
         self.resultEdSignature = resultEdSignature

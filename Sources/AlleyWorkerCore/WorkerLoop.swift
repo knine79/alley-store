@@ -72,11 +72,19 @@ public struct WorkerLoop: Sendable {
             log("잡 \(job.id) 완료 (\(output.size) 바이트)")
         } catch {
             let reason = String(describing: error)
-            log("잡 \(job.id) 실패: \(reason)")
+            // 갈래를 여기서 정한다. 오류 타입을 손에 쥔 곳은 여기뿐이고, 서버가
+            // 문자열을 다시 해석하게 두지 않는다 (ADR-0023).
+            let code = SigningFailureCode.classify(error)
+            log("잡 \(job.id) 실패 [\(code.rawValue)]: \(reason)")
             // 보고까지 실패하면 서버는 이 잡을 running 으로 알고 있게 된다.
             // 하트비트가 끊기면 서버가 그 잡을 큐로 되돌린다 (ADR-0018).
             try? await client.report(
-                SigningJobUpdate(state: .failed, log: reason, failureReason: summarize(reason)),
+                SigningJobUpdate(
+                    state: .failed,
+                    log: reason,
+                    failureReason: summarize(reason),
+                    failureCode: code
+                ),
                 for: job.id
             )
         }

@@ -27,15 +27,27 @@ public struct SigningPipeline: Sendable {
     }
 
     public enum PipelineError: Error, CustomStringConvertible {
-        case commandFailed(step: String, detail: String)
+        /// 외부 명령이 실패했다.
+        ///
+        /// 갈래(`code`)를 던지는 자리에서 함께 넣는다. **나중에 `step` 문자열을 보고
+        /// 되짚지 않으려고 그렇게 한다.** 문자열은 화면에 보이는 말이라 언제든 다듬게
+        /// 되는데, 거기에 분류가 매달려 있으면 말을 고치는 순간 조용히 틀린다.
+        case commandFailed(step: String, code: SigningFailureCode, detail: String)
         case notarizationRejected(detail: String)
 
         public var description: String {
             switch self {
-            case .commandFailed(let step, let detail):
+            case .commandFailed(let step, _, let detail):
                 return "\(step) 단계에서 실패했습니다.\n\(detail)"
             case .notarizationRejected(let detail):
                 return "Apple 이 공증을 거절했습니다.\n\(detail)"
+            }
+        }
+
+        public var failureCode: SigningFailureCode {
+            switch self {
+            case .commandFailed(_, let code, _): return code
+            case .notarizationRejected: return .notarizationRejected
             }
         }
     }
@@ -123,7 +135,12 @@ public struct SigningPipeline: Sendable {
             timeout: 600
         )
         guard result.succeeded else {
-            throw PipelineError.commandFailed(step: "압축 풀기", detail: result.combinedOutput)
+            // 푸는 데 실패한 zip 은 다시 풀어도 안 풀린다. 올린 파일 자체가 잘못됐다.
+            throw PipelineError.commandFailed(
+                step: "압축 풀기",
+                code: Self.code(exitCode: result.exitCode, otherwise: .bundleLayoutInvalid),
+                detail: result.combinedOutput
+            )
         }
     }
 
@@ -139,7 +156,13 @@ public struct SigningPipeline: Sendable {
             timeout: 600
         )
         guard result.succeeded else {
-            throw PipelineError.commandFailed(step: "압축", detail: result.combinedOutput)
+            // 우리가 만든 번들을 우리가 못 묶은 경우다. 디스크가 찼거나 서명 과정에서
+            // 번들이 깨졌다는 뜻이라 어느 쪽인지 여기서는 알 수 없다.
+            throw PipelineError.commandFailed(
+                step: "압축",
+                code: Self.code(exitCode: result.exitCode, otherwise: .unknown),
+                detail: result.combinedOutput
+            )
         }
     }
 
@@ -180,6 +203,7 @@ public struct SigningPipeline: Sendable {
         }
         throw PipelineError.commandFailed(
             step: "번들 검사",
+            code: .entitlementsRejected,
             detail: EntitlementsGuidance.missingJIT(bundle: bundle.url.lastPathComponent)
         )
     }
@@ -204,9 +228,52 @@ public struct SigningPipeline: Sendable {
         guard result.succeeded else {
             throw PipelineError.commandFailed(
                 step: "서명 (\(target.lastPathComponent))",
+                code: Self.code(
+                    exitCode: result.exitCode,
+                    otherwise: Self.codesignCode(from: result.combinedOutput)
+                ),
                 detail: result.combinedOutput
             )
         }
+    }
+
+    /// `codesign` 이 실패한 이유가 identity 쪽인지 번들 쪽인지 좁힌다.
+    ///
+    /// **여기만은 명령의 출력 문자열을 본다.** `codesign` 은 인증서가 없는 것과 번들이
+    /// 깨진 것에 같은 종료 코드 1 을 쓴다. 무엇이 문제였는지는 사람에게 하는 말에만
+    /// 들어 있어서, 그 말을 보지 않고서는 둘을 나눌 방법이 없다.
+    ///
+    /// **한계를 분명히 적어둔다.** Apple 이 이 문구를 바꾸면 이 판단은 아무 신호 없이
+    /// 틀린다. 인증서가 만료됐는데도 `codesignFailed` 로 분류되고, 화면에는 번들을
+    /// 고치라는 엉뚱한 안내가 나간다. 다만 **둘 다 재시도하지 않는 갈래라 재시도
+    /// 판단은 틀어지지 않는다.** 잘못돼도 잘못되는 것은 안내 문장 하나다. 이 성질이
+    /// 깨지지 않게, 두 코드 중 하나만 재시도 쪽으로 옮기는 일은 하지 말 것.
+    static func codesignCode(from output: String) -> SigningFailureCode {
+        let lowered = output.lowercased()
+        let identityMarkers = [
+            // 그 이름의 identity 가 키체인에 없다.
+            "no identity found",
+            "could not be found in the keychain",
+            // 같은 이름의 identity 가 여러 개다.
+            "ambiguous (matches multiple identities)",
+            // 인증서 자체가 만료됐거나 유효하지 않다.
+            "has expired",
+            "certificate has expired",
+        ]
+        return identityMarkers.contains(where: lowered.contains)
+            ? .signingIdentityUnavailable
+            : .codesignFailed
+    }
+
+    /// 명령이 시간 초과로 끝났으면 그 갈래, 아니면 부르는 쪽이 정한 갈래.
+    ///
+    /// `Shell` 은 제한 시간을 넘긴 프로세스를 죽이고 124 를 돌려준다. 종료 코드로
+    /// 알 수 있는 유일한 갈래라 여기서 한 번에 처리한다.
+    static func code(
+        exitCode: Int32,
+        otherwise fallback: SigningFailureCode
+    ) -> SigningFailureCode {
+        exitCode == 124 ? .timedOut : fallback
     }
 
     /// 이 대상에 붙일 권한 파일. 붙일 것이 없으면 nil.
@@ -248,7 +315,11 @@ public struct SigningPipeline: Sendable {
             timeout: 600
         )
         guard result.succeeded else {
-            throw PipelineError.commandFailed(step: "서명 검증", detail: result.combinedOutput)
+            throw PipelineError.commandFailed(
+                step: "서명 검증",
+                code: Self.code(exitCode: result.exitCode, otherwise: .codesignFailed),
+                detail: result.combinedOutput
+            )
         }
         try await assertNothingLeftAdHoc(in: bundle)
     }
@@ -276,6 +347,7 @@ public struct SigningPipeline: Sendable {
         guard leftovers.isEmpty else {
             throw PipelineError.commandFailed(
                 step: "서명 검증",
+                code: .unsignedCodeRemains,
                 detail: """
                     서명되지 않고 남은 코드가 있습니다. 공증에서 거절됩니다:
                     \(leftovers.joined(separator: "\n"))
@@ -304,8 +376,31 @@ public struct SigningPipeline: Sendable {
             if let id = submission?.id, let log = await notarizationLog(id: id) {
                 detail += "\n\n\(log)"
             }
+            // 제출이 접수돼 심사까지 갔는데 거절된 것만 "거절"이다. 그 판단은
+            // `notarytool` 이 JSON 으로 주는 `status` 하나로 한다. 제출조차 못 했으면
+            // 그 필드가 아예 없고, 그건 앱 내용과 무관한 실패라 다시 해볼 만하다.
+            //
+            // **`status` 값 자체는 Apple 이 정한다.** "Invalid" 라는 문자열이 바뀌면
+            // 거절을 일시 오류로 잘못 보고 세 번 제출하게 된다. 종료 코드로는 이
+            // 구분이 안 되므로 다른 방법이 없다.
+            guard Self.isRejection(submission) else {
+                throw PipelineError.commandFailed(
+                    step: "공증 제출",
+                    code: Self.code(exitCode: result.exitCode, otherwise: .appleServiceUnavailable),
+                    detail: detail
+                )
+            }
             throw PipelineError.notarizationRejected(detail: detail)
         }
+    }
+
+    /// Apple 이 내용을 보고 물린 것인가.
+    ///
+    /// 제출 자체가 안 된 경우(네트워크, 자격증명, 서비스 장애)에는 제출 식별자도
+    /// 상태도 없다. 그때는 거절이 아니다.
+    static func isRejection(_ submission: NotarySubmission?) -> Bool {
+        guard let status = submission?.status else { return false }
+        return status == "Invalid" || status == "Rejected"
     }
 
     private func notarizationLog(id: String) async -> String? {
@@ -329,7 +424,13 @@ public struct SigningPipeline: Sendable {
             timeout: 300
         )
         guard result.succeeded else {
-            throw PipelineError.commandFailed(step: "공증 티켓 첨부", detail: result.combinedOutput)
+            // 스테이플은 Apple 서버에서 티켓을 받아 와야 한다. 공증이 방금 받아들여졌어도
+            // 티켓이 아직 퍼지지 않았을 수 있어서, 잠시 뒤에 하면 되는 경우가 많다.
+            throw PipelineError.commandFailed(
+                step: "공증 티켓 첨부",
+                code: Self.code(exitCode: result.exitCode, otherwise: .appleServiceUnavailable),
+                detail: result.combinedOutput
+            )
         }
     }
 
