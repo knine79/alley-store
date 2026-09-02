@@ -60,68 +60,69 @@ Alley는 이 과정을 하나의 흐름으로 묶습니다.
 
 ## 시작하기
 
-### 요구사항
+### 준비물
 
-- Docker와 Docker Compose
-- 서명 워커를 돌릴 macOS 머신 (Xcode Command Line Tools, Developer ID Application 인증서)
+Alley 를 굴리려면 컴퓨터가 두 종류 필요합니다. 하는 일이 서로 다릅니다.
+
+| | 무엇을 하나 | 필요한 것 |
+| --- | --- | --- |
+| **서버** | 웹 콘솔을 띄우고 파일과 기록을 보관합니다. 리눅스여도 됩니다 | Docker 와 Docker Compose |
+| **서명 워커 맥** | Apple 이 요구하는 서명과 공증을 합니다. 반드시 macOS 여야 합니다 | Xcode Command Line Tools, Developer ID Application 인증서 |
+
+서명 워커가 따로 있는 이유는 **서명에 쓰는 개인키를 서버에 두지 않기 위해서**입니다.
+그 키를 가진 사람은 회사 이름으로 아무 앱이나 배포할 수 있습니다. 서버는 인터넷에
+열려 있으니 키를 거기 두지 않습니다 ([ADR-0002](docs/adr/0002-signing-worker.md)).
 
 ### 서버 실행
 
 ```bash
 cp .env.example .env
-# .env 를 열어 Google OAuth 클라이언트 정보와 비밀값을 채웁니다
-docker compose up
+# .env 를 열어 Google 로그인 정보와 비밀값을 채웁니다
+
+# 데이터베이스에 표를 만듭니다. 처음 한 번만 합니다.
+docker compose run --rm server migrate --yes
+
+docker compose up -d
 ```
+
+**가운데 `migrate` 를 건너뛰지 마세요.** 서버는 켜질 때 데이터베이스를 스스로
+건드리지 않습니다. 표가 없는 채로 뜨기 때문에, 서버는 켜진 것처럼 보이는데 화면을
+열면 오류가 납니다.
 
 `http://localhost:8080` 에서 서버가 뜹니다.
 
-### 서명 워커 설정
+### 서명 워커 설치
 
-인증서를 보관할 macOS 머신에서:
+두 단계입니다. **번들을 한 번 만들고, 그것을 워커 맥에 가져다 놓습니다.**
 
-```bash
-# 공증 자격증명을 키체인에 저장합니다 (한 번만)
-xcrun notarytool store-credentials "alley-notary" \
-    --apple-id "you@example.com" \
-    --team-id "TEAMID" \
-    --password "앱 암호"
-
-# 키체인의 서명 identity 이름을 확인합니다
-security find-identity -v -p codesigning
-
-export ALLEY_SERVER_URL="https://store.example.com"
-export ALLEY_WORKER_TOKEN="웹 콘솔에서 발급한 토큰"
-export ALLEY_SIGNING_IDENTITY="Developer ID Application: Example Inc. (TEAMID)"
-export ALLEY_NOTARY_PROFILE="alley-notary"
-
-swift run alley-worker preflight
-```
-
-`preflight` 는 서명과 공증에 필요한 것들이 실제로 준비됐는지 확인합니다.
-잡을 받은 뒤 환경 문제로 실패하는 상황을 미리 걸러냅니다.
-
-확인이 끝나면 설치합니다. 워커는 서명·공증된 `.app` 번들로 배포하고, `launchd` 에
-등록해서 로그인할 때마다 뜨게 합니다
+워커는 서명·공증을 마친 `.app` 번들로 배포합니다
 ([ADR-0022](docs/adr/0022-worker-as-signed-app-bundle.md)).
 
 ```bash
-# 인증서가 있는 맥에서 번들을 만듭니다
+# 1. 레포와 인증서가 있는 맥에서 번들을 만듭니다
 ./scripts/build-worker-app.sh --sign
 
-# 나온 zip 을 워커 맥으로 옮겨 설치합니다
+# 2. 나온 zip 과 설치 스크립트를 워커 맥으로 옮겨 설치합니다
 ./install-worker.sh --bundle alley-worker.zip
 ```
 
-**워커 맥에는 소스도 Swift 툴체인도 필요 없습니다.** 번들 zip 과 `install-worker.sh`
-하나면 됩니다. 번들을 한 번 만들어 여러 워커 맥에 나눠주는 것이 원래 의도한
-방식입니다. 레포가 있는 맥이라면 `--bundle` 없이 불러 그 자리에서 빌드해도 됩니다.
+**워커 맥에는 소스도 Swift 툴체인도 필요 없습니다.** zip 하나와 스크립트 하나면
+됩니다. 인증서를 보관하는 맥에 개발 도구를 잔뜩 깔아둘 이유가 없고, 워커를 두 대
+이상 붙일 때도 번들 하나를 나눠주면 됩니다. 레포가 있는 맥이라면 `--bundle` 없이
+불러 그 자리에서 빌드해도 됩니다.
 
-서명 키는 로그인 키체인에 있고 그 키체인은 로그아웃 상태에서 잠겨 있으므로,
-시스템 데몬이 아니라 LaunchAgent 로 설치합니다. 설치 위치는
-`~/Library/Application Support/alley-worker/alley-worker.app` 이고, 로그는
-`~/Library/Logs/alley-worker.log` 에 쌓입니다.
+설치 스크립트가 번들의 서명을 확인하고, 서명·공증에 필요한 것이 갖춰졌는지
+점검한 뒤 `launchd` 에 등록합니다. 그래서 따로 점검 명령을 돌릴 필요가 없습니다.
 
-전체 절차는 [셀프호스팅 가이드](docs/self-hosting.md#3-서명-워커-설치)에 있습니다.
+설치 위치는 `~/Library/Application Support/alley-worker/alley-worker.app`,
+로그는 `~/Library/Logs/alley-worker.log` 입니다.
+
+**워커 맥은 로그인된 채로 두어야 합니다.** 서명 키가 로그인 키체인에 들어 있고,
+로그아웃하면 그 키체인이 잠겨서 서명을 할 수 없기 때문입니다. 그래서 시스템 데몬이
+아니라 LaunchAgent 로 설치합니다.
+
+공증 자격증명 저장을 포함한 전체 절차는
+[셀프호스팅 가이드](docs/self-hosting.md#3-서명-워커-설치)에 있습니다.
 
 ### CI 에서 올리기
 
