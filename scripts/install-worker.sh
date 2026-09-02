@@ -6,9 +6,16 @@
 # 있고, 그 키체인은 로그아웃 상태에서 잠겨 있기 때문이다. 그래서 시스템 데몬이 아니라
 # LaunchAgent 로 설치한다.
 #
+# 설치하는 것은 맨 실행 파일이 아니라 `.app` 번들이다. 이유는 ADR-0022 에 있다.
+#
 # 사용법:
-#   ./scripts/install-worker.sh                 대화식으로 설정을 묻는다
-#   ./scripts/install-worker.sh --uninstall     설치한 것을 되돌린다
+#   ./scripts/install-worker.sh                     이 레포에서 빌드해 설치한다
+#   ./scripts/install-worker.sh --bundle <경로>     이미 만들어진 번들을 설치한다
+#   ./scripts/install-worker.sh --uninstall         설치한 것을 되돌린다
+#
+# `--bundle` 에는 `.app` 디렉터리나 `build-worker-app.sh --sign` 이 만든 `.zip` 을
+# 준다. 이 경로는 워커 맥에 소스도 Swift 툴체인도 없을 때 쓴다. 서명·공증된 번들을
+# 한 번 만들어 여러 대에 나눠주는 것이 원래 의도한 방식이다.
 #
 # 설정을 미리 환경변수로 넘기면 묻지 않는다:
 #   ALLEY_SERVER_URL, ALLEY_WORKER_TOKEN, ALLEY_SIGNING_IDENTITY,
@@ -24,6 +31,8 @@ set -euo pipefail
 LABEL="${ALLEY_WORKER_LABEL:-com.example.alley-worker}"
 
 INSTALL_DIR="$HOME/Library/Application Support/alley-worker"
+APP_DIR="$INSTALL_DIR/alley-worker.app"
+EXECUTABLE="$APP_DIR/Contents/MacOS/alley-worker"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG_DIR="$HOME/Library/Logs"
 LOG_FILE="$LOG_DIR/alley-worker.log"
@@ -48,10 +57,23 @@ uninstall() {
     info "로그는 남겨둡니다: $LOG_FILE"
 }
 
-if [ "${1:-}" = "--uninstall" ]; then
-    uninstall
-    exit 0
-fi
+SOURCE_BUNDLE=""
+case "${1:-}" in
+    --uninstall)
+        uninstall
+        exit 0
+        ;;
+    --bundle)
+        SOURCE_BUNDLE="${2:-}"
+        [ -n "$SOURCE_BUNDLE" ] || die "--bundle 뒤에 번들이나 zip 경로가 필요합니다."
+        [ -e "$SOURCE_BUNDLE" ] || die "찾지 못했습니다: $SOURCE_BUNDLE"
+        ;;
+    "")
+        ;;
+    *)
+        die "알 수 없는 인자: $1"
+        ;;
+esac
 
 [ "$(uname -s)" = "Darwin" ] || die "서명 워커는 macOS 에서만 돕니다."
 
@@ -89,15 +111,77 @@ ask ALLEY_NOTARY_PROFILE "공증 프로필 이름 (xcrun notarytool store-creden
 
 ALLEY_WORKER_NAME="${ALLEY_WORKER_NAME:-$(scutil --get ComputerName 2>/dev/null || hostname)}"
 
-# 빌드는 레포에서 한다. 릴리즈 빌드로 설치해야 공증 대기 중 메모리와 CPU 를 덜 쓴다.
-info "워커를 빌드합니다..."
-(cd "$REPO_ROOT" && swift build -c release --product alley-worker)
-BINARY="$(cd "$REPO_ROOT" && swift build -c release --show-bin-path)/alley-worker"
-[ -x "$BINARY" ] || die "빌드 결과를 찾지 못했습니다: $BINARY"
+# 설치할 번들을 마련한다. STAGED 는 복사 원본이 될 `.app` 디렉터리다.
+STAGED=""
+STAGING_DIR=""
+cleanup() { [ -n "$STAGING_DIR" ] && rm -rf "$STAGING_DIR"; return 0; }
+trap cleanup EXIT
+
+if [ -n "$SOURCE_BUNDLE" ]; then
+    case "$SOURCE_BUNDLE" in
+        *.zip)
+            # 다운로드한 zip 에는 격리 속성이 붙어 있다. 떼지 않는다. 공증받은
+            # 이유가 바로 이 상태에서 Gatekeeper 를 통과하는 것이다.
+            STAGING_DIR="$(mktemp -d)"
+            info "zip 을 풉니다..."
+            ditto -x -k "$SOURCE_BUNDLE" "$STAGING_DIR"
+            STAGED="$(find "$STAGING_DIR" -maxdepth 2 -name '*.app' -type d | head -1)"
+            [ -n "$STAGED" ] || die "zip 안에서 .app 을 찾지 못했습니다: $SOURCE_BUNDLE"
+            ;;
+        *)
+            [ -d "$SOURCE_BUNDLE" ] || die "번들은 디렉터리여야 합니다: $SOURCE_BUNDLE"
+            STAGED="$SOURCE_BUNDLE"
+            ;;
+    esac
+else
+    # 레포에서 빌드한다. 개발 중에 쓰는 경로다. 나온 번들은 ad-hoc 서명이라
+    # 이 맥을 벗어나지 못한다. 다른 맥에 설치할 것은 --sign 으로 만들어 --bundle 로 준다.
+    BUILDER="$REPO_ROOT/scripts/build-worker-app.sh"
+    [ -x "$BUILDER" ] || die "빌드 스크립트가 없습니다: $BUILDER
+소스 없이 설치하려면 --bundle 로 만들어진 번들을 주세요."
+    "$BUILDER"
+    STAGED="$REPO_ROOT/.build/worker-app/alley-worker.app"
+fi
+
+[ -x "$STAGED/Contents/MacOS/alley-worker" ] || die "번들 안에 실행 파일이 없습니다: $STAGED"
+
+# 봉인이 멀쩡한지 먼저 본다. 옮겨 다니는 동안 깨졌을 수 있고, 깨진 채로 등록하면
+# launchd 가 조용히 실패한다.
+codesign --verify --deep --strict "$STAGED" \
+    || die "번들의 서명이 유효하지 않습니다: $STAGED"
+
+# 검증을 통과해도 ad-hoc 서명이면 배포용이 아니다. 이 레포에서 그냥 빌드하면 그
+# 상태가 되고, 개발 중에는 그것으로 충분하므로 막지 않고 알리기만 한다.
+#
+# 누가 서명했는지는 확인하지 않는다. Team ID 는 조직마다 달라서 여기 박을 수 없다
+# (ADR-0022 의 나쁜 점 참고).
+#
+# 파이프로 grep 에 넘기지 않는다. `grep -q` 는 첫 줄을 찾자마자 끝나고, 그때
+# codesign 이 SIGPIPE 로 죽으면서 pipefail 이 파이프라인 전체를 실패로 만든다.
+# 찾았는데 못 찾은 것처럼 보이는 결과가 나온다.
+SIGNATURE_INFO="$(codesign -dv "$STAGED" 2>&1 || true)"
+case "$SIGNATURE_INFO" in
+    *"Signature=adhoc"*)
+        warn "ad-hoc 서명된 번들입니다. 이 맥에서만 쓰세요."
+        ;;
+    *)
+        info "서명을 확인했습니다."
+        ;;
+esac
 
 mkdir -p "$INSTALL_DIR" "$LOG_DIR"
-cp "$BINARY" "$INSTALL_DIR/alley-worker"
-chmod 755 "$INSTALL_DIR/alley-worker"
+
+# 예전 설치는 맨 실행 파일이었다. 남겨두면 launchd 가 새 번들을 가리키는 동안에도
+# 옛 바이너리가 디스크에 남아, 다음 사람이 어느 쪽이 도는지 헷갈린다.
+if [ -f "$INSTALL_DIR/alley-worker" ]; then
+    rm -f "$INSTALL_DIR/alley-worker"
+    info "이전 설치(맨 실행 파일)를 지웠습니다."
+fi
+
+# 돌고 있는 워커의 실행 파일을 덮어쓰지 않는다. 먼저 내리고 통째로 갈아끼운다.
+launchctl bootout "gui/$UID/$LABEL" 2>/dev/null || true
+rm -rf "$APP_DIR"
+ditto "$STAGED" "$APP_DIR"
 
 # 잡을 받은 뒤에 환경 문제를 발견하면 원인 파악이 번거롭다. 설치 시점에 걸러낸다.
 info "환경을 점검합니다..."
@@ -108,7 +192,7 @@ if ! env \
     ALLEY_NOTARY_PROFILE="$ALLEY_NOTARY_PROFILE" \
     ALLEY_WORKER_NAME="$ALLEY_WORKER_NAME" \
     ALLEY_SPARKLE_PRIVATE_KEY="${ALLEY_SPARKLE_PRIVATE_KEY:-}" \
-    "$INSTALL_DIR/alley-worker" preflight
+    "$EXECUTABLE" preflight
 then
     die "환경 점검에 실패했습니다. 위 항목을 고치고 다시 실행하세요."
 fi
@@ -122,9 +206,14 @@ cat > "$PLIST" <<PLIST_EOF
 <dict>
     <key>Label</key>
     <string>$LABEL</string>
+    <!-- 번들 안의 실행 파일을 직접 부른다. launchd 는 Launch Services 를 거치지
+         않으므로 open(1) 과 달리 Info.plist 의 LSBackgroundOnly 를 보지 않는다.
+         그 키는 사람이 번들을 더블클릭했을 때를 위한 것이다.
+         이 heredoc 은 변수를 확장해야 해서 따옴표로 막을 수 없다. 여기 들어가는
+         글에 백틱이나 $ 를 쓰면 셸이 명령으로 실행해버린다. -->
     <key>ProgramArguments</key>
     <array>
-        <string>$INSTALL_DIR/alley-worker</string>
+        <string>$EXECUTABLE</string>
         <string>run</string>
     </array>
     <key>EnvironmentVariables</key>
@@ -163,13 +252,12 @@ PLIST_EOF
 chmod 600 "$PLIST"
 umask 022
 
-# 이미 돌고 있으면 내리고 다시 올린다. 설정이 바뀌었을 수 있다.
-launchctl bootout "gui/$UID/$LABEL" 2>/dev/null || true
 launchctl bootstrap "gui/$UID" "$PLIST"
 
 echo
 info "설치했습니다."
 echo "  워커 이름: $ALLEY_WORKER_NAME"
+echo "  번들:      $APP_DIR"
 echo "  로그:      $LOG_FILE"
 echo "  중지:      launchctl bootout gui/$UID/$LABEL"
 echo "  제거:      $0 --uninstall"
