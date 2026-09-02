@@ -380,9 +380,12 @@ public struct SigningPipeline: Sendable {
             // `notarytool` 이 JSON 으로 주는 `status` 하나로 한다. 제출조차 못 했으면
             // 그 필드가 아예 없고, 그건 앱 내용과 무관한 실패라 다시 해볼 만하다.
             //
-            // **`status` 값 자체는 Apple 이 정한다.** "Invalid" 라는 문자열이 바뀌면
-            // 거절을 일시 오류로 잘못 보고 세 번 제출하게 된다. 종료 코드로는 이
-            // 구분이 안 되므로 다른 방법이 없다.
+            // **`status` 값 자체는 Apple 이 정한다.** 그 문자열이 바뀌면 거절을 일시
+            // 오류로 잘못 보고 세 번 제출하게 된다. 종료 코드로는 이 구분이 안 되므로
+            // 다른 방법이 없다.
+            //
+            // `notarytool` man page 가 `--wait` 설명에서 값을 셋으로 못박고 있다:
+            // "Accepted", "Invalid", "Rejected". 셋 다 다뤘다 (2026-09-02 확인).
             guard Self.isRejection(submission) else {
                 throw PipelineError.commandFailed(
                     step: "공증 제출",
