@@ -3,6 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+    # 버전 태그로도 돌린다. 이 태그가 발행되는 이미지의 버전 태그가 되므로
+    # (ADR-0021) 검사를 건너뛰고 이미지만 나가는 경로를 만들지 않는다.
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -100,18 +103,58 @@ jobs:
       - name: 검사 실행
         run: ./scripts/check-secrets.sh
 
+  # 서버 이미지를 지어서 ghcr.io 에 올린다 (ADR-0021).
+  # 운영은 소스를 두지 않고 이 이미지를 받아 쓴다.
   docker:
-    name: Docker 이미지 빌드
+    name: Docker 이미지
     runs-on: ubuntu-latest
+    # 테스트를 통과하지 못한 커밋의 이미지가 레지스트리에 남지 않게 한다.
+    # 이미지에 들어가는 것은 서버뿐이라 macOS 잡은 기다리지 않는다.
+    needs: [build-and-test]
+    permissions:
+      contents: read
+      # 레지스트리 쓰기는 이 잡에만 준다.
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: 이미지 빌드
+      # 이미지 주소를 레포 경로에서 뽑는다. 포크해도 자기 레포로 나간다.
+      # 대문자가 섞인 레포 이름은 액션이 알아서 소문자로 바꾼다.
+      - name: 태그 계산
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # 커밋 SHA 는 언제나, 브랜치 이름은 그 브랜치를 밀 때,
+          # 버전 태그(v1.2.3)를 밀면 1.2.3 과 1.2 가 붙는다.
+          # `latest` 는 액션 기본값(latest=auto)이 버전 태그에만 붙인다.
+          # 브랜치를 민다고 latest 가 움직이지 않는다.
+          tags: |
+            type=sha,format=long
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      # PR 에서는 로그인하지 않는다. 포크에서 온 PR 의 토큰에는 쓰기 권한이 없어
+      # 밀어봐야 실패한다. 짓는 것까지는 그대로 검증된다.
+      - name: 레지스트리 로그인
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 빌드 및 발행
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: false
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          # org.opencontainers.image.source 가 여기서 붙는다.
+          # 이 라벨이 있어야 GitHub 이 패키지를 레포에 연결한다.
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
