@@ -146,7 +146,8 @@ export ALLEY_NOTARY_PROFILE="alley-notary"
 ## 5. 첫 앱 올려보기
 
 1. 웹 콘솔에서 앱을 등록합니다 (번들 ID 는 나중에 못 바꿉니다)
-2. 새 버전 화면에서 zip 을 올립니다
+2. 새 버전 화면에서 zip 을 올립니다. Electron 처럼 JIT 를 쓰는 런타임을 품은 앱이면
+   entitlements plist 도 함께 고릅니다 (아래 참고)
 3. 미서명으로 올렸다면 워커가 가져가 서명·공증합니다. 상태가 `배포 준비됨` 이 되면
 4. **출시** 를 누릅니다. 그때부터 스토어 앱 목록에 보입니다
 
@@ -156,7 +157,32 @@ CI 에서 올리려면 앱 상세 화면에서 배포 토큰을 발급하고:
 export ALLEY_SERVER_URL="https://store.example.com"
 export ALLEY_TOKEN="alleyd_..."
 alley upload build/MyApp.zip --version 1.2.0
+
+# Electron 처럼 권한이 필요한 앱
+alley upload build/MyApp.zip --version 1.2.0 --entitlements build/app.entitlements
 ```
+
+### entitlements 를 언제 함께 올리나
+
+워커는 공증 요건이라 언제나 Hardened Runtime 으로 서명합니다. 그 아래에서 앱이 무엇을
+할 수 있는지는 entitlements 가 정합니다.
+
+**대부분의 맥 앱은 필요 없습니다.** 정말로 아무 권한도 쓰지 않습니다.
+
+**Electron 이나 JIT 를 쓰는 런타임을 품은 앱은 필요합니다.**
+`com.apple.security.cs.allow-jit` 없이 Hardened Runtime 아래에서 V8 을 띄우면 앱이
+실행되자마자 죽습니다. 그래도 공증은 통과하기 때문에, 이걸 빼먹으면 **아무도 실행할 수
+없는 앱이 배포까지 그대로 갑니다.** Electron 앱은 워커가 서명 전에 막아주지만, 다른 JIT
+런타임은 잡지 못합니다.
+
+파일은 대개 앱 빌드 설정에 이미 있습니다. Xcode 는 `CODE_SIGN_ENTITLEMENTS` 가 가리키는
+`.entitlements` 파일이고, Electron 은 빌드 스크립트가 `codesign` 에 넘기는 plist 입니다.
+
+이미 서명·공증을 마친 완성본을 `--signed` 로 올릴 때는 필요 없습니다. 서명 단계를 아예
+지나가기 때문입니다. 서명된 앱을 워커가 다시 서명하는 경우에도, 안 주면 붙어 있던 권한을
+그대로 읽어 다시 붙입니다.
+
+어떤 권한으로 서명됐는지는 앱 상세 화면의 버전 줄에서 볼 수 있습니다.
 
 ## 운영하면서 볼 것
 
@@ -356,3 +382,9 @@ curl -si -X OPTIONS \
 
 **`ALLOWED_EMAIL_DOMAINS` 를 고쳤는데 반영되지 않음**
 그 값은 씨앗입니다. 관리자 화면에서 바꾸세요.
+
+**설치는 되는데 실행하자마자 죽음**
+entitlements 를 먼저 의심하세요. 앱 상세 화면의 버전 줄에서 어떤 권한으로 서명됐는지
+볼 수 있습니다. 아무것도 안 보이면 권한 없이 서명된 것입니다. JIT 를 쓰는 런타임은
+`com.apple.security.cs.allow-jit` 없이 Hardened Runtime 아래에서 실행되지 않습니다.
+plist 를 갖춰 새 빌드를 다시 올리세요.

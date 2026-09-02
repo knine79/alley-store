@@ -68,6 +68,8 @@
 - [x] 워커 토큰 발급·폐기 (API + 관리자 화면, [ADR-0013](adr/0013-worker-token-authentication.md))
 - [x] codesign → notarytool → staple 파이프라인
 - [x] entitlements 검사 (restricted 항목이 있는데 프로필이 없으면 서명 전 실패)
+- [x] 업로더가 entitlements 를 함께 올린다 (API·CLI·콘솔, `.app` 에만 적용,
+      Electron JIT 검사, [ADR-0020](adr/0020-uploader-provides-entitlements.md))
 - [x] launchd 설치 스크립트 (`scripts/install-worker.sh`)
 - [x] 실패 로그 수집/재시도
 - [x] 멈춘 잡 회수: 하트비트가 끊긴 `running` 잡을 큐로 되돌리고, 시도 상한을 넘기면
@@ -88,6 +90,12 @@
 워커가 잡을 가져간 채로 죽으면 서버가 5분마다 훑어서 그 잡을 큐로 되돌립니다. 세 번
 내보내고도 끝나지 않으면 실패로 확정합니다. 되돌린 사실은 관리 > 서명 워커의
 "최근 서명 잡" 표에 시도 횟수로 나타납니다.
+
+실제 Electron 앱으로 돌려보다 미서명 업로드에는 붙일 entitlements 가 없다는 것을
+찾았습니다. 재서명이면 기존 서명에서 읽으면 되지만 미서명에는 읽을 것이 없어서, 권한이
+빈 채로 Hardened Runtime 만 켜져서 서명됐습니다. 이제 업로더가 plist 를 함께 올립니다
+([ADR-0020](adr/0020-uploader-provides-entitlements.md)). **빼먹으면 여전히 조용히
+잘못된 앱이 나갑니다.** Electron 만 서명 전에 걸러냅니다.
 
 ### 1-4. 웹 콘솔 (0.5~1주, 1-2와 병행 가능) — 완료
 
@@ -258,3 +266,5 @@ Phase 1을 완료로 판정하는 조건입니다. 1~7 중 **3, 4, 7 은 실제 
 | 웹 콘솔 SPA 전환 | Phase 3 착수 전 | Leaf 서버 렌더링으로 시작한다. 통계·피드백 대시보드가 복잡해지면 재검토한다. 사내용 고급 화면이 먼저 필요해지면 같은 API 에 붙는 별도 프론트엔드를 다른 레포에서 만든다 |
 | 콘솔 업로드본의 해시 | 서명 완료본 업로드가 늘어나면 | 브라우저는 큰 파일의 SHA-256 을 계산할 수 없다. 미서명 업로드는 워커가 서명본의 해시를 남기지만, 이미 서명된 완성본을 웹으로 올리면 해시가 빈다 ([ADR-0012](adr/0012-browser-upload-script.md)) |
 | 설치 완료 보고 | 통계가 부족해지면 | 지금 통계는 "받아갔다"까지다. 스토어 앱이 설치 성공을 따로 보고하면 설치 수를 셀 수 있지만, 그 값이 큰지 아직 모른다 |
+| 앱 단위 기본 entitlements | 같은 파일을 매번 첨부하는 것이 번거로워지면 | 지금은 버전마다 함께 올린다. 앱에 기본값을 두면 편하지만 바이너리와 권한이 따로 놀 수 있다 ([ADR-0020](adr/0020-uploader-provides-entitlements.md)) |
+| Electron 밖의 JIT 런타임 검사 | 그런 앱이 실제로 깨지면 | 지금 검사는 Electron Framework 하나만 본다. JVM·Mono 는 잡지 못한다. 일반화하려면 번들 안의 바이너리가 무엇을 링크했는지 봐야 한다 |

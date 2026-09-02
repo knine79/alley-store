@@ -239,7 +239,7 @@ SwiftUI 스토어 앱이 그대로 임포트해야 하기 때문입니다. HTTP 
 | `store_settings` | 스토어 이름, 로고, 강조색, 허용 도메인, 번들 ID 프리픽스 (singleton, [ADR-0011](adr/0011-store-settings-in-database.md)) |
 | `apps`           | bundle_id, 이름, 아이콘, 설명, 카테고리, owner_id                     |
 | `app_members`    | app_id, user_id (앱별 업로드 권한)                                |
-| `versions`       | app_id, short_version, build_number, 릴리즈 노트, min_macos, 상태 |
+| `versions`       | app_id, short_version, build_number, 릴리즈 노트, min_macos, 상태, entitlements ([ADR-0020](adr/0020-uploader-provides-entitlements.md)) |
 | `artifacts`      | version_id, kind(unsigned/signed), s3_key, sha256, size    |
 | `signing_jobs`   | version_id, 상태, worker_id, 로그, 시도 횟수                       |
 | `workers`        | 이름, 토큰 해시, 마지막 폴링 시각                                       |
@@ -289,12 +289,33 @@ stateDiagram-v2
 - 워커 등록: 관리자가 웹 콘솔에서 토큰 발급 → 워커 설정에 기입
 - 잡 처리 순서:
   1. 잡 클레임 → presigned URL로 미서명 아티팩트 다운로드
-  2. entitlements 검사 (restricted 항목이 있는데 프로필이 없으면 여기서 실패)
+  2. entitlements 검사 (restricted 항목이 있는데 프로필이 없으면 여기서 실패.
+   Electron 인데 JIT 권한이 없어도 여기서 실패)
   3. `codesign --force --options runtime --sign "..."` (내부 프레임워크·헬퍼 포함
    inside-out 서명)
   4. `xcrun notarytool submit --wait`
   5. `xcrun stapler staple`
   6. 결과물을 presigned URL로 업로드, 상태·로그 보고
+
+#### 서명할 때 붙이는 entitlements
+
+Hardened Runtime은 공증 요건이라 언제나 켭니다. 그런데 그 아래에서 앱이 무엇을 할 수
+있는지는 entitlements가 정합니다. 붙일 것을 어디서 얻는지는 두 갈래입니다.
+
+- **업로더가 준 것이 있으면 그것을 씁니다.** 미서명 업로드에는 읽어낼 기존 서명이 없어서
+워커가 짐작할 방법이 없습니다. 앱이 무슨 권한을 쓰는지는 그 앱을 만든 사람만 압니다
+([ADR-0020](adr/0020-uploader-provides-entitlements.md))
+- **없으면 각 대상의 기존 서명에서 읽어 다시 붙입니다.** 서명된 앱을 재서명하는 경우가
+여기 해당합니다. `codesign`은 재서명할 때 이전 권한을 물려주지 않습니다
+
+업로더가 준 plist는 `.app` 번들에만 붙입니다. 메인 앱과 그 안의 헬퍼 `.app`이 여기
+해당합니다. 프레임워크와 dylib, 홀로 놓인 헬퍼 실행 파일에는 붙이지 않습니다.
+`--entitlements`는 번들의 주 실행 파일에 쓰는 것입니다.
+
+Electron 앱은 `com.apple.security.cs.allow-jit` 없이 Hardened Runtime 아래에서 V8을
+띄우면 실행되자마자 죽습니다. **그 상태로도 공증은 통과합니다.** 그래서 번들에 Electron
+Framework가 있는데 이 권한이 없으면 서명하기 전에 실패시킵니다. 이 검사는 Electron만
+알고 다른 JIT 런타임은 잡지 못합니다. 그 한계는 ADR-0020에 적었습니다.
 - 공증 자격증명은 환경변수가 아니라 `notarytool` 키체인 프로필 방식을 씁니다.
 자격증명이 프로세스 환경에 노출되지 않습니다
 - `alley-worker preflight`로 설치 직후 환경을 점검합니다. 잡을 받은 뒤에 환경 문제를
@@ -419,6 +440,7 @@ GET   /api/v1/me
 GET   /api/v1/apps,  POST /api/v1/apps
 GET   /api/v1/apps/:id,  PATCH /api/v1/apps/:id
 POST  /api/v1/apps/:id/versions        # 버전 생성 + 업로드 URL 발급
+                                       # entitlements plist 를 함께 받는다 (ADR-0020)
 POST  /api/v1/versions/:id/complete    # 업로드 완료 통지 → 서명 잡 생성
 POST  /api/v1/versions/:id/release
 GET   /api/v1/versions/:id/download    # 인증 → 이력 기록 → presigned URL
