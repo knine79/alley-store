@@ -185,6 +185,38 @@ public struct SigningPipeline: Sendable {
         guard result.succeeded else {
             throw PipelineError.commandFailed(step: "서명 검증", detail: result.combinedOutput)
         }
+        try await assertNothingLeftAdHoc(in: bundle)
+    }
+
+    /// 우리가 서명하지 않고 지나친 코드가 남았는지 본다.
+    ///
+    /// `codesign --verify --deep --strict` 로는 이것을 잡을 수 없다. 프레임워크 안의
+    /// dylib 이 링커가 붙인 ad-hoc 서명 그대로 남아 있어도 봉인은 멀쩡해서 "valid on
+    /// disk" 가 나온다. 실제로 Electron 앱에서 그런 파일 다섯 개를 지나친 적이 있고,
+    /// 그때도 이 검증은 통과했다.
+    ///
+    /// 그래서 번들 안의 Mach-O 를 직접 훑어 ad-hoc 으로 남은 것이 있는지 센다.
+    /// Developer ID 로 서명하는 한 ad-hoc 은 하나도 남으면 안 된다. 남았다면 그것은
+    /// 우리가 대상에서 빠뜨렸다는 뜻이고, 공증에서 거절당한다.
+    private func assertNothingLeftAdHoc(in bundle: AppBundle) async throws {
+        var leftovers: [String] = []
+        for code in bundle.allMachOFiles() {
+            let result = await Shell.runDetached(
+                "/usr/bin/codesign", ["-dv", code.path], timeout: 60
+            )
+            // codesign 은 이 정보를 표준 오류로 낸다.
+            guard result.combinedOutput.contains("adhoc") else { continue }
+            leftovers.append(code.path.replacingOccurrences(of: bundle.url.path + "/", with: ""))
+        }
+        guard leftovers.isEmpty else {
+            throw PipelineError.commandFailed(
+                step: "서명 검증",
+                detail: """
+                    서명되지 않고 남은 코드가 있습니다. 공증에서 거절됩니다:
+                    \(leftovers.joined(separator: "\n"))
+                    """
+            )
+        }
     }
 
     private func notarize(_ archive: URL) async throws {

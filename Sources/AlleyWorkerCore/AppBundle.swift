@@ -56,9 +56,15 @@ public struct AppBundle: Sendable {
 
     /// 번들 안에서 따로 서명해야 하는 것들.
     ///
-    /// 중첩 번들(프레임워크, 확장, 헬퍼 앱)과 홀로 놓인 Mach-O 파일이다. 번들 안에
-    /// 들어 있는 실행 파일은 그 번들을 서명할 때 함께 봉인되므로 여기 넣지 않는다.
-    /// 넣으면 같은 것을 두 번 서명하게 된다.
+    /// 중첩 번들(프레임워크, 확장, 헬퍼 앱)과, 어느 번들의 주 실행 파일도 아닌 Mach-O
+    /// 파일이다. 주 실행 파일만 그 번들을 서명할 때 함께 봉인된다. 나머지는 번들 **안에**
+    /// 있더라도 자기 서명이 필요하다.
+    ///
+    /// 이 구분이 중요한 이유는 프레임워크가 실제로 그렇게 생겼기 때문이다. Electron 은
+    /// `Electron Framework.framework/Versions/A/Libraries/` 에 dylib 을 넣고
+    /// `Helpers/chrome_crashpad_handler` 를 함께 담는다. Squirrel 은 `Resources/ShipIt`
+    /// 을 담는다. 프레임워크를 서명해도 이것들의 서명은 바뀌지 않는다. 링커가 붙여둔
+    /// ad-hoc 서명이 그대로 남고, 공증에서 Developer ID 로 서명되지 않은 코드로 걸린다.
     func nestedCode() throws -> [URL] {
         let bundleExtensions: Set<String> = [
             "framework", "app", "appex", "xpc", "bundle", "systemextension",
@@ -66,39 +72,86 @@ public struct AppBundle: Sendable {
         let libraryExtensions: Set<String> = ["dylib", "so"]
 
         var found: [URL] = []
-        var bundles: [URL] = []
+        // 지금까지 만난 중첩 번들. 어느 번들이 이 파일을 품고 있는지 찾는 데 쓴다.
+        var bundles: [(relativePath: String, mainExecutables: Set<String>)] = []
+        let ownMainExecutables = Self.mainExecutablePaths(of: url)
 
-        guard let walker = FileManager.default.enumerator(
-            at: url,
-            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey]
-        ) else {
-            return []
+        walk { entry, relativePath, isDirectory in
+            if bundleExtensions.contains(entry.pathExtension) {
+                bundles.append((relativePath, Self.mainExecutablePaths(of: entry)))
+                found.append(entry)
+                return
+            }
+            guard !isDirectory else { return }
+
+            let isCode = libraryExtensions.contains(entry.pathExtension)
+                || Self.isMachO(at: entry)
+            guard isCode else { return }
+
+            // 이 파일을 품은 가장 안쪽 번들. 없으면 앱 자신이다.
+            let owner = bundles
+                .filter { relativePath.hasPrefix($0.relativePath + "/") }
+                .max { $0.relativePath.count < $1.relativePath.count }
+            let inside = owner.map {
+                String(relativePath.dropFirst($0.relativePath.count + 1))
+            } ?? relativePath
+
+            // 주 실행 파일은 번들과 함께 봉인된다. 따로 서명하면 그 봉인이 깨진다.
+            let mains = owner?.mainExecutables ?? ownMainExecutables
+            guard !mains.contains(inside) else { return }
+            found.append(entry)
         }
 
-        for case let item as URL in walker {
-            let isInsideKnownBundle = bundles.contains { item.path.hasPrefix($0.path + "/") }
+        return found
+    }
 
-            if bundleExtensions.contains(item.pathExtension) {
-                bundles.append(item)
-                found.append(item)
-                continue
-            }
-            // 프레임워크 안의 실행 파일까지 따로 서명할 필요는 없다.
-            guard !isInsideKnownBundle else { continue }
-
-            if libraryExtensions.contains(item.pathExtension) {
-                found.append(item)
-            } else if Self.isMachO(at: item) {
-                found.append(item)
-            }
+    /// 번들 안의 모든 Mach-O 파일.
+    ///
+    /// `codeToSign()` 과 달리 무엇을 서명해야 하는지 따지지 않는다. 서명이 끝난 뒤
+    /// **빠뜨린 것이 없는지** 확인하는 쪽에서 쓴다. 서명 대상을 고르는 논리로 검산하면
+    /// 그 논리의 실수를 잡을 수 없다.
+    public func allMachOFiles() -> [URL] {
+        var found: [URL] = []
+        walk { entry, _, isDirectory in
+            guard !isDirectory, Self.isMachO(at: entry) else { return }
+            found.append(entry)
         }
+        return found
+    }
 
-        // 앱의 주 실행 파일은 앱을 서명할 때 함께 서명된다. 같은 디렉터리에 있는
-        // 다른 실행 파일은 헬퍼 도구라서 자기 서명이 있어야 하므로 그대로 둔다.
-        let main = mainExecutableName
-        return found.filter { item in
-            !(item.lastPathComponent == main
-                && item.deletingLastPathComponent().lastPathComponent == "MacOS")
+    /// 번들 안을 위에서 아래로 훑는다. 번들은 그 안의 것보다 먼저 나온다.
+    ///
+    /// 번들 뿌리에서부터의 상대 경로를 함께 넘긴다. **절대 경로를 비교하지 않으려고
+    /// 그렇게 한다.** `FileManager` 는 디렉터리를 훑을 때 링크를 풀어(`/var` 을
+    /// `/private/var` 로) 돌려주는데, 같은 Foundation 이 경로를 만들 때는 반대로
+    /// `/private` 를 떼는 쪽이라 두 경로가 같은 파일을 가리키면서도 문자열로는
+    /// 달라진다. 그 비교에 기대면 조용히 어긋난다.
+    ///
+    /// 심볼릭 링크는 따라가지도, 넘겨주지도 않는다. `Foo.framework/Foo` 처럼 실체를
+    /// 가리키는 링크가 흔한데, 링크를 통해 서명하면 같은 파일을 두 번 서명하게 된다.
+    private func walk(
+        _ visit: (_ entry: URL, _ relativePath: String, _ isDirectory: Bool) -> Void
+    ) {
+        var stack: [(directory: URL, prefix: String)] = [(url, "")]
+        while let current = stack.popLast() {
+            let entries = (try? FileManager.default.contentsOfDirectory(
+                at: current.directory,
+                includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]
+            )) ?? []
+            for entry in entries {
+                let values = try? entry.resourceValues(
+                    forKeys: [.isDirectoryKey, .isSymbolicLinkKey]
+                )
+                if values?.isSymbolicLink == true { continue }
+
+                let name = entry.lastPathComponent
+                let relativePath = current.prefix.isEmpty
+                    ? name : "\(current.prefix)/\(name)"
+                let isDirectory = values?.isDirectory == true
+
+                visit(entry, relativePath, isDirectory)
+                if isDirectory { stack.append((entry, relativePath)) }
+            }
         }
     }
 
@@ -107,16 +160,55 @@ public struct AppBundle: Sendable {
     /// `Info.plist` 가 진실이다. 읽을 수 없으면 번들 이름과 같다고 본다. 관례가 그렇고,
     /// 틀려도 그 파일을 한 번 더 서명할 뿐 결과가 깨지지는 않는다.
     var mainExecutableName: String {
-        let fallback = url.deletingPathExtension().lastPathComponent
-        guard let data = try? Data(
-            contentsOf: url.appendingPathComponent("Contents/Info.plist")
-        ),
-            let plist = try? PropertyListSerialization.propertyList(
-                from: data, options: [], format: nil
-            ) as? [String: Any],
-            let name = plist["CFBundleExecutable"] as? String
+        Self.executableName(
+            fromInfoPlistAt: url.appendingPathComponent("Contents/Info.plist")
+        ) ?? url.deletingPathExtension().lastPathComponent
+    }
+
+    /// 이 번들을 서명할 때 함께 봉인되는 주 실행 파일의 경로들. 번들 기준 상대 경로다.
+    ///
+    /// 하나면 충분할 것 같지만 프레임워크는 그렇지 않다. 버전 디렉터리마다 실행 파일이
+    /// 하나씩 있고, 평평한 형태(`Foo.framework/Foo`)도 함께 쓰인다. 어느 쪽이든 그 번들을
+    /// 서명할 때 봉인되므로 전부 모아서 돌려준다.
+    ///
+    /// 여기에 실제로 없는 경로가 섞여도 손해가 없다. 그 경로에는 파일이 없으니 비교에
+    /// 걸리지 않는다. 반대로 **빠뜨리면 같은 파일을 두 번 서명하게 되어** 바깥 번들의
+    /// 봉인이 깨진다. 그래서 넉넉하게 모은다.
+    static func mainExecutablePaths(of bundle: URL) -> Set<String> {
+        let fallback = bundle.deletingPathExtension().lastPathComponent
+
+        guard bundle.pathExtension == "framework" else {
+            let name = executableName(
+                fromInfoPlistAt: bundle.appendingPathComponent("Contents/Info.plist")
+            ) ?? fallback
+            return ["Contents/MacOS/\(name)"]
+        }
+
+        // 평평한 형태.
+        var paths: Set<String> = [fallback]
+
+        let versions = bundle.appendingPathComponent("Versions", isDirectory: true)
+        let entries = (try? FileManager.default.contentsOfDirectory(
+            at: versions, includingPropertiesForKeys: nil
+        )) ?? []
+        for version in entries {
+            let name = executableName(
+                fromInfoPlistAt: version.appendingPathComponent("Resources/Info.plist")
+            ) ?? fallback
+            paths.insert("Versions/\(version.lastPathComponent)/\(name)")
+        }
+        return paths
+    }
+
+    /// `Info.plist` 의 `CFBundleExecutable`.
+    static func executableName(fromInfoPlistAt plist: URL) -> String? {
+        guard let data = try? Data(contentsOf: plist),
+              let parsed = try? PropertyListSerialization.propertyList(
+                  from: data, options: [], format: nil
+              ) as? [String: Any],
+              let name = parsed["CFBundleExecutable"] as? String
         else {
-            return fallback
+            return nil
         }
         return name
     }
