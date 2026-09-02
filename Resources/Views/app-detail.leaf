@@ -77,6 +77,13 @@
                     #if(version.failureReason):
                     <span class="table-note">#(version.failureReason)</span>
                     #endif
+                    #if(version.failureTitle):
+                    <span class="table-note">
+                        <strong>#(version.failureTitle)</strong>
+                        <code class="failure-code">#(version.failureCode)</code>
+                    </span>
+                    <span class="table-note">#(version.failureAdvice)</span>
+                    #endif
                     #if(version.entitlementKeys):
                     <details class="log">
                         <summary>entitlements</summary>

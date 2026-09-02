@@ -105,9 +105,34 @@
                 <td class="table-tight">#(job.attempt)</td>
                 <td class="table-tight table-muted">#if(job.lastSeen):#(job.lastSeen)#else:—#endif</td>
             </tr>
-            #if(job.note):
+            #if(job.failureTitle):
             <tr>
-                <td class="table-muted" colspan="5">#(job.note)</td>
+                <td class="table-muted" colspan="5">
+                    <strong>#(job.failureTitle)</strong>
+                    <code class="failure-code">#(job.failureCode)</code>
+                    <span class="table-note">#(job.failureAdvice)</span>
+                    #if(job.note):
+                    <span class="table-note">#(job.note)</span>
+                    #endif
+                    #if(job.log):
+                    <details class="log">
+                        <summary>서명 로그</summary>
+                        <pre class="log-body">#(job.log)</pre>
+                    </details>
+                    #endif
+                </td>
+            </tr>
+            #elseif(job.note):
+            <tr>
+                <td class="table-muted" colspan="5">
+                    #(job.note)
+                    #if(job.log):
+                    <details class="log">
+                        <summary>서명 로그</summary>
+                        <pre class="log-body">#(job.log)</pre>
+                    </details>
+                    #endif
+                </td>
             </tr>
             #endif
             #endfor
