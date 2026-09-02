@@ -28,7 +28,7 @@ Mac App Store를 쓰면 이 문제가 해결되지만, 조직 내부에서만 �
 | 항목       | 결정                                                       |
 | -------- | -------------------------------------------------------- |
 | 클라이언트    | 웹 콘솔(개발자용) + 네이티브 SwiftUI 스토어 앱(사용자용)                    |
-| 배포 형태    | Docker 셀프호스팅. 어떤 호스팅 환경도 전제하지 않음                         |
+| 배포 형태    | Docker 셀프호스팅. 서버 이미지는 CI 가 발행하고 운영은 그것을 받아 씀 (ADR-0021)      |
 | 서명 파이프라인 | 서버 + macOS 서명 워커(pull 방식). 서명 키는 워커 머신에만                 |
 | 기술 스택    | Swift 풀스택 (Vapor 서버 + Swift 워커 + SwiftUI 앱 + 공유 DTO 패키지) |
 | 인증       | Google OAuth (OIDC). 허용 도메인은 서버 설정. 다운로드도 로그인 필수         |
@@ -192,7 +192,8 @@ alley-store/
 ├── Resources/Views/       # 웹 콘솔 Leaf 템플릿
 ├── Public/                # 웹 콘솔 정적 파일 (CSS, 업로드 스크립트)
 ├── scripts/               # 워커 설치, 앱 번들 조립, 금칙어 검사
-├── docker-compose.yml
+├── docker-compose.yml          # 발행된 이미지를 받아 띄운다
+├── docker-compose.override.yml # 로컬에서는 소스로 짓는다 (ADR-0021)
 ├── Dockerfile
 └── docs/
 ```

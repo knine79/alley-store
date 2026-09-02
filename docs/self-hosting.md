@@ -36,11 +36,21 @@ Google 설정 하나에 로그인 문을 전부 맡기지 않습니다.
 
 ## 2. 서버 띄우기
 
+서버 이미지는 CI 가 커밋마다 `ghcr.io/<소유자>/<레포>` 에 올립니다
+([ADR-0021](adr/0021-publish-server-container-image.md)). **운영 서버에는 제품 소스를
+두지 않습니다.** 필요한 것은 파일 두 개입니다.
+
 ```bash
-git clone <이 레포>
-cd alley-store
-cp .env.example .env
+mkdir alley && cd alley
+
+# 레포에서 이 둘만 가져옵니다
+curl -fsSL -O https://raw.githubusercontent.com/<소유자>/<레포>/main/docker-compose.yml
+curl -fsSL -o .env https://raw.githubusercontent.com/<소유자>/<레포>/main/.env.example
 ```
+
+레포를 클론해서 개발할 때는 `cp .env.example .env` 만 하면 됩니다. 클론에는
+`docker-compose.override.yml` 이 함께 있어서 이미지를 받는 대신 소스에서 짓습니다.
+아래 절차는 나머지가 같습니다.
 
 `.env` 에서 반드시 채워야 하는 것:
 
@@ -53,10 +63,41 @@ cp .env.example .env
 | `S3_SECRET_ACCESS_KEY` | `openssl rand -base64 32` |
 | `INITIAL_ADMIN_EMAILS` | 첫 관리자. 이 계정으로 로그인해야 설정을 바꿀 수 있습니다 |
 | `ALLOWED_EMAIL_DOMAINS` | 로그인을 허용할 도메인 |
+| `ALLEY_IMAGE`, `ALLEY_IMAGE_TAG` | 받아올 서버 이미지 (아래) |
+
+### 어떤 태그를 고르나
+
+`ALLEY_IMAGE=ghcr.io/<소유자>/<레포>` 로 두고 태그만 고릅니다.
+
+| 태그 | 무엇 | 언제 |
+| --- | --- | --- |
+| `1.2.3` | `v1.2.3` 태그에서 나온 빌드 | **운영은 이것으로.** 움직이지 않습니다 |
+| `sha-<40자리>` | 그 커밋의 빌드 | 아직 버전 태그를 붙이지 않은 것을 올려야 할 때 |
+| `1.2` | 1.2.x 중 마지막 | 패치는 따라가도 된다고 판단했을 때. 움직입니다 |
+| `main`, `latest` | 마지막에 나온 것 | **운영에 쓰지 마세요** |
+
+`latest` 로 배포하면 다시 받을 때마다 다른 것이 뜹니다. 무엇이 돌고 있는지 아무도 말할
+수 없고, 문제가 났을 때 어디로 되돌릴지도 알 수 없습니다.
+
+패키지를 비공개로 두었다면 받기 전에 로그인이 필요합니다. `read:packages` 권한이 있는
+토큰이면 됩니다.
 
 ```bash
+echo "$GITHUB_TOKEN" | docker login ghcr.io -u <사용자> --password-stdin
+```
+
+### 띄우기
+
+```bash
+# 데이터베이스 스키마를 만듭니다. 처음 한 번.
+docker compose run --rm server migrate --yes
+
 docker compose up -d
 ```
+
+**서버는 부팅할 때 스키마를 건드리지 않습니다.** 마이그레이션은 `migrate` 명령으로만
+돕니다. 이 단계를 건너뛰면 서버는 뜨지만 아무 표도 없어서 첫 요청부터 깨집니다.
+버전을 올릴 때도 같은 명령을 씁니다 ([6. 서버 업그레이드](#6-서버-업그레이드)).
 
 `http://localhost:8080` (또는 설정한 주소)에서 로그인 화면이 뜹니다.
 
@@ -183,6 +224,73 @@ alley upload build/MyApp.zip --version 1.2.0 --entitlements build/app.entitlemen
 그대로 읽어 다시 붙입니다.
 
 어떤 권한으로 서명됐는지는 앱 상세 화면의 버전 줄에서 볼 수 있습니다.
+
+## 6. 서버 업그레이드
+
+새 버전이 나오면 `.env` 의 `ALLEY_IMAGE_TAG` 를 바꾸고 받습니다. 소스를 다시 받거나
+서버에서 짓지 않습니다 ([ADR-0021](adr/0021-publish-server-container-image.md)).
+
+```bash
+# 1. 지금 무엇이 돌고 있는지 적어둡니다. 되돌릴 자리입니다.
+docker compose images server
+
+# 2. .env 에서 ALLEY_IMAGE_TAG 를 새 버전으로 바꿉니다
+
+# 3. 새 이미지를 받습니다. 아직 갈아끼우지 않습니다.
+docker compose pull server
+
+# 4. 마이그레이션을 돌립니다. 새 이미지로 돌아갑니다.
+docker compose run --rm server migrate --yes
+
+# 5. 갈아끼웁니다.
+docker compose up -d server
+
+# 6. 확인합니다.
+curl -fsS https://store.example.com/health
+```
+
+**순서가 중요합니다.** 3번과 4번을 건너뛰고 5번만 하면 새 코드가 없는 열을 찾습니다.
+반대로 마이그레이션을 옛 이미지로 돌리면 새 마이그레이션이 아예 들어 있지 않습니다.
+
+**무중단이 아닙니다.** 컨테이너를 갈아끼우는 동안 짧게 끊깁니다. 마이그레이션이 큰
+표를 잠그면 그만큼 더 걸립니다.
+
+### 되돌리기
+
+`ALLEY_IMAGE_TAG` 를 옛 태그로 되돌리고 3번과 5번만 합니다. **마이그레이션은 되돌리지
+않습니다.**
+
+지금까지의 마이그레이션은 열이나 표를 더하는 방향이라, 새 스키마 위에서 옛 이미지가
+도는 경우가 대부분입니다. 옛 코드는 새로 생긴 열을 모를 뿐 깨지지는 않습니다. 그래서
+이미지만 되돌리는 것으로 대체로 충분합니다. **대체로입니다.** 열 이름을 바꾸거나
+지우는 마이그레이션이 섞이면 그렇지 않고, 그런 마이그레이션은 언제든 생길 수 있습니다.
+
+스키마까지 되돌려야 한다면:
+
+```bash
+docker compose run --rm server migrate --revert --yes
+```
+
+이 명령은 **마지막 배치**를 되돌립니다. 배치는 한 번의 `migrate` 실행에서 함께 적용된
+마이그레이션 전부입니다. 한 번에 세 개가 적용됐다면 세 개가 같이 사라집니다. 그리고
+되돌린다는 것은 그 마이그레이션이 만든 열과 표를 **지운다**는 뜻입니다. 그 안의
+데이터도 같이 사라집니다. 롤백의 기본 수단으로 삼을 것이 못 됩니다.
+
+**확인 필요.** 이 절차로 실제 데이터를 놓고 업그레이드와 롤백을 해본 적이 아직
+없습니다. 처음 한 번은 데이터베이스를 백업한 뒤에 하세요. 백업 대상은 아래
+[백업](#백업) 절에 있습니다.
+
+### 워커와 스토어 앱은 따로입니다
+
+이미지로 배포되는 것은 서버뿐입니다. 워커와 스토어 앱은 macOS 바이너리라 컨테이너에
+담기지 않습니다.
+
+- **워커**: 그 맥에서 소스를 받아 `./scripts/install-worker.sh` 를 다시 돌립니다
+- **스토어 앱**: 새 빌드를 스토어에 올리면 앱이 스스로 갈아끼웁니다. 첫 배포만 사람이
+  나눠줍니다 (4번 참조)
+
+서버 API 는 뒤로 호환되게 유지하지만, 워커와 스토어 앱을 서버보다 한참 오래 두지
+마세요.
 
 ## 운영하면서 볼 것
 

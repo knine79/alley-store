@@ -28,6 +28,7 @@
 | [0018](0018-stalled-signing-job-recovery.md) | 멈춘 서명 잡은 서버가 주기적으로 훑어 큐로 되돌린다 | 수락됨 | 2026-09-02 |
 | [0019](0019-abandoned-draft-cleanup.md) | 버려진 draft 는 보관 기간이 지나면 오브젝트까지 함께 지운다 | 수락됨 | 2026-09-02 |
 | [0020](0020-uploader-provides-entitlements.md) | entitlements 는 업로더가 버전과 함께 올린다 | 수락됨 | 2026-09-02 |
+| [0021](0021-publish-server-container-image.md) | 서버를 컨테이너 이미지로 발행한다 | 수락됨 | 2026-09-02 |
 
 ## 언제 쓰나
 
