@@ -74,7 +74,7 @@ public struct WorkerLoop: Sendable {
             let reason = String(describing: error)
             log("잡 \(job.id) 실패: \(reason)")
             // 보고까지 실패하면 서버는 이 잡을 running 으로 알고 있게 된다.
-            // 하트비트가 끊긴 잡을 되돌리는 것은 서버 쪽 후속 과제다 (ADR-0013).
+            // 하트비트가 끊기면 서버가 그 잡을 큐로 되돌린다 (ADR-0018).
             try? await client.report(
                 SigningJobUpdate(state: .failed, log: reason, failureReason: summarize(reason)),
                 for: job.id

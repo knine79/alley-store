@@ -7,12 +7,8 @@ import Vapor
 ///
 /// 워커가 죽으면 아무 일도 일어나지 않는다. 큐에 잡이 쌓이고, 올린 사람은 "서명 대기"
 /// 를 계속 본다. 아무도 안 보고 있으면 며칠이 지나도 모른다. 그래서 서버가 주기적으로
-/// 확인한다.
-///
-/// **Vapor 에는 스케줄러가 없다.** Queues 패키지를 붙이면 Redis 같은 것이 따라오는데,
-/// 하는 일이 "몇 분에 한 번 표를 훑는다"뿐이라 그 값을 하지 못한다. 애플리케이션
-/// 수명에 묶인 Task 하나로 충분하다.
-public struct WorkerWatchdog: LifecycleHandler {
+/// 확인한다. 주기를 도는 것은 `PeriodicSweep` 이 맡는다.
+public enum WorkerWatchdog {
     /// 이 시간 넘게 소식이 없으면 죽은 것으로 본다.
     ///
     /// 워커는 30초마다 하트비트를 보낸다(`WorkerLoop`). 10분이면 재시작이나 잠깐의
@@ -20,29 +16,6 @@ public struct WorkerWatchdog: LifecycleHandler {
     static let silenceThreshold: TimeInterval = 10 * 60
     /// 확인 주기.
     static let checkInterval: Duration = .seconds(300)
-
-    public init() {}
-
-    public func didBootAsync(_ application: Application) async throws {
-        let watchdog = Task {
-            // 뜨자마자 확인하면 아직 워커가 붙기 전이라 오알림이 난다.
-            try? await Task.sleep(for: Self.checkInterval)
-
-            while !Task.isCancelled {
-                await Self.check(on: application)
-                try? await Task.sleep(for: Self.checkInterval)
-            }
-        }
-        application.storage[WatchdogKey.self] = watchdog
-    }
-
-    public func shutdownAsync(_ application: Application) async {
-        application.storage[WatchdogKey.self]?.cancel()
-    }
-
-    private struct WatchdogKey: StorageKey {
-        typealias Value = Task<Void, Never>
-    }
 
     /// 조용해진 워커를 찾아 한 번 알린다.
     ///

@@ -78,6 +78,44 @@
 </table>
 #endif
 
+#if(count(jobs) == 0):
+#else:
+<section class="section">
+    <h2 class="section-title">최근 서명 잡</h2>
+    <p class="page-lead">
+        시도 횟수가 1 보다 크면 워커가 잡다가 멈춰서 서버가 큐로 되돌린 것입니다.
+        상한을 넘기면 실패로 확정되고 이유가 함께 남습니다.
+    </p>
+    <table class="table">
+        <thead>
+            <tr>
+                <th class="table-fill">앱</th>
+                <th class="table-tight">버전</th>
+                <th class="table-tight">상태</th>
+                <th class="table-tight">시도</th>
+                <th class="table-tight">마지막 소식</th>
+            </tr>
+        </thead>
+        <tbody>
+            #for(job in jobs):
+            <tr>
+                <td class="table-fill table-strong">#(job.app)</td>
+                <td class="table-tight table-muted">#(job.version)</td>
+                <td class="table-tight">#(job.state)</td>
+                <td class="table-tight">#(job.attempt)</td>
+                <td class="table-tight table-muted">#if(job.lastSeen):#(job.lastSeen)#else:—#endif</td>
+            </tr>
+            #if(job.note):
+            <tr>
+                <td class="table-muted" colspan="5">#(job.note)</td>
+            </tr>
+            #endif
+            #endfor
+        </tbody>
+    </table>
+</section>
+#endif
+
 <section class="section">
     <h2 class="section-title">워커 등록</h2>
     <form class="form" method="post" action="/admin/workers">

@@ -28,7 +28,17 @@ public func configure(_ app: Application, config: AppConfig) async throws {
     app.routes.defaultMaxBodySize = "1mb"
 
     // 조용해진 워커를 주기적으로 찾아 알린다.
-    app.lifecycle.use(WorkerWatchdog())
+    app.lifecycle.use(
+        PeriodicSweep(name: "워커 감시", interval: WorkerWatchdog.checkInterval) { application in
+            await WorkerWatchdog.check(on: application)
+        }
+    )
+    // 워커가 죽어 멈춘 서명 잡을 큐로 되돌린다.
+    app.lifecycle.use(
+        PeriodicSweep(name: "멈춘 서명 잡 회수", interval: StalledJobSweep.checkInterval) { application in
+            await StalledJobSweep.run(on: application)
+        }
+    )
 
     try routes(app)
 }

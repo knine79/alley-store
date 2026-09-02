@@ -8,6 +8,9 @@ import Vapor
 /// 규칙은 `AdminOperations` 에 있고 JSON API 와 공유한다. 여기서는 폼에서 온 문자열을
 /// 요청 타입으로 옮기는 일만 한다.
 struct AdminPagesController: RouteCollection, Sendable {
+    /// 워커 화면에 함께 띄우는 최근 서명 잡 수.
+    static let recentJobCount = 10
+
     func boot(routes: any RoutesBuilder) throws {
         let pages = routes
             .grouped(SessionAuthenticator(), User.guardMiddleware())
@@ -205,11 +208,20 @@ struct AdminPagesController: RouteCollection, Sendable {
         on request: Request
     ) async throws -> View {
         let workers = try await Worker.query(on: request.db).sort(\.$name).all()
+        // 최근 잡을 함께 보여준다. 멈춘 잡을 큐로 되돌린 사실은 여기서만 보인다.
+        // 시도 횟수가 1 보다 크면 누군가 그 잡을 다시 내보냈다는 뜻이다.
+        let jobs = try await SigningJob.query(on: request.db)
+            .sort(\.$updatedAt, .descending)
+            .range(..<Self.recentJobCount)
+            .with(\.$version) { $0.with(\.$app) }
+            .all()
+
         return try await request.view.render(
             "admin-workers",
             WorkerListPageContext(
                 page: try await request.pageContext(title: "서명 워커"),
                 workers: try workers.map { try WorkerRow(worker: $0) },
+                jobs: jobs.map { SigningJobRow(job: $0) },
                 issued: issued.map { IssuedWorkerToken(name: $0.worker.name, token: $0.token) },
                 error: error
             )
@@ -450,6 +462,39 @@ struct WorkerRow: Encodable {
     }
 }
 
+/// 화면에 뿌리는 서명 잡 한 줄.
+///
+/// 앱과 버전을 미리 읽어둔 잡을 넘겨야 한다. 안 읽었으면 이름 대신 "?" 가 나간다.
+struct SigningJobRow: Encodable {
+    var app: String
+    var version: String
+    var state: String
+    /// 몇 번째 시도인지. 1 보다 크면 멈춰서 되돌린 적이 있다는 뜻이다.
+    var attempt: Int
+    var lastSeen: String?
+    /// 실패 이유. 왜 멈췄는지가 여기 남는다.
+    var note: String?
+
+    init(job: SigningJob) {
+        let version = job.$version.value
+        self.app = version?.$app.value?.name ?? "?"
+        self.version = version.map { "\($0.shortVersion) (\($0.buildNumber))" } ?? "?"
+        self.state = Self.stateName(job.state)
+        self.attempt = job.attempt
+        self.lastSeen = (job.heartbeatAt ?? job.claimedAt).map { DateStyle.minute.string(from: $0) }
+        self.note = job.failureReason
+    }
+
+    private static func stateName(_ state: SigningJobState) -> String {
+        switch state {
+        case .queued: return "대기 중"
+        case .running: return "처리 중"
+        case .succeeded: return "완료"
+        case .failed: return "실패"
+        }
+    }
+}
+
 /// 방금 발급한 토큰. 이 화면을 벗어나면 다시 볼 수 없다.
 struct IssuedWorkerToken: Encodable {
     var name: String
@@ -523,6 +568,7 @@ struct PortalPageContext: Encodable {
 struct WorkerListPageContext: Encodable {
     var page: PageContext
     var workers: [WorkerRow]
+    var jobs: [SigningJobRow]
     var issued: IssuedWorkerToken?
     var error: String?
 }

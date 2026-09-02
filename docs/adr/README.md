@@ -25,6 +25,7 @@
 | [0015](0015-app-scoped-deploy-tokens.md) | CI 는 앱 하나에 묶인 배포 토큰으로 올린다 | 수락됨 | 2026-08-31 |
 | [0016](0016-server-handles-small-uploads.md) | 피드백 스크린샷은 서버가 직접 받는다 | 수락됨 | 2026-09-01 |
 | [0017](0017-sparkle-feed-tokens.md) | Sparkle 피드는 앱별 읽기 전용 토큰을 주소에 실어 인증한다 | 수락됨 | 2026-09-01 |
+| [0018](0018-stalled-signing-job-recovery.md) | 멈춘 서명 잡은 서버가 주기적으로 훑어 큐로 되돌린다 | 수락됨 | 2026-09-02 |
 
 ## 언제 쓰나
 
