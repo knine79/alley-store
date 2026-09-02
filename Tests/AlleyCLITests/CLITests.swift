@@ -107,6 +107,79 @@ struct UploadParsingTests {
     }
 }
 
+/// `--entitlements` 는 서버에 붙기 전에 걸러야 한다.
+///
+/// 파일이 없거나 plist 가 아닌 것은 서버 문제가 아니라 인자 실수다. CI 가 종료 코드로
+/// 그 차이를 판단한다.
+@Suite("entitlements 인자")
+struct EntitlementsArgumentTests {
+    /// 임시 파일을 만들고 쓰고 나면 지운다.
+    private func withFile(_ contents: String, _ body: (String) throws -> Void) throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("alley-entitlements-\(UUID().uuidString).plist")
+        try Data(contents.utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        try body(file.path)
+    }
+
+    private let valid = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <plist version="1.0">
+        <dict><key>com.apple.security.cs.allow-jit</key><true/></dict>
+        </plist>
+        """
+
+    @Test("안 주면 nil 이다")
+    func absentIsNil() throws {
+        // 대부분의 앱은 안 준다.
+        #expect(try CLI.readEntitlements(at: nil) == nil)
+    }
+
+    @Test("파일을 읽어 원문 그대로 싣는다")
+    func readsFile() throws {
+        try withFile(valid) { path in
+            let options = try CLI.parseUpload([
+                "build/App.zip", "--version", "1.2.0", "--entitlements", path,
+            ])
+            #expect(options.entitlements == valid)
+        }
+    }
+
+    @Test("파일이 없으면 인자 실수로 끝낸다")
+    func missingFileIsUsageError() {
+        #expect(throws: CLI.UsageError.self) {
+            try CLI.readEntitlements(at: "/없는/경로/app.entitlements")
+        }
+    }
+
+    @Test("plist 가 아니면 인자 실수로 끝낸다")
+    func malformedFileIsUsageError() throws {
+        // 서명할 때가 되어서야 발견하면 왕복이 길다.
+        try withFile("이건 plist 가 아닙니다") { path in
+            #expect(throws: CLI.UsageError.self) {
+                try CLI.readEntitlements(at: path)
+            }
+        }
+    }
+
+    @Test("잘못된 파일을 주면 종료 코드 2 로 끝난다")
+    func exitsWithUsageCode() async throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("alley-entitlements-\(UUID().uuidString).plist")
+        try Data("이건 plist 가 아닙니다".utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        // 서버에 붙기도 전에 끝난다. 파이프라인이 재시도할 이유가 없는 실패다.
+        let code = await CLI.run(
+            arguments: ["upload", "build/App.zip", "--version", "1.2.0", "--entitlements", file.path],
+            environment: [:],
+            output: { _ in },
+            complain: { _ in }
+        )
+        #expect(code == .usage)
+    }
+}
+
 @Suite("CLI 설정")
 struct CLIConfigTests {
     @Test("환경변수에서 읽는다")

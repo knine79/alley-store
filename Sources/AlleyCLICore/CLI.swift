@@ -22,6 +22,9 @@ public enum CLI {
           --app <번들 ID>      토큰이 이 앱의 것인지 확인한다
           --notes <문자열>     릴리즈 노트
           --min-os <문자열>    실행에 필요한 최소 macOS 버전 (예: 14.0)
+          --entitlements <경로>
+                               서명할 때 붙일 entitlements plist.
+                               \(EntitlementsGuidance.whenNeeded)
           --signed             이미 서명·공증을 마친 완성본이다. 서명 단계를 건너뛴다
           --release            올린 뒤 곧바로 출시한다 (--signed 일 때만)
 
@@ -31,6 +34,7 @@ public enum CLI {
 
         예시:
           alley upload build/MyApp.zip --version 1.2.0
+          alley upload build/MyApp.zip --version 1.2.0 --entitlements build/app.entitlements
           alley upload build/MyApp.zip --version 1.2.0 --signed --release
         """
 
@@ -124,7 +128,7 @@ public enum CLI {
     static func parseUpload(_ raw: [String]) throws -> UploadCommand.Options {
         let arguments = try Arguments(
             raw,
-            valueOptions: ["version", "build", "app", "notes", "min-os"],
+            valueOptions: ["version", "build", "app", "notes", "min-os", "entitlements"],
             flagOptions: ["signed", "release"]
         )
 
@@ -145,9 +149,41 @@ public enum CLI {
             releaseNotes: arguments.string("notes"),
             minimumOSVersion: arguments.string("min-os"),
             uploadKind: arguments.flag("signed") ? .signed : .unsigned,
+            entitlements: try readEntitlements(at: arguments.string("entitlements")),
             releaseAfterUpload: arguments.flag("release"),
             expectedBundleID: arguments.string("app")
         )
+    }
+
+    /// `--entitlements` 가 가리키는 파일을 읽어 XML 원문으로 돌려준다.
+    ///
+    /// **여기서 형식까지 본다.** 파일이 없거나 plist 가 아닌 것은 서버 문제가 아니라 인자
+    /// 실수라, 요청을 보내기 전에 종료 코드 2 로 끝낸다. 파이프라인이 그 차이로
+    /// 재시도할지를 판단한다.
+    static func readEntitlements(at path: String?) throws -> String? {
+        guard let path else { return nil }
+
+        let url = URL(fileURLWithPath: path)
+        guard let data = try? Data(contentsOf: url) else {
+            throw UsageError(
+                """
+                --entitlements 가 가리키는 파일을 읽지 못했습니다: \(path)
+                \(EntitlementsGuidance.whereToFind)
+                """
+            )
+        }
+        guard let xml = String(data: data, encoding: .utf8) else {
+            throw UsageError(
+                "--entitlements 파일이 UTF-8 텍스트가 아닙니다: \(path). XML plist 여야 합니다."
+            )
+        }
+
+        do {
+            try EntitlementsPlist.validate(xml)
+        } catch let error as EntitlementsPlist.PlistError {
+            throw UsageError("\(path): \(error)")
+        }
+        return xml
     }
 }
 

@@ -16,6 +16,11 @@ public struct UploadCommand: Sendable {
         public var releaseNotes: String?
         public var minimumOSVersion: String?
         public var uploadKind: UploadKind
+        /// 서명할 때 붙일 entitlements plist 의 XML 원문 (ADR-0020).
+        ///
+        /// 파일을 읽는 것은 인자 파싱 쪽이 한다. 파일이 없거나 plist 가 아닌 것은
+        /// 서버에 붙기 전에 걸러야 할 인자 실수다.
+        public var entitlements: String?
         /// 올린 뒤 곧바로 출시할지. 미서명 업로드는 서명이 끝나야 하므로 쓸 수 없다.
         public var releaseAfterUpload: Bool
         /// 토큰이 가리키는 앱이 이것인지 확인한다. 파이프라인에 엉뚱한 토큰이
@@ -29,6 +34,7 @@ public struct UploadCommand: Sendable {
             releaseNotes: String? = nil,
             minimumOSVersion: String? = nil,
             uploadKind: UploadKind = .unsigned,
+            entitlements: String? = nil,
             releaseAfterUpload: Bool = false,
             expectedBundleID: String? = nil
         ) {
@@ -38,6 +44,7 @@ public struct UploadCommand: Sendable {
             self.releaseNotes = releaseNotes
             self.minimumOSVersion = minimumOSVersion
             self.uploadKind = uploadKind
+            self.entitlements = entitlements
             self.releaseAfterUpload = releaseAfterUpload
             self.expectedBundleID = expectedBundleID
         }
@@ -104,7 +111,8 @@ public struct UploadCommand: Sendable {
                 buildNumber: build,
                 releaseNotes: options.releaseNotes,
                 minimumOSVersion: options.minimumOSVersion,
-                uploadKind: options.uploadKind
+                uploadKind: options.uploadKind,
+                entitlements: options.entitlements
             ),
             ofApp: app.id
         )
