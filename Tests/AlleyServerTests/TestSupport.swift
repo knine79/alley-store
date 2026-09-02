@@ -163,8 +163,9 @@ final class FakeArtifactStorage: ArtifactStoring, @unchecked Sendable {
     }
 
     func head(key: String) async throws -> Int64? {
+        if isUnavailable { throw Unavailable() }
         // NSLock 은 async 함수 안에서 직접 잠글 수 없다. 잠그는 구간을 동기 함수로 뺀다.
-        size(of: key)
+        return size(of: key)
     }
 
     private func size(of key: String) -> Int64? {
@@ -179,6 +180,7 @@ final class FakeArtifactStorage: ArtifactStoring, @unchecked Sendable {
     }
 
     func delete(key: String) async throws {
+        if isUnavailable { throw Unavailable() }
         // NSLock 은 async 함수 안에서 직접 잠글 수 없다. 잠그는 구간을 동기 함수로 뺀다.
         forget(key)
     }

@@ -39,6 +39,12 @@ public func configure(_ app: Application, config: AppConfig) async throws {
             await StalledJobSweep.run(on: application)
         }
     )
+    // 업로드 통지 없이 버려진 draft 와 그 오브젝트를 지운다.
+    app.lifecycle.use(
+        PeriodicSweep(name: "방치된 draft 청소", interval: DraftSweep.checkInterval) { application in
+            await DraftSweep.run(on: application)
+        }
+    )
 
     try routes(app)
 }

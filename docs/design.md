@@ -278,6 +278,10 @@ stateDiagram-v2
 전이 규칙은 `VersionState.allowedNextStates`에 박아두어 단계를 건너뛰는 경로를
 타입 수준에서 막습니다. 위 그림과 코드가 어긋나면 코드가 기준입니다.
 
+`draft`에서 아무 데도 가지 못한 버전은 서버가 지웁니다. 업로드를 시작만 하고 완료를
+알리지 않으면 행과 오브젝트가 계속 쌓이기 때문입니다. 보관 기간과 그 대가는
+[ADR-0019](adr/0019-abandoned-draft-cleanup.md)에 있습니다.
+
 ### 5.3 서명 워커
 
 - Swift 실행 파일 + `launchd` LaunchAgent. 설치 스크립트 제공

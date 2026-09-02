@@ -92,6 +92,16 @@ MINIO_CORS_ALLOW_ORIGIN=https://store.example.com,https://console.example.com
 
 비밀값과 부팅에 필요한 값(데이터베이스 주소 등)은 계속 `.env` 에 있습니다.
 
+### 버려진 업로드는 알아서 지워집니다
+
+버전을 만들었다가 업로드를 마치지 않으면 그 버전은 `draft` 로 남고, 스토리지에 올라간
+파일이 있으면 그것도 함께 남습니다. 서버가 한 시간에 한 번 훑어서 `DRAFT_RETENTION_HOURS`
+(기본 72시간)를 넘긴 것을 지웁니다. 오브젝트도 같이 지웁니다
+([ADR-0019](adr/0019-abandoned-draft-cleanup.md)).
+
+이 값을 `S3_PRESIGNED_URL_TTL` 보다 짧게 두지 마세요. 아직 올리고 있는 파일의 자리를
+지우게 됩니다.
+
 ## 3. 서명 워커 설치
 
 인증서를 보관할 맥에서:

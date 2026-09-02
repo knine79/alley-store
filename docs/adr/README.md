@@ -26,6 +26,7 @@
 | [0016](0016-server-handles-small-uploads.md) | 피드백 스크린샷은 서버가 직접 받는다 | 수락됨 | 2026-09-01 |
 | [0017](0017-sparkle-feed-tokens.md) | Sparkle 피드는 앱별 읽기 전용 토큰을 주소에 실어 인증한다 | 수락됨 | 2026-09-01 |
 | [0018](0018-stalled-signing-job-recovery.md) | 멈춘 서명 잡은 서버가 주기적으로 훑어 큐로 되돌린다 | 수락됨 | 2026-09-02 |
+| [0019](0019-abandoned-draft-cleanup.md) | 버려진 draft 는 보관 기간이 지나면 오브젝트까지 함께 지운다 | 수락됨 | 2026-09-02 |
 
 ## 언제 쓰나
 

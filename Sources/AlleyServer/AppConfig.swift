@@ -17,6 +17,11 @@ public struct AppConfig: Sendable {
     public var appStoreConnect: AppStoreConnectConfig?
     /// 사용자와 워커가 접근하는 서버의 공개 주소. 콜백 URL 구성에 쓴다.
     public var publicBaseURL: String
+    /// 업로드 통지 없이 버려진 `draft` 버전을 지우기까지 기다리는 시간(초).
+    ///
+    /// **presigned 업로드 URL 의 수명보다 반드시 길어야 한다.** 그보다 짧으면 아직
+    /// 올리고 있는 파일의 자리를 지우게 된다 (`DraftSweep`).
+    public var draftRetention: TimeInterval
 
     /// 환경변수에만 존재하는 스토어 설정.
     ///
@@ -202,7 +207,11 @@ extension AppConfig {
                 sessionTTL: try integer("SESSION_TTL", default: 60 * 60 * 24 * 7)
             ),
             appStoreConnect: appStoreConnectConfig(),
-            publicBaseURL: try required("PUBLIC_BASE_URL")
+            publicBaseURL: try required("PUBLIC_BASE_URL"),
+            // 기본 사흘. presigned 업로드 URL 의 기본 수명(1시간)의 일흔두 배라
+            // 아직 올리는 중인 업로드를 지울 여지가 없고, 금요일 저녁에 버려진
+            // 업로드가 월요일 아침까지는 남아 있다.
+            draftRetention: TimeInterval(try integer("DRAFT_RETENTION_HOURS", default: 72) * 3600)
         )
     }
 }
