@@ -285,7 +285,11 @@ stateDiagram-v2
 
 ### 5.3 서명 워커
 
-- Swift 실행 파일 + `launchd` LaunchAgent. 설치 스크립트 제공
+- 서명·공증된 `.app` 번들 + `launchd` LaunchAgent. 설치 스크립트 제공. 번들을 한 번
+  만들어 여러 워커 맥에 나눠주므로 워커 맥에는 소스도 Swift 툴체인도 필요 없습니다.
+  조립·서명 경로는 스토어 앱과 공통이고(`scripts/lib/bundle.sh`), UI 가 없는데도 번들로
+  만드는 것은 공증 티켓을 스테이플할 자리가 필요해서입니다
+  ([ADR-0022](adr/0022-worker-as-signed-app-bundle.md))
 - 워커가 서버로 long-poll (`GET /api/v1/worker/jobs/next`). 인바운드 포트 불필요
 - 워커 등록: 관리자가 웹 콘솔에서 토큰 발급 → 워커 설정에 기입
 - 잡 처리 순서:

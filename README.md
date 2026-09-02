@@ -100,15 +100,28 @@ swift run alley-worker preflight
 `preflight` 는 서명과 공증에 필요한 것들이 실제로 준비됐는지 확인합니다.
 잡을 받은 뒤 환경 문제로 실패하는 상황을 미리 걸러냅니다.
 
-확인이 끝나면 설치합니다. `launchd` 에 등록해서 로그인할 때마다 뜨게 합니다.
+확인이 끝나면 설치합니다. 워커는 서명·공증된 `.app` 번들로 배포하고, `launchd` 에
+등록해서 로그인할 때마다 뜨게 합니다
+([ADR-0022](docs/adr/0022-worker-as-signed-app-bundle.md)).
 
 ```bash
-./scripts/install-worker.sh
+# 인증서가 있는 맥에서 번들을 만듭니다
+./scripts/build-worker-app.sh --sign
+
+# 나온 zip 을 워커 맥으로 옮겨 설치합니다
+./install-worker.sh --bundle alley-worker.zip
 ```
 
+**워커 맥에는 소스도 Swift 툴체인도 필요 없습니다.** 번들 zip 과 `install-worker.sh`
+하나면 됩니다. 번들을 한 번 만들어 여러 워커 맥에 나눠주는 것이 원래 의도한
+방식입니다. 레포가 있는 맥이라면 `--bundle` 없이 불러 그 자리에서 빌드해도 됩니다.
+
 서명 키는 로그인 키체인에 있고 그 키체인은 로그아웃 상태에서 잠겨 있으므로,
-시스템 데몬이 아니라 LaunchAgent 로 설치합니다. 로그는
+시스템 데몬이 아니라 LaunchAgent 로 설치합니다. 설치 위치는
+`~/Library/Application Support/alley-worker/alley-worker.app` 이고, 로그는
 `~/Library/Logs/alley-worker.log` 에 쌓입니다.
+
+전체 절차는 [셀프호스팅 가이드](docs/self-hosting.md#3-서명-워커-설치)에 있습니다.
 
 ### CI 에서 올리기
 

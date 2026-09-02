@@ -29,6 +29,7 @@
 | [0019](0019-abandoned-draft-cleanup.md) | 버려진 draft 는 보관 기간이 지나면 오브젝트까지 함께 지운다 | 수락됨 | 2026-09-02 |
 | [0020](0020-uploader-provides-entitlements.md) | entitlements 는 업로더가 버전과 함께 올린다 | 수락됨 | 2026-09-02 |
 | [0021](0021-publish-server-container-image.md) | 서버를 컨테이너 이미지로 발행한다 | 수락됨 | 2026-09-02 |
+| [0022](0022-worker-as-signed-app-bundle.md) | 서명 워커를 서명·공증된 `.app` 번들로 배포한다 | 수락됨 | 2026-09-02 |
 
 ## 언제 쓰나
 

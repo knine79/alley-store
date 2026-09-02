@@ -145,7 +145,13 @@ MINIO_CORS_ALLOW_ORIGIN=https://store.example.com,https://console.example.com
 
 ## 3. 서명 워커 설치
 
-인증서를 보관할 맥에서:
+워커는 서명·공증된 `.app` 번들로 배포합니다
+([ADR-0022](adr/0022-worker-as-signed-app-bundle.md)). 번들을 한 번 만들어 워커 맥에
+가져다 놓는 두 단계입니다.
+
+### 번들 만들기
+
+레포와 Swift 툴체인, Developer ID 인증서가 있는 맥에서 합니다.
 
 ```bash
 # 공증 자격증명을 키체인에 저장합니다 (한 번만)
@@ -154,16 +160,49 @@ xcrun notarytool store-credentials "alley-notary" \
     --team-id "TEAMID" \
     --password "앱 암호"
 
-# 웹 콘솔의 관리 > 서명 워커에서 토큰을 발급받은 뒤
-./scripts/install-worker.sh
+export ALLEY_WORKER_BUNDLE_ID="com.example.alley.worker"
+export ALLEY_SIGNING_IDENTITY="Developer ID Application: Example Inc. (TEAMID)"
+export ALLEY_NOTARY_PROFILE="alley-notary"
+
+./scripts/build-worker-app.sh --sign
 ```
 
-스크립트가 환경을 점검하고 `launchd` 에 등록합니다. 로그는
+`.build/worker-app/alley-worker.zip` 이 나옵니다. 서명·공증·스테이플까지 끝난
+번들입니다. 공증은 Apple 서버가 처리하는 동안 몇 분에서 몇십 분 걸립니다.
+
+`--sign` 을 빼면 서명하지 않은 번들만 나옵니다. 그 번들은 만든 맥에서만 쓸 수
+있습니다.
+
+### 워커 맥에 설치하기
+
+**워커 맥에는 소스도 Swift 툴체인도 필요 없습니다.** 필요한 것은 위에서 만든 zip 과
+설치 스크립트 하나뿐입니다. 인증서를 보관하는 맥에 컴파일러와 패키지 매니저를 깔아둘
+이유가 없고, 워커를 두 대 이상 붙일 때도 번들 하나를 나눠주면 됩니다.
+
+```bash
+curl -fsSL -O https://raw.githubusercontent.com/<소유자>/<레포>/main/scripts/install-worker.sh
+chmod +x install-worker.sh
+
+# 웹 콘솔의 관리 > 서명 워커에서 토큰을 발급받은 뒤
+./install-worker.sh --bundle ~/Downloads/alley-worker.zip
+```
+
+스크립트가 번들의 서명을 확인하고, 환경을 점검한 뒤 `launchd` 에 등록합니다. 설치
+위치는 `~/Library/Application Support/alley-worker/alley-worker.app` 이고, 로그는
 `~/Library/Logs/alley-worker.log` 에 쌓입니다.
+
+레포가 있는 맥에 그대로 설치할 때는 `--bundle` 없이 `./scripts/install-worker.sh` 로
+부릅니다. 그 자리에서 빌드해 설치합니다.
 
 **시스템 데몬이 아니라 LaunchAgent 입니다.** 서명에 쓰는 개인키가 로그인 키체인에
 있고, 그 키체인은 로그아웃 상태에서 잠겨 있기 때문입니다. 그 맥은 로그인된 채로
 두어야 합니다.
+
+**워커 릴리스를 누가 언제 만드는지는 아직 정하지 않았습니다.** 지금은 인증서를 가진
+사람이 자기 맥에서 `--sign` 을 돌리는 것 말고 절차가 없습니다. CI 에서 만들려면
+Developer ID 개인키를 CI 에 두어야 하는데, 그것은 서명을 별도 맥으로 뺀 이유
+([ADR-0002](adr/0002-pull-based-signing-worker.md))를 정면으로 거스릅니다.
+ADR-0022 의 후속 과제입니다.
 
 ## 4. 스토어 앱 배포
 
@@ -285,7 +324,10 @@ docker compose run --rm server migrate --revert --yes
 이미지로 배포되는 것은 서버뿐입니다. 워커와 스토어 앱은 macOS 바이너리라 컨테이너에
 담기지 않습니다.
 
-- **워커**: 그 맥에서 소스를 받아 `./scripts/install-worker.sh` 를 다시 돌립니다
+- **워커**: 번들을 새로 만들어(`./scripts/build-worker-app.sh --sign`) 워커 맥에서
+  `./install-worker.sh --bundle <새 zip>` 을 다시 돌립니다 (3번 참조). 갈아끼우기 전에
+  돌던 워커를 내리고 통째로 바꾸므로, 서명 중인 잡이 없을 때 하세요. **자동 업데이트는
+  아직 없습니다.** 워커 맥마다 사람이 갑니다
 - **스토어 앱**: 새 빌드를 스토어에 올리면 앱이 스스로 갈아끼웁니다. 첫 배포만 사람이
   나눠줍니다 (4번 참조)
 
@@ -328,7 +370,9 @@ appcast 로 스스로 업데이트하는 앱이 있을 때만 해당됩니다. �
 
 ### 어디에 있나
 
-개인키는 워커 머신의 launchd 설정에 평문으로 들어갑니다.
+개인키는 워커 머신의 launchd 설정에 평문으로 들어갑니다. 워커 번들 자체는
+`~/Library/Application Support/alley-worker/alley-worker.app` 에 설치되고, 아래 설정이
+그 안의 실행 파일을 가리킵니다.
 
 ```
 ~/Library/LaunchAgents/com.example.alley-worker.plist
@@ -397,8 +441,11 @@ identity 로 서명돼 있습니다. **코드 서명 쪽이 이어져 있는 한
 2. **워커를 새 키로 바꾼다**
 
    ```bash
-   ALLEY_SPARKLE_PRIVATE_KEY="<새 키>" ./scripts/install-worker.sh
+   ALLEY_SPARKLE_PRIVATE_KEY="<새 키>" ./install-worker.sh --bundle <지금 쓰는 zip>
    ```
+
+   키만 바꾸는 것이라 워커 번들은 그대로 두어도 됩니다. 지금 설치된 것과 같은 zip 을
+   다시 주면 됩니다.
 
    이때부터 새로 서명되는 결과물은 전부 새 키로 서명됩니다. appcast 에 이미 올라가
    있는 옛 버전의 서명은 그대로 남아 옛 키로 계속 검증됩니다.
