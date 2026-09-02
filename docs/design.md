@@ -187,11 +187,13 @@ alley-store/
 │   ├── AlleyWorkerCore/   # 서명 워커의 동작
 │   ├── AlleyWorker/       # 워커 실행 파일
 │   ├── AlleyStoreCore/    # SwiftUI 스토어 앱 (macOS 전용)
-│   └── AlleyStore/        # 앱 실행 파일
+│   ├── AlleyStore/        # 앱 실행 파일
+│   ├── AlleyCLICore/      # CI 에서 버전을 올리는 alley 명령
+│   └── AlleyCLI/          # CLI 실행 파일
 ├── Tests/
 ├── Resources/Views/       # 웹 콘솔 Leaf 템플릿
 ├── Public/                # 웹 콘솔 정적 파일 (CSS, 업로드 스크립트)
-├── scripts/               # 워커 설치, 앱 번들 조립, 금칙어 검사
+├── scripts/               # 워커·앱 번들 조립과 설치, 금칙어·자격증명 검사
 ├── docker-compose.yml          # 발행된 이미지를 받아 띄운다
 ├── docker-compose.override.yml # 로컬에서는 소스로 짓는다 (ADR-0021)
 ├── Dockerfile
@@ -298,9 +300,12 @@ stateDiagram-v2
    Electron 인데 JIT 권한이 없어도 여기서 실패)
   3. `codesign --force --options runtime --sign "..."` (내부 프레임워크·헬퍼 포함
    inside-out 서명)
-  4. `xcrun notarytool submit --wait`
-  5. `xcrun stapler staple`
-  6. 결과물을 presigned URL로 업로드, 상태·로그 보고
+  4. 번들 안의 Mach-O 를 훑어 재서명되지 않은 것이 남았는지 따로 센다.
+   `codesign --verify --deep --strict` 는 프레임워크 안의 dylib 이 링커가 붙인
+   ad-hoc 서명 그대로 남아 있어도 통과시킨다
+  5. `xcrun notarytool submit --wait`
+  6. `xcrun stapler staple`
+  7. 결과물을 presigned URL로 업로드, 상태·로그 보고
 
 #### 서명할 때 붙이는 entitlements
 
