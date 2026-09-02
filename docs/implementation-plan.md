@@ -21,7 +21,7 @@
 
 ---
 
-## Phase 0. 프로젝트 셋업 — 완료
+## Phase 0. 프로젝트 셋업 - 완료
 
 - [x] 모노레포 스캐폴딩 (Package.swift: 서버·워커·공유)
 - [x] docker-compose (server + postgres + minio), Dockerfile (멀티스테이지)
@@ -34,7 +34,7 @@
 목표: 로그인 → 앱 등록/업로드 → 자동 서명·공증 → 스토어 앱에서 다운로드·설치가
 끝까지 동작한다.
 
-### 1-1. 서버 기초 (1주) — 완료
+### 1-1. 서버 기초 (1주) - 완료
 
 - [x] `/api/v1/meta`, 스토어 설정
 - [x] Google OAuth 플로우 + 도메인 서버 검증 + JWT 세션 ([ADR-0008](adr/0008-session-token-design.md))
@@ -46,7 +46,7 @@
 **선행 조건**: Google Cloud Console에서 OAuth 클라이언트 발급 (완료).
 프로젝트 `alley-store`, 동의 화면 Internal, 웹 애플리케이션 클라이언트.
 
-### 1-2. 앱/버전/아티팩트 (1주) — 완료
+### 1-2. 앱/버전/아티팩트 (1주) - 완료
 
 - [x] apps/versions/artifacts CRUD + 권한 (developer만 등록, app_members만 업로드)
 - [x] 앱 등록 시 번들 ID 검증 (프리픽스 준수 + 중복 차단), 번들 ID 대장 조회
@@ -63,7 +63,7 @@
 멀티파트 업로드는 넣지 않았습니다. 사내망에서 수백 MB를 올리는 상황이라 단순
 재시도로 충분하다고 봤습니다. 근거와 대안은 ADR-0009에 있습니다.
 
-### 1-3. 서명 워커 (1주) — 코드 완료, E2E 미검증
+### 1-3. 서명 워커 (1주) - 코드 완료, E2E 미검증
 
 - [x] signing_jobs 큐 + 워커 API (long-poll, 클레임, 하트비트)
 - [x] 워커 토큰 발급·폐기 (API + 관리자 화면, [ADR-0013](adr/0013-worker-token-authentication.md))
@@ -103,7 +103,7 @@
 ([ADR-0020](adr/0020-uploader-provides-entitlements.md)). **빼먹으면 여전히 조용히
 잘못된 앱이 나갑니다.** Electron 만 서명 전에 걸러냅니다.
 
-### 1-4. 웹 콘솔 (0.5~1주, 1-2와 병행 가능) — 완료
+### 1-4. 웹 콘솔 (0.5~1주, 1-2와 병행 가능) - 완료
 
 - [x] 스토어 설정을 데이터베이스로 이전 ([ADR-0011](adr/0011-store-settings-in-database.md))
 - [x] 관리자 API: 스토어 설정 조회/수정, 사용자 역할 변경
@@ -130,7 +130,7 @@ preflight 와 실제 `PUT` 양쪽에 헤더를 붙여줘서 [ADR-0009](adr/0009-
 앱 멤버 추가·제거 화면과 콘솔에서의 다운로드도 아직 없습니다. 멤버는 API 로,
 다운로드는 스토어 앱으로 합니다.
 
-### 1-5. 스토어 앱 (1~1.5주, 병행 가능) — 완료
+### 1-5. 스토어 앱 (1~1.5주, 병행 가능) - 완료
 
 - [x] SwiftPM 타깃 + 번들 조립 스크립트 (비샌드박스 + Hardened Runtime,
       [ADR-0014](adr/0014-store-app-without-xcode-project.md))
@@ -159,7 +159,7 @@ preflight 와 실제 `PUT` 양쪽에 헤더를 붙여줘서 [ADR-0009](adr/0009-
 컨테이너 안에서 마이그레이션이 도는 것까지 로컬에서 확인했습니다. **레지스트리에서
 실제로 받아본 것은 아직 아닙니다.** CI 를 한 번 돌려야 확인됩니다.
 
-## Phase 2. 발급 자동화 + CLI (1~2주) — 대부분 완료
+## Phase 2. 발급 자동화 + CLI (1~2주) - 대부분 완료
 
 - [x] App Store Connect API 연동: 인증서 현황 조회, App ID 등록
 - [x] 와일드카드 App ID 등록 + 웹 콘솔 현황 표시 (`/admin/portal`)
@@ -188,7 +188,7 @@ alley upload build/MyApp.zip --version 1.2.0
 **App Store Connect 연동은 실제 키로 확인하지 못했습니다.** JWT 조립과 응답 해석,
 만료 판단은 테스트로 확인했지만, Apple 이 그 토큰을 받아주는지는 키가 있어야 압니다.
 
-## Phase 3. 별점 + 피드백 + 알림 (1~2주) — 완료
+## Phase 3. 별점 + 피드백 + 알림 (1~2주) - 완료
 
 - [x] 별점(1~5, 버전별), 피드백(텍스트 + 스크린샷 첨부, [ADR-0016](adr/0016-server-handles-small-uploads.md))
 - [x] 스토어 앱/웹에 별점·리뷰 UI
@@ -213,7 +213,7 @@ alley upload build/MyApp.zip --version 1.2.0
 스토어 앱은 지금 깔려 있는 버전이 최신 출시본과 같을 때만 폼을 띄웁니다. 앱이 아는
 것이 "설치된 버전"뿐이라서입니다. 예전 버전에 남기려면 웹 콘솔을 씁니다.
 
-## Phase 4. 마무리 (1~2주) — 완료
+## Phase 4. 마무리 (1~2주) - 완료
 
 - [x] Sparkle appcast 엔드포인트 + 앱별 피드 토큰
       ([ADR-0017](adr/0017-sparkle-feed-tokens.md))
@@ -231,7 +231,7 @@ alley upload build/MyApp.zip --version 1.2.0
 받아갔다는 사실까지입니다. 설치 완료를 알려면 스토어 앱이 따로 보고해야 하는데,
 그 값이 크지 않다고 봤습니다.
 
-## 다음. 워커 자동 업데이트 — 시작 전
+## 다음. 워커 자동 업데이트 - 시작 전
 
 - [ ] 워커가 새 번들이 나왔는지 확인하고 받아온다
 - [ ] 잡을 잡고 있지 않을 때만 자기를 갈아끼운다
