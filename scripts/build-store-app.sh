@@ -6,6 +6,8 @@
 # 디렉터리 구조가 필요해서, 그 껍데기를 여기서 씌운다. Xcode 프로젝트를 두지 않는
 # 이유는 ADR-0014 에 있다.
 #
+# 서명·공증 절차는 워커 번들과 같아서 scripts/lib/bundle.sh 에 모아두었다(ADR-0022).
+#
 # 사용법:
 #   ./scripts/build-store-app.sh                 번들만 만든다
 #   ./scripts/build-store-app.sh --sign          서명·공증까지 한다
@@ -35,6 +37,9 @@ APP_DIR="$OUTPUT_DIR/$APP_NAME.app"
 
 info() { printf '\033[1m%s\033[0m\n' "$*"; }
 die() { printf '오류: %s\n' "$*" >&2; exit 1; }
+
+# shellcheck source=lib/bundle.sh
+. "$REPO_ROOT/scripts/lib/bundle.sh"
 
 [ "$(uname -s)" = "Darwin" ] || die "스토어 앱은 macOS 에서만 만들 수 있습니다."
 
@@ -96,22 +101,16 @@ PLIST_EOF
 info "번들을 만들었습니다: $APP_DIR"
 
 if [ "${1:-}" != "--sign" ]; then
+    bundle_seal_adhoc "$APP_DIR"
     echo
     echo "서명하지 않은 번들입니다. 다른 맥에서 실행하려면 --sign 으로 다시 만드세요."
     exit 0
 fi
 
-[ -n "${ALLEY_SIGNING_IDENTITY:-}" ] || die "ALLEY_SIGNING_IDENTITY 가 필요합니다."
-
-info "서명합니다..."
-# Hardened Runtime 은 Developer ID 배포의 필수 조건이다. 샌드박스는 쓰지 않는다(ADR-0007).
-codesign --force --options runtime --timestamp \
-    --sign "$ALLEY_SIGNING_IDENTITY" "$APP_DIR"
-codesign --verify --deep --strict --verbose=2 "$APP_DIR"
+bundle_sign "$APP_DIR"
 
 ARCHIVE="$OUTPUT_DIR/$APP_NAME.zip"
-rm -f "$ARCHIVE"
-ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$ARCHIVE"
+bundle_archive "$APP_DIR" "$ARCHIVE"
 
 if [ -z "${ALLEY_NOTARY_PROFILE:-}" ]; then
     echo
@@ -120,14 +119,7 @@ if [ -z "${ALLEY_NOTARY_PROFILE:-}" ]; then
     exit 0
 fi
 
-info "공증을 요청합니다. 몇 분 걸립니다..."
-xcrun notarytool submit "$ARCHIVE" \
-    --keychain-profile "$ALLEY_NOTARY_PROFILE" \
-    --wait --timeout 45m
-
-xcrun stapler staple "$APP_DIR"
-rm -f "$ARCHIVE"
-ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$ARCHIVE"
+bundle_notarize "$APP_DIR" "$ARCHIVE"
 
 info "끝났습니다: $ARCHIVE"
 echo "이 zip 을 웹 콘솔에 '서명·공증 완료' 로 올리면 스토어 앱 자신도 스토어에서 배포됩니다."
