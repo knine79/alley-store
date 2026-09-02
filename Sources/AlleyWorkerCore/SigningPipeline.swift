@@ -72,11 +72,19 @@ public struct SigningPipeline: Sendable {
 
         await progress(.validating, "번들: \(bundle.url.lastPathComponent)")
         let targets = try bundle.codeToSign()
-        try await validate(bundle: bundle)
+        // 업로더가 준 plist 가 있으면 그것이 진실이다 (ADR-0020).
+        let provided = job.entitlements.map { Data($0.utf8) }
+        let declaredKeys = try await validate(bundle: bundle, provided: provided)
 
-        await progress(.codesigning, "서명 대상 \(targets.count)개")
+        var codesigningDetail = "서명 대상 \(targets.count)개"
+        if declaredKeys.isEmpty {
+            // 실패시키지 않는다. 네이티브 맥 앱은 대부분 정말로 권한이 필요 없다.
+            // 다만 나중에 "왜 안 붙었나"를 물을 사람을 위해 잡 로그에 남긴다.
+            codesigningDetail += "\n\n\(EntitlementsGuidance.noneProvided)"
+        }
+        await progress(.codesigning, codesigningDetail)
         for target in targets {
-            try await sign(target, workspace: workspace)
+            try await sign(target, workspace: workspace, provided: provided)
         }
         try await verifySignature(of: bundle)
 
@@ -135,19 +143,49 @@ public struct SigningPipeline: Sendable {
         }
     }
 
-    private func validate(bundle: AppBundle) async throws {
-        let declared = await Entitlements.read(of: bundle.url)
-        try Entitlements.validate(
-            bundle: bundle.url,
-            declaredKeys: Entitlements.keys(fromPropertyList: declared)
+    /// 서명하기 전에 번들을 살펴본다. 실제로 붙게 될 권한 키를 돌려준다.
+    ///
+    /// 업로더가 plist 를 줬으면 그것이 기준이고, 안 줬으면 번들에 붙어 있는 것을 읽는다.
+    /// 재서명이라면 후자가 맞다.
+    @discardableResult
+    private func validate(bundle: AppBundle, provided: Data?) async throws -> [String] {
+        // `??` 의 오른쪽은 autoclosure 라 await 를 넣을 수 없다. 풀어서 쓴다.
+        let declared: Data
+        if let provided {
+            declared = provided
+        } else {
+            declared = await Entitlements.read(of: bundle.url)
+        }
+
+        let keys = Entitlements.keys(fromPropertyList: declared)
+        try Entitlements.validate(bundle: bundle.url, declaredKeys: keys)
+        try requireJITForElectron(bundle: bundle, declaredKeys: keys)
+        return keys
+    }
+
+    /// Electron 을 품었는데 JIT 권한이 없으면 서명하기 전에 멈춘다.
+    ///
+    /// 이대로 서명하면 **공증은 통과한다.** 실행만 안 된다. 그런 앱이 나가면 원인을
+    /// 찾는 데 하루가 걸리므로 여기서 잡는다.
+    ///
+    /// **이 검사는 Electron 하나만 안다. 일반화되지 않는다.** JVM, Mono, 자체 JIT 를 쓰는
+    /// 게임 엔진처럼 같은 이유로 깨지는 런타임을 전혀 잡지 못한다. 그런 앱은 여기를 조용히
+    /// 통과한 뒤 사용자의 맥에서 죽는다. 다른 런타임까지 알아보게 만들려면 번들 안의
+    /// 바이너리가 무엇을 링크했는지 봐야 하는데, 그건 이 검사가 감당할 범위를 넘는다.
+    func requireJITForElectron(bundle: AppBundle, declaredKeys: [String]) throws {
+        guard bundle.containsElectronFramework,
+              !declaredKeys.contains(EntitlementsGuidance.jitKey)
+        else {
+            return
+        }
+        throw PipelineError.commandFailed(
+            step: "번들 검사",
+            detail: EntitlementsGuidance.missingJIT(bundle: bundle.url.lastPathComponent)
         )
     }
 
     /// 하나를 서명한다.
-    ///
-    /// 붙어 있던 권한을 꺼내 다시 넘긴다. 넘기지 않으면 재서명 과정에서 권한이
-    /// 사라지고, 앱은 실행되지만 그 기능만 조용히 죽는다.
-    private func sign(_ target: URL, workspace: URL) async throws {
+    private func sign(_ target: URL, workspace: URL, provided: Data?) async throws {
         var arguments = [
             "--force",
             "--sign", config.signingIdentity,
@@ -157,10 +195,8 @@ public struct SigningPipeline: Sendable {
             "--timestamp",
         ]
 
-        let entitlements = await Entitlements.read(of: target)
-        let file = workspace.appendingPathComponent("entitlements-\(UUID().uuidString).plist")
-        if let written = Entitlements.writePropertyList(entitlements, to: file) {
-            arguments += ["--entitlements", written.path]
+        if let file = await entitlementsFile(for: target, provided: provided, workspace: workspace) {
+            arguments += ["--entitlements", file.path]
         }
         arguments.append(target.path)
 
@@ -171,6 +207,35 @@ public struct SigningPipeline: Sendable {
                 detail: result.combinedOutput
             )
         }
+    }
+
+    /// 이 대상에 붙일 권한 파일. 붙일 것이 없으면 nil.
+    ///
+    /// **업로더가 준 plist 는 `.app` 번들에만 붙인다.** 메인 앱과 그 안의 헬퍼 `.app` 이
+    /// 여기 해당한다. `--entitlements` 는 번들의 주 실행 파일에 쓰는 것이고, 프레임워크나
+    /// dylib, 홀로 놓인 헬퍼 실행 파일에 붙이면 안 된다. Electron 을 서명하는 표준
+    /// 도구(@electron/osx-sign)도 비샌드박스 Developer ID 타깃에서는 헬퍼 앱들에 메인과
+    /// 같은 권한을 쓴다.
+    ///
+    /// 업로더가 줬는데 번들에도 권한이 붙어 있으면 **업로더가 준 것이 이긴다.** 명시적으로
+    /// 준 것이 서명에서 읽어 짐작한 것보다 우선이다.
+    ///
+    /// 준 것이 없으면 붙어 있던 권한을 꺼내 다시 넘긴다. 넘기지 않으면 재서명 과정에서
+    /// 권한이 사라지고, 앱은 실행되지만 그 기능만 조용히 죽는다.
+    private func entitlementsFile(
+        for target: URL,
+        provided: Data?,
+        workspace: URL
+    ) async -> URL? {
+        let data: Data
+        if let provided, target.pathExtension == "app" {
+            data = provided
+        } else {
+            data = await Entitlements.read(of: target)
+        }
+
+        let file = workspace.appendingPathComponent("entitlements-\(UUID().uuidString).plist")
+        return Entitlements.writePropertyList(data, to: file)
     }
 
     /// 서명 결과를 스스로 확인한다.

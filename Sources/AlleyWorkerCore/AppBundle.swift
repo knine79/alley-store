@@ -44,6 +44,19 @@ public struct AppBundle: Sendable {
         }
     }
 
+    /// Electron 을 품고 있는지.
+    ///
+    /// 경로 하나만 본다. Electron 앱은 예외 없이 이 자리에 프레임워크를 놓는다.
+    /// 이 프레임워크가 있으면 그 앱은 V8 을 띄우고, Hardened Runtime 아래에서 JIT 권한
+    /// 없이는 실행되자마자 죽는다.
+    public var containsElectronFramework: Bool {
+        FileManager.default.fileExists(
+            atPath: url
+                .appendingPathComponent("Contents/Frameworks/Electron Framework.framework")
+                .path
+        )
+    }
+
     /// 서명해야 하는 것들을 안쪽부터 바깥 순서로.
     ///
     /// 마지막 항목이 언제나 앱 자신이다.
