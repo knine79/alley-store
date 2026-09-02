@@ -109,6 +109,9 @@ private func configureMigrations(_ app: Application) {
     // Sparkle 피드 (ADR-0017).
     app.migrations.add(CreateFeedToken())
     app.migrations.add(AddArtifactEdSignature())
+
+    // 업로더가 함께 올리는 entitlements (ADR-0020).
+    app.migrations.add(AddVersionEntitlements())
 }
 
 /// 미들웨어 스택.

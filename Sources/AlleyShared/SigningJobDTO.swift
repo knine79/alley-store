@@ -12,6 +12,11 @@ public struct SigningJobDTO: Codable, Sendable, Identifiable, Equatable {
     public var artifactDownloadURL: String
     /// 서명·공증을 마친 결과물을 올릴 만료 있는 URL.
     public var resultUploadURL: String
+    /// 업로더가 함께 올린 entitlements plist 의 XML 원문. 안 올렸으면 nil (ADR-0020).
+    ///
+    /// 옵셔널이라 합성 디코더가 `decodeIfPresent` 로 읽는다. 이 필드를 모르는 예전
+    /// 서버가 보낸 지시서도 그대로 해석된다.
+    public var entitlements: String?
     public var expiresAt: Date
 
     public init(
@@ -20,6 +25,7 @@ public struct SigningJobDTO: Codable, Sendable, Identifiable, Equatable {
         appBundleID: String,
         artifactDownloadURL: String,
         resultUploadURL: String,
+        entitlements: String? = nil,
         expiresAt: Date
     ) {
         self.id = id
@@ -27,6 +33,7 @@ public struct SigningJobDTO: Codable, Sendable, Identifiable, Equatable {
         self.appBundleID = appBundleID
         self.artifactDownloadURL = artifactDownloadURL
         self.resultUploadURL = resultUploadURL
+        self.entitlements = entitlements
         self.expiresAt = expiresAt
     }
 }

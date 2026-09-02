@@ -183,19 +183,27 @@ public struct CreateVersionRequest: Codable, Sendable {
     public var releaseNotes: String?
     public var minimumOSVersion: String?
     public var uploadKind: UploadKind
+    /// 서명할 때 붙일 entitlements plist 의 XML 원문. 안 보내도 된다 (ADR-0020).
+    ///
+    /// 미서명 업로드에는 읽어낼 기존 서명이 없어서 워커가 이것을 짐작할 수 없다.
+    /// 파일이 1KB 도 되지 않아 presigned URL 세 단계를 새로 만들지 않고 본문에 싣는다
+    /// (ADR-0016 의 선례).
+    public var entitlements: String?
 
     public init(
         shortVersion: String,
         buildNumber: Int,
         releaseNotes: String? = nil,
         minimumOSVersion: String? = nil,
-        uploadKind: UploadKind = .unsigned
+        uploadKind: UploadKind = .unsigned,
+        entitlements: String? = nil
     ) {
         self.shortVersion = shortVersion
         self.buildNumber = buildNumber
         self.releaseNotes = releaseNotes
         self.minimumOSVersion = minimumOSVersion
         self.uploadKind = uploadKind
+        self.entitlements = entitlements
     }
 
     /// `uploadKind` 를 안 보내면 미서명으로 본다. 대부분이 그 경우다.
@@ -210,6 +218,7 @@ public struct CreateVersionRequest: Codable, Sendable {
         self.uploadKind = try container.decodeIfPresent(
             UploadKind.self, forKey: .uploadKind
         ) ?? .unsigned
+        self.entitlements = try container.decodeIfPresent(String.self, forKey: .entitlements)
     }
 }
 

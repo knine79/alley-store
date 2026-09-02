@@ -35,6 +35,12 @@ public final class Version: Model, @unchecked Sendable {
     @Enum(key: "upload_kind")
     public var uploadKind: UploadKind
 
+    /// 서명할 때 붙일 entitlements plist 의 XML 원문. 안 올렸으면 nil (ADR-0020).
+    ///
+    /// 형식은 받을 때 확인한다. 여기 들어온 것은 최상위가 사전인 plist 다.
+    @OptionalField(key: "entitlements")
+    public var entitlements: String?
+
     @Parent(key: "created_by")
     public var createdBy: User
 
@@ -64,6 +70,7 @@ public final class Version: Model, @unchecked Sendable {
         releaseNotes: String? = nil,
         minimumOSVersion: String? = nil,
         uploadKind: UploadKind,
+        entitlements: String? = nil,
         createdByID: UUID,
         state: VersionState = .draft
     ) {
@@ -74,6 +81,7 @@ public final class Version: Model, @unchecked Sendable {
         self.releaseNotes = releaseNotes
         self.minimumOSVersion = minimumOSVersion
         self.uploadKind = uploadKind
+        self.entitlements = entitlements
         self.$createdBy.id = createdByID
         self.state = state
     }
@@ -183,5 +191,25 @@ public struct CreateVersion: AsyncMigration {
 
     public func revert(on database: any Database) async throws {
         try await database.schema(Version.schema).delete()
+    }
+}
+
+/// 업로더가 함께 올린 entitlements plist 를 담을 열 (ADR-0020).
+///
+/// `CreateVersion` 을 고치지 않고 열을 덧붙인다. 이미 마이그레이션을 돌린 데이터베이스는
+/// 그 파일을 다시 실행하지 않으므로, 기존 파일을 고치면 새로 세우는 곳에서만 열이 생긴다.
+public struct AddVersionEntitlements: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        try await database.schema(Version.schema)
+            .field("entitlements", .string)
+            .update()
+    }
+
+    public func revert(on database: any Database) async throws {
+        try await database.schema(Version.schema)
+            .deleteField("entitlements")
+            .update()
     }
 }

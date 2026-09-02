@@ -108,6 +108,7 @@ public struct VersionController: RouteCollection, Sendable {
             releaseNotes: payload.releaseNotes,
             minimumOSVersion: payload.minimumOSVersion,
             uploadKind: payload.uploadKind,
+            entitlements: try Self.checkedEntitlements(payload.entitlements),
             createdByID: try principal.attributedUserID
         )
         try await version.save(on: request.db)
@@ -135,6 +136,27 @@ public struct VersionController: RouteCollection, Sendable {
             )
         )
         return response
+    }
+
+    /// 함께 올라온 entitlements 를 **받는 자리에서** 검사한다.
+    ///
+    /// 서명할 때가 되어서야 깨진 plist 를 발견하면 왕복이 길다. 그때는 워커가 이미 잡을
+    /// 물고 있고, 올린 사람은 몇 분 뒤에야 실패를 본다.
+    ///
+    /// **프로필이 필요한 권한(`com.apple.developer.*`)인지는 여기서 보지 않는다.**
+    /// 그 판단은 프로비저닝 프로필이 번들 안에 있는지에 달렸는데, 이 시점에는 바이너리가
+    /// 아직 올라오지도 않았다. 그 검사는 번들을 손에 쥔 워커가 한다.
+    private static func checkedEntitlements(_ raw: String?) throws -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        do {
+            try EntitlementsPlist.validate(trimmed)
+        } catch let error as EntitlementsPlist.PlistError {
+            throw Abort(.badRequest, reason: error.description)
+        }
+        return trimmed
     }
 
     // MARK: - 업로드 완료 통지

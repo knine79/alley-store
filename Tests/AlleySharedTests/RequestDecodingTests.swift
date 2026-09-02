@@ -58,6 +58,42 @@ struct RequestDecodingTests {
         }
     }
 
+    @Test("버전 생성은 entitlements 를 빼도 된다")
+    func versionAllowsMissingEntitlements() throws {
+        // 대부분의 앱은 안 보낸다. 필수로 보면 그 앱들이 전부 400 으로 떨어진다.
+        let request = try decode(
+            #"{"shortVersion": "1.0.0", "buildNumber": 3}"#,
+            as: CreateVersionRequest.self
+        )
+        #expect(request.entitlements == nil)
+    }
+
+    @Test("버전 생성에 entitlements 를 주면 그대로 읽는다")
+    func versionReadsEntitlements() throws {
+        let request = try decode(
+            #"{"shortVersion": "1.0.0", "buildNumber": 3, "entitlements": "<plist/>"}"#,
+            as: CreateVersionRequest.self
+        )
+        #expect(request.entitlements == "<plist/>")
+    }
+
+    @Test("서명 지시서는 entitlements 가 없어도 읽힌다")
+    func signingJobAllowsMissingEntitlements() throws {
+        // 이 필드를 모르는 예전 서버가 보낸 지시서도 워커가 그대로 해석해야 한다.
+        let job = try decode(
+            """
+            {"id": "00000000-0000-0000-0000-000000000001",
+             "versionID": "00000000-0000-0000-0000-000000000002",
+             "appBundleID": "com.example.tool",
+             "artifactDownloadURL": "https://storage.example/unsigned.zip",
+             "resultUploadURL": "https://storage.example/signed.zip",
+             "expiresAt": 0}
+            """,
+            as: SigningJobDTO.self
+        )
+        #expect(job.entitlements == nil)
+    }
+
     @Test("알림 대상은 채널을 빼면 Slack 으로 본다")
     func notificationDefaultsToSlack() throws {
         let request = try decode(

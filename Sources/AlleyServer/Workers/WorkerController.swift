@@ -154,6 +154,9 @@ public struct WorkerController: RouteCollection, Sendable {
             appBundleID: job.version.app.bundleID,
             artifactDownloadURL: download.url,
             resultUploadURL: upload.url,
+            // 올린 사람이 준 것이 있으면 실어 보낸다. 미서명 업로드에는 워커가 읽어낼
+            // 기존 서명이 없어서, 이것 없이는 권한 없이 서명된다 (ADR-0020).
+            entitlements: job.version.entitlements,
             // 둘 중 먼저 만료되는 쪽이 이 잡의 유효 기간이다.
             expiresAt: min(download.expiresAt, upload.expiresAt)
         )
