@@ -60,6 +60,30 @@ docker compose up -d
 
 `http://localhost:8080` (또는 설정한 주소)에서 로그인 화면이 뜹니다.
 
+### 스토리지가 허용할 출처
+
+버전 업로드는 서버를 거치지 않고 브라우저에서 스토리지로 바로 갑니다
+([ADR-0009](adr/0009-presigned-artifact-transfer.md)). 그래서 스토리지가 웹 콘솔의
+출처를 허용해야 합니다.
+
+docker-compose 의 MinIO 는 `PUBLIC_BASE_URL` 을 그대로 허용 출처로 씁니다. 웹 콘솔이
+서버와 같은 주소에 있으면 따로 할 일이 없습니다. 다른 출처를 더 허용해야 하면 `.env`
+에 쉼표로 구분해 적습니다.
+
+```bash
+MINIO_CORS_ALLOW_ORIGIN=https://store.example.com,https://console.example.com
+```
+
+`scheme://host:port` 형태여야 합니다. 경로나 끝의 슬래시가 붙으면 브라우저가 보내는
+`Origin` 헤더와 달라져서 막힙니다. AWS S3 를 쓰면 이 값은 아무 일도 하지 않습니다.
+버킷의 CORS 설정에 같은 출처를 넣으세요.
+
+**이것은 접근 통제가 아닙니다.** CORS 는 브라우저가 지키는 규칙이라, 허용하지 않은
+출처의 요청도 `curl` 로는 그대로 올라갑니다. 업로드를 실제로 막는 것은 presigned URL
+이고 그 주소는 로그인한 사람에게만 발급됩니다. 출처를 좁히는 것은 그 주소가 어떤
+경로로든 다른 사이트에 흘러갔을 때 그 사이트의 스크립트가 브라우저에서 바로 쓰는
+것을 막는 정도입니다.
+
 ### 설정은 어디서 바꾸나
 
 `.env` 의 값 중 **스토어 이름·로고·강조색·허용 도메인·번들 ID 프리픽스**는 최초
@@ -155,9 +179,29 @@ Incoming Webhook 주소를 넣습니다. 메일은 지원하지 않습니다.
 `OAUTH_REDIRECT_URI` 와 Google 콘솔의 승인된 URI 가 글자 하나까지 같아야 합니다.
 끝의 슬래시도 다릅니다.
 
-**업로드가 `draft` 에서 멈춤**
+**업로드가 `draft` 에서 멈춤 (브라우저 콘솔에 CORS 오류)**
 브라우저가 스토리지로 직접 올리는 구조라(ADR-0009) 스토리지에 닿지 못하면 여기서
-멈춥니다. 브라우저 콘솔에서 CORS 오류를 확인하세요.
+멈춥니다. 콘솔에 `blocked by CORS policy` 가 보이면 스토리지가 웹 콘솔의 출처를
+허용하지 않고 있습니다. 지금 무엇이 허용돼 있는지부터 봅니다.
+
+```bash
+docker compose exec minio printenv MINIO_API_CORS_ALLOW_ORIGIN
+```
+
+브라우저 주소창의 `scheme://host:port` 와 글자 하나까지 같아야 합니다.
+`https://store.example.com` 과 `https://store.example.com/` 은 다르고, `http` 와
+`https` 도 다릅니다. `.env` 를 고쳤다면 `docker compose up -d minio` 로 다시 띄워야
+반영됩니다.
+
+스토리지에 직접 물어볼 수도 있습니다. `Access-Control-Allow-Origin` 이 돌아오지
+않으면 그 출처가 막혀 있는 것입니다.
+
+```bash
+curl -si -X OPTIONS \
+     -H 'Origin: https://store.example.com' \
+     -H 'Access-Control-Request-Method: PUT' \
+     https://storage.example.com/alley-artifacts/probe | grep -i access-control
+```
 
 **서명이 계속 대기 중**
 관리 > 서명 워커에서 마지막 접속 시각을 보세요. 워커 머신이 잠자기로 들어가면

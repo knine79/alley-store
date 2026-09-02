@@ -58,6 +58,11 @@ services:
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-alleyminio}
       MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-change-me-minio-secret}
+      # 브라우저가 여기로 직접 올리므로(ADR-0009) 그 출처만 허용한다.
+      # 기본값이 PUBLIC_BASE_URL 을 따라가서, 주소만 바꿔도 업로드가 계속 된다.
+      # 콘솔과 다른 출처를 더 허용해야 하면 MINIO_CORS_ALLOW_ORIGIN 에
+      # 쉼표로 구분해 직접 적는다. 경로 없는 scheme://host:port 형태여야 한다.
+      MINIO_API_CORS_ALLOW_ORIGIN: ${MINIO_CORS_ALLOW_ORIGIN:-${PUBLIC_BASE_URL:-http://localhost:8080}}
     volumes:
       - minio-data:/data
     ports:
