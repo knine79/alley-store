@@ -44,6 +44,15 @@ public enum Shell {
         process.standardOutput = outPipe
         process.standardError = errPipe
 
+        // 종료를 `waitUntilExit()` 로 기다리지 않는다. 자식이 아주 빨리 끝나면 그
+        // 호출이 종료를 놓치고 영영 돌아오지 않는다. 실제로 300KB 를 올리는 `curl`
+        // 에서 이 일이 났다. 워커가 잡 하나를 물고 멈춰서 그 뒤로 아무 잡도 받지
+        // 못했다. 몇 초씩 걸리는 codesign·notarytool 에서는 안 나던 것이다.
+        //
+        // `terminationHandler` 는 `run()` 전에 걸어두면 그 경합이 없다.
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
+
         do {
             try process.run()
         } catch {
@@ -70,23 +79,15 @@ public enum Shell {
         }
 
         var timedOut = false
-        if let timeout {
-            let deadline = DispatchTime.now() + timeout
-            let waiter = DispatchSemaphore(value: 0)
-            DispatchQueue.global().async {
-                process.waitUntilExit()
-                waiter.signal()
-            }
-            if waiter.wait(timeout: deadline) == .timedOut {
-                timedOut = true
-                process.terminate()
-                // terminate 후에도 파이프가 닫힐 때까지 기다린다.
-                process.waitUntilExit()
-            }
-        } else {
-            process.waitUntilExit()
+        let deadline = timeout.map { DispatchTime.now() + $0 } ?? .distantFuture
+        if exited.wait(timeout: deadline) == .timedOut {
+            timedOut = true
+            process.terminate()
+            // 죽이라고 했는데도 안 죽는 경우가 있다. 그때까지 붙잡혀 있지 않는다.
+            _ = exited.wait(timeout: .now() + 10)
         }
 
+        // 파이프가 닫혀야 읽기가 끝난다. 자식이 죽으면 닫힌다.
         group.wait()
 
         return Result(
