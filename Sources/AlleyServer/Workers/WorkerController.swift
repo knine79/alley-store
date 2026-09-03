@@ -142,10 +142,14 @@ public struct WorkerController: RouteCollection, Sendable {
         let appID = job.version.$app.id
 
         let download = try await request.artifactStorage.downloadURL(
-            key: ArtifactStorage.objectKey(appID: appID, versionID: versionID, kind: .unsigned)
+            key: request.artifactStorage.newKey(
+                ArtifactStorage.objectKey(appID: appID, versionID: versionID, kind: .unsigned)
+            )
         )
         let upload = try await request.artifactStorage.uploadURL(
-            key: ArtifactStorage.objectKey(appID: appID, versionID: versionID, kind: .signed)
+            key: request.artifactStorage.newKey(
+                ArtifactStorage.objectKey(appID: appID, versionID: versionID, kind: .signed)
+            )
         )
 
         return SigningJobDTO(
@@ -239,10 +243,12 @@ public struct WorkerController: RouteCollection, Sendable {
     ) async throws {
         let version = job.version
         let versionID = try version.requireID()
-        let key = ArtifactStorage.objectKey(
-            appID: version.$app.id,
-            versionID: versionID,
-            kind: .signed
+        let key = request.artifactStorage.newKey(
+            ArtifactStorage.objectKey(
+                appID: version.$app.id,
+                versionID: versionID,
+                kind: .signed
+            )
         )
 
         // 워커가 "다 올렸다"고 말하는 것만 믿지 않는다. 여기서 확인하지 않으면

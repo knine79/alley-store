@@ -139,6 +139,12 @@ final class FakeArtifactStorage: ArtifactStoring, @unchecked Sendable {
     /// 스토리지가 죽은 상황을 흉내낸다.
     var isUnavailable = false
 
+    let keyPrefix: String
+
+    init(keyPrefix: String = "") {
+        self.keyPrefix = keyPrefix
+    }
+
     /// 누군가 이 키에 파일을 올렸다고 가정한다.
     func place(key: String, size: Int64 = 1024) {
         lock.lock()
@@ -195,8 +201,8 @@ final class FakeArtifactStorage: ArtifactStoring, @unchecked Sendable {
 extension Application {
     /// 스토리지를 흉내내는 것으로 바꾸고 그 손잡이를 돌려준다.
     @discardableResult
-    func useFakeStorage() -> FakeArtifactStorage {
-        let storage = FakeArtifactStorage()
+    func useFakeStorage(keyPrefix: String = "") -> FakeArtifactStorage {
+        let storage = FakeArtifactStorage(keyPrefix: keyPrefix)
         artifactStorage = storage
         return storage
     }

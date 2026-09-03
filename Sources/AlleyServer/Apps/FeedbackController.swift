@@ -103,7 +103,9 @@ public struct FeedbackController: RouteCollection, Sendable {
             throw Abort(.badRequest, reason: "이미지만 붙일 수 있습니다.")
         }
 
-        let key = Feedback.screenshotKey(feedbackID: try entry.requireID())
+        let key = request.artifactStorage.newKey(
+            Feedback.screenshotKey(feedbackID: try entry.requireID())
+        )
         try await request.artifactStorage.put(
             Data(buffer: buffer),
             to: key,

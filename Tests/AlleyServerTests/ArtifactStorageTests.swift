@@ -1,6 +1,9 @@
 import AlleyShared
+import Fluent
 import Foundation
 import Testing
+import Vapor
+import VaporTesting
 
 @testable import AlleyServer
 
@@ -10,12 +13,14 @@ struct ArtifactStorageTests {
         endpoint: String? = nil,
         usePathStyle: Bool = true,
         bucket: String = "alley-artifacts",
-        region: String = "us-east-1"
+        region: String = "us-east-1",
+        keyPrefix: String = ""
     ) -> AppConfig.StorageConfig {
         AppConfig.StorageConfig(
             endpoint: endpoint,
             region: region,
             bucket: bucket,
+            keyPrefix: keyPrefix,
             accessKeyID: "key",
             secretAccessKey: "secret",
             usePathStyle: usePathStyle,
@@ -81,11 +86,146 @@ struct ArtifactStorageTests {
         }
     }
 
+    // MARK: - 키 프리픽스
+
+    @Test("프리픽스가 없으면 키가 그대로다")
+    func noPrefixLeavesKeyAlone() throws {
+        let storage = FakeArtifactStorage()
+        #expect(storage.newKey("apps/a/versions/b/signed.zip") == "apps/a/versions/b/signed.zip")
+    }
+
+    @Test("프리픽스가 있으면 키 앞에 붙는다")
+    func prefixGoesInFront() throws {
+        let storage = FakeArtifactStorage(keyPrefix: "proj-abc123")
+        #expect(storage.newKey("apps/a/signed.zip") == "proj-abc123/apps/a/signed.zip")
+        #expect(storage.newKey("feedback/f/screenshot") == "proj-abc123/feedback/f/screenshot")
+    }
+
+    @Test("슬래시를 어떻게 적어도 같은 결과가 된다", arguments: [
+        "proj-abc123", "proj-abc123/", "/proj-abc123/", "  /proj-abc123/  ",
+    ])
+    func prefixSlashesAreNormalized(_ raw: String) throws {
+        let config = try TestSupport.config(overrides: ["S3_KEY_PREFIX": raw])
+        #expect(config.storage.keyPrefix == "proj-abc123")
+    }
+
+    @Test("프리픽스를 안 주거나 슬래시만 주면 없는 것으로 본다", arguments: ["", "/", "   "])
+    func blankPrefixIsUnset(_ raw: String) throws {
+        let config = try TestSupport.config(overrides: ["S3_KEY_PREFIX": raw])
+        #expect(config.storage.keyPrefix.isEmpty)
+    }
+
     @Test("업로드 방식이 아티팩트 종류로 이어진다", arguments: [
         (UploadKind.unsigned, ArtifactKind.unsigned),
         (UploadKind.signed, ArtifactKind.signed),
     ])
     func uploadKindMapsToArtifactKind(_ upload: UploadKind, _ expected: ArtifactKind) {
         #expect(upload.artifactKind == expected)
+    }
+}
+
+/// 프리픽스가 실제 업로드 경로 끝까지 따라가는지.
+///
+/// 단위 테스트로 `newKey` 만 확인하면, 어느 한 호출부가 프리픽스를 안 붙여도 통과한다.
+/// 여기서는 버전을 만들고 완료 통지까지 보내서 데이터베이스에 남는 키를 본다.
+@Suite("키 프리픽스가 붙은 업로드")
+struct PrefixedUploadTests {
+    private func seedApp(on app: Application) async throws -> (appID: UUID, token: String) {
+        let (owner, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+        let record = try await app.seedApp(bundleID: "com.example.tool", name: "도구", owner: owner)
+        return (try record.requireID(), token)
+    }
+
+    /// 버전을 만들고 올렸다고 통지한 뒤, 아티팩트 행에 남은 키를 돌려준다.
+    private func upload(
+        on app: Application,
+        storage: FakeArtifactStorage,
+        keyBuilder: (UUID, UUID) -> String
+    ) async throws -> String {
+        let setup = try await seedApp(on: app)
+
+        var versionID: UUID?
+        try await app.testing().test(
+            .POST, APIPath.versions(ofApp: setup.appID), headers: .bearer(setup.token),
+            beforeRequest: {
+                try $0.content.encode(CreateVersionRequest(shortVersion: "1.0.0", buildNumber: 1))
+            }
+        ) { response in
+            #expect(response.status == .created)
+            versionID = try response.content.decode(UploadTicket.self).version.id
+        }
+
+        let id = try #require(versionID)
+        // 클라이언트가 presigned URL 로 올렸다고 가정한다.
+        storage.place(key: keyBuilder(setup.appID, id), size: 2048)
+
+        try await app.testing().test(
+            .POST, APIPath.completeUpload(versionID: id), headers: .bearer(setup.token),
+            beforeRequest: { try $0.content.encode(CompleteUploadRequest(sha256: "abc")) }
+        ) { #expect($0.status == .ok) }
+
+        let artifact = try #require(
+            try await Artifact.query(on: app.db).filter(\.$version.$id == id).first()
+        )
+        return artifact.storageKey
+    }
+
+    @Test("프리픽스를 주면 오브젝트가 그 아래에 놓인다")
+    func objectsLandUnderPrefix() async throws {
+        try await withMigratedApp { app in
+            let storage = app.useFakeStorage(keyPrefix: "proj-abc123")
+            let stored = try await upload(on: app, storage: storage) { appID, versionID in
+                "proj-abc123/"
+                    + ArtifactStorage.objectKey(
+                        appID: appID, versionID: versionID, kind: .unsigned
+                    )
+            }
+            #expect(stored.hasPrefix("proj-abc123/apps/"))
+        }
+    }
+
+    @Test("프리픽스가 없으면 예전 자리 그대로다")
+    func objectsStayAtRootWithoutPrefix() async throws {
+        try await withMigratedApp { app in
+            let storage = app.useFakeStorage()
+            let stored = try await upload(on: app, storage: storage) { appID, versionID in
+                ArtifactStorage.objectKey(appID: appID, versionID: versionID, kind: .unsigned)
+            }
+            #expect(stored.hasPrefix("apps/"))
+        }
+    }
+
+    @Test("프리픽스가 생겨도 이미 저장된 키는 그대로 쓴다")
+    func existingKeysAreUsedVerbatim() async throws {
+        // 프리픽스를 나중에 켜면 기존 행이 가리키는 오브젝트는 원래 자리에 그대로 있다.
+        // 저장된 값이 곧 전체 키라서, 여기에 프리픽스를 덧붙이면 못 찾는다.
+        try await withMigratedApp { app in
+            let storage = app.useFakeStorage(keyPrefix: "proj-abc123")
+            let (owner, token) = try await app.makeUser(
+                email: "dev@example.com", role: .developer
+            )
+            let record = try await app.seedApp(
+                bundleID: "com.example.tool", name: "도구", owner: owner
+            )
+            let version = try await app.seedVersion(
+                appID: try record.requireID(), short: "1.0.0", build: 1, state: .released, by: owner
+            )
+            let legacyKey = "apps/legacy/versions/legacy/signed.zip"
+            try await Artifact(
+                versionID: try version.requireID(), kind: .signed,
+                storageKey: legacyKey, sha256: "abc", fileSize: 1024
+            ).save(on: app.db)
+            storage.place(key: legacyKey, size: 1024)
+
+            try await app.testing().test(
+                .GET, APIPath.download(versionID: try version.requireID()),
+                headers: .bearer(token)
+            ) { response in
+                #expect(response.status == .ok)
+                let ticket = try response.content.decode(DownloadTicket.self)
+                #expect(ticket.downloadURL.contains(legacyKey))
+                #expect(!ticket.downloadURL.contains("proj-abc123"))
+            }
+        }
     }
 }

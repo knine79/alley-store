@@ -43,10 +43,12 @@ public enum DraftSweep {
             guard isAbandoned(version, now: now, retention: retention) else { continue }
             guard let versionID = try? version.requireID() else { continue }
 
-            let key = ArtifactStorage.objectKey(
-                appID: version.$app.id,
-                versionID: versionID,
-                kind: version.uploadKind.artifactKind
+            let key = storage.newKey(
+                ArtifactStorage.objectKey(
+                    appID: version.$app.id,
+                    versionID: versionID,
+                    kind: version.uploadKind.artifactKind
+                )
             )
 
             // 행을 지우기 전에 스토리지를 먼저 본다. 순서가 중요하다. 행을 먼저 지우면

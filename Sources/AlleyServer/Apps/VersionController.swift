@@ -117,10 +117,12 @@ public struct VersionController: RouteCollection, Sendable {
             "버전 생성 [\(app.bundleID) \(shortVersion) (\(payload.buildNumber)), 올린 쪽: \(principal.description)]"
         )
 
-        let key = ArtifactStorage.objectKey(
-            appID: appID,
-            versionID: try version.requireID(),
-            kind: version.uploadKind.artifactKind
+        let key = request.artifactStorage.newKey(
+            ArtifactStorage.objectKey(
+                appID: appID,
+                versionID: try version.requireID(),
+                kind: version.uploadKind.artifactKind
+            )
         )
         let presigned = try await request.artifactStorage.uploadURL(key: key)
 
@@ -180,10 +182,12 @@ public struct VersionController: RouteCollection, Sendable {
 
         let payload = try request.content.decode(CompleteUploadRequest.self)
         let kind = version.uploadKind.artifactKind
-        let key = ArtifactStorage.objectKey(
-            appID: version.$app.id,
-            versionID: try version.requireID(),
-            kind: kind
+        let key = request.artifactStorage.newKey(
+            ArtifactStorage.objectKey(
+                appID: version.$app.id,
+                versionID: try version.requireID(),
+                kind: kind
+            )
         )
 
         guard let size = try await request.artifactStorage.head(key: key) else {

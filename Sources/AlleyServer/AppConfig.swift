@@ -60,12 +60,23 @@ public struct AppConfig: Sendable {
     }
 
     public struct StorageConfig: Sendable {
-        /// S3 호환 엔드포인트. MinIO 같은 셀프호스팅 스토리지도 그대로 쓴다.
+        /// **서버가** 스토리지에 붙는 주소. 컨테이너 네트워크 안에서만 풀리는 이름이어도 된다.
+        ///
+        /// MinIO 같은 셀프호스팅 스토리지도 그대로 쓴다.
         public var endpoint: String?
+
         public var region: String
         public var bucket: String
+
+        /// 버킷 안에서 이 서버가 쓰는 자리. 앞뒤 슬래시 없이 정규화된 값이다. 없으면 빈 문자열.
+        ///
+        /// 버킷 하나를 여러 프로젝트가 나눠 쓰고 각자 프리픽스 하나만 소유하는 배포
+        /// 환경에서 필요하다. 버킷 루트에 쓰면 권한에서 막힌다.
+        public var keyPrefix: String
+
         public var accessKeyID: String
         public var secretAccessKey: String
+
         /// MinIO 등 가상 호스트 방식을 못 쓰는 스토리지를 위한 옵션.
         public var usePathStyle: Bool
         /// 발급하는 presigned URL의 유효 시간(초).
@@ -157,6 +168,17 @@ extension AppConfig {
             return value
         }
 
+        /// 오브젝트 키 프리픽스를 정규화한다.
+        ///
+        /// `foo`, `foo/`, `/foo/` 를 모두 같은 값으로 본다. 셋 다 사람이 같은 뜻으로
+        /// 적는 값인데 그대로 이어붙이면 `//` 가 생기거나 루트를 가리키게 된다.
+        /// S3 는 `//` 를 빈 이름의 디렉터리로 받아들여서, 틀린 채로 조용히 동작한다.
+        func keyPrefix(_ key: String) -> String {
+            guard let raw = optional(key) else { return "" }
+            return raw.trimmingCharacters(in: .whitespaces)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        }
+
         /// 셋이 다 있을 때만 켠다.
         func appStoreConnectConfig() -> AppStoreConnectConfig? {
             guard let issuer = optional("ASC_ISSUER_ID"),
@@ -192,6 +214,7 @@ extension AppConfig {
                 endpoint: optional("S3_ENDPOINT"),
                 region: optional("S3_REGION") ?? "us-east-1",
                 bucket: try required("S3_BUCKET"),
+                keyPrefix: keyPrefix("S3_KEY_PREFIX"),
                 accessKeyID: try required("S3_ACCESS_KEY_ID"),
                 secretAccessKey: try required("S3_SECRET_ACCESS_KEY"),
                 usePathStyle: boolean("S3_USE_PATH_STYLE", default: true),

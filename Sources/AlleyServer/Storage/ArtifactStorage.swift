@@ -20,6 +20,9 @@ public struct PresignedURL: Sendable {
 /// **스토리지에 파일이 실제로 있는지 확인하는 것이 핵심 규칙**인데, 구현이 S3 에
 /// 박혀 있으면 그 규칙을 검증하려고 매번 오브젝트 스토리지를 띄워야 한다.
 public protocol ArtifactStoring: Sendable {
+    /// 이 스토리지가 **새로 만드는** 키 앞에 붙는 자리. 앞뒤 슬래시 없이. 없으면 빈 문자열.
+    var keyPrefix: String { get }
+
     /// 이 키로 파일을 올릴 수 있는 URL. `PUT` 으로 보낸다.
     func uploadURL(key: String) async throws -> PresignedURL
     /// 이 키의 파일을 받을 수 있는 URL. `GET` 으로 보낸다.
@@ -35,6 +38,20 @@ public protocol ArtifactStoring: Sendable {
     func put(_ data: Data, to key: String, contentType: String?) async throws
 
     func delete(key: String) async throws
+}
+
+extension ArtifactStoring {
+    /// 프리픽스를 안 쓰는 것이 기본이다. 테스트용 가짜가 이걸 신경 쓸 필요는 없다.
+    public var keyPrefix: String { "" }
+
+    /// **새로** 만드는 오브젝트가 놓일 자리를 정한다.
+    ///
+    /// 이미 `artifacts.storage_key` 나 `feedbacks.screenshot_key` 에 적혀 있는 키에는
+    /// 쓰지 않는다. 저장된 값이 곧 전체 키다. 프리픽스가 나중에 생기거나 바뀌어도
+    /// 그 행들이 가리키는 오브젝트는 원래 자리에 그대로 있고, 그래야 읽을 수 있다.
+    public func newKey(_ logicalKey: String) -> String {
+        keyPrefix.isEmpty ? logicalKey : "\(keyPrefix)/\(logicalKey)"
+    }
 }
 
 /// S3 호환 오브젝트 스토리지 구현.
@@ -63,9 +80,12 @@ public struct ArtifactStorage: ArtifactStoring {
     /// 오브젝트 URL 을 만드는 기준. presigned URL 은 이 위에 서명을 얹는다.
     private let objectBase: URL
 
+    public let keyPrefix: String
+
     public init(client: AWSClient, config: AppConfig.StorageConfig) throws {
         self.bucket = config.bucket
         self.ttl = TimeInterval(config.presignedURLTTL)
+        self.keyPrefix = config.keyPrefix
 
         self.s3 = S3(
             client: client,
