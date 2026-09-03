@@ -74,8 +74,9 @@ public struct AppConfig: Sendable {
         /// 환경에서 필요하다. 버킷 루트에 쓰면 권한에서 막힌다.
         public var keyPrefix: String
 
-        public var accessKeyID: String
-        public var secretAccessKey: String
+        /// 액세스 키. 둘 다 없으면 SDK 기본 자격증명 체인을 쓴다 (ADR-0024).
+        public var accessKeyID: String?
+        public var secretAccessKey: String?
 
         /// MinIO 등 가상 호스트 방식을 못 쓰는 스토리지를 위한 옵션.
         public var usePathStyle: Bool
@@ -119,6 +120,8 @@ extension AppConfig {
     public enum LoadError: Error, CustomStringConvertible {
         case missing(key: String)
         case invalid(key: String, reason: String)
+        /// 값 하나씩은 멀쩡한데 조합이 성립하지 않는 경우.
+        case incomplete(reason: String)
 
         public var description: String {
             switch self {
@@ -126,6 +129,8 @@ extension AppConfig {
                 return "필수 환경변수 \(key) 가 설정되지 않았습니다."
             case .invalid(let key, let reason):
                 return "환경변수 \(key) 값이 올바르지 않습니다: \(reason)"
+            case .incomplete(let reason):
+                return "환경변수 설정이 반쪽입니다: \(reason)"
             }
         }
     }
@@ -179,6 +184,24 @@ extension AppConfig {
                 .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         }
 
+        /// 액세스 키는 둘 다 주거나 둘 다 안 주거나다.
+        ///
+        /// 하나만 준 것은 설정 실수다. 그대로 뜨면 기본 자격증명 체인으로 조용히
+        /// 넘어가서, 방금 넣은 키가 왜 안 먹는지 아무도 모르게 된다.
+        func accessKeyPair() throws -> (String?, String?) {
+            let id = optional("S3_ACCESS_KEY_ID")
+            let secret = optional("S3_SECRET_ACCESS_KEY")
+            switch (id, secret) {
+            case (nil, .some), (.some, nil):
+                throw LoadError.incomplete(
+                    reason: "S3_ACCESS_KEY_ID 와 S3_SECRET_ACCESS_KEY 는 둘 다 주거나 둘 다 비워야 합니다. "
+                        + "둘 다 비우면 SDK 기본 자격증명 체인(환경변수, 인스턴스에 붙은 역할 등)을 씁니다."
+                )
+            default:
+                return (id, secret)
+            }
+        }
+
         /// 셋이 다 있을 때만 켠다.
         func appStoreConnectConfig() -> AppStoreConnectConfig? {
             guard let issuer = optional("ASC_ISSUER_ID"),
@@ -195,6 +218,8 @@ extension AppConfig {
                 privateKeyPEM: key.replacingOccurrences(of: "\\n", with: "\n")
             )
         }
+
+        let (accessKeyID, secretAccessKey) = try accessKeyPair()
 
         return AppConfig(
             store: StoreConfig(
@@ -215,8 +240,8 @@ extension AppConfig {
                 region: optional("S3_REGION") ?? "us-east-1",
                 bucket: try required("S3_BUCKET"),
                 keyPrefix: keyPrefix("S3_KEY_PREFIX"),
-                accessKeyID: try required("S3_ACCESS_KEY_ID"),
-                secretAccessKey: try required("S3_SECRET_ACCESS_KEY"),
+                accessKeyID: accessKeyID,
+                secretAccessKey: secretAccessKey,
                 usePathStyle: boolean("S3_USE_PATH_STYLE", default: true),
                 presignedURLTTL: try integer("S3_PRESIGNED_URL_TTL", default: 3600)
             ),

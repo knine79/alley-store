@@ -63,6 +63,7 @@ public struct ArtifactStorage: ArtifactStoring {
     public enum StorageError: Error, CustomStringConvertible {
         case invalidEndpoint(String)
         case objectMissing(key: String)
+        case noCredentials
 
         public var description: String {
             switch self {
@@ -70,6 +71,13 @@ public struct ArtifactStorage: ArtifactStoring {
                 return "스토리지 엔드포인트를 URL 로 해석할 수 없습니다: \(value)"
             case .objectMissing(let key):
                 return "스토리지에 파일이 없습니다: \(key)"
+            case .noCredentials:
+                return """
+                    스토리지 자격증명을 찾지 못했습니다. S3_ACCESS_KEY_ID 와 \
+                    S3_SECRET_ACCESS_KEY 를 주거나, 인스턴스에 붙은 역할로 인증되도록 하세요. \
+                    둘 다 비우면 SDK 기본 체인(AWS_* 환경변수, 웹 아이덴티티 토큰, \
+                    인스턴스 메타데이터, ~/.aws)을 차례로 봅니다.
+                    """
             }
         }
     }
@@ -118,7 +126,7 @@ public struct ArtifactStorage: ArtifactStoring {
     /// 접근 실패는 그대로 던진다.
     public func head(key: String) async throws -> Int64? {
         do {
-            let output = try await s3.headObject(.init(bucket: bucket, key: key))
+            let output = try await explained { try await s3.headObject(.init(bucket: bucket, key: key)) }
             return output.contentLength
         } catch let error as S3ErrorType where error == .notFound {
             return nil
@@ -129,28 +137,46 @@ public struct ArtifactStorage: ArtifactStoring {
     }
 
     public func put(_ data: Data, to key: String, contentType: String?) async throws {
-        _ = try await s3.putObject(
-            .init(
-                body: .init(bytes: data),
-                bucket: bucket,
-                contentType: contentType,
-                key: key
+        _ = try await explained {
+            try await s3.putObject(
+                .init(
+                    body: .init(bytes: data),
+                    bucket: bucket,
+                    contentType: contentType,
+                    key: key
+                )
             )
-        )
+        }
     }
 
     public func delete(key: String) async throws {
-        _ = try await s3.deleteObject(.init(bucket: bucket, key: key))
+        _ = try await explained { try await s3.deleteObject(.init(bucket: bucket, key: key)) }
     }
 
     private func sign(key: String, method: HTTPMethod) async throws -> PresignedURL {
         let url = objectBase.appendingPathComponent(key)
-        let signed = try await s3.signURL(
-            url: url,
-            httpMethod: method,
-            expires: .seconds(Int64(ttl))
-        )
+        let signed = try await explained {
+            try await s3.signURL(
+                url: url,
+                httpMethod: method,
+                expires: .seconds(Int64(ttl))
+            )
+        }
         return PresignedURL(url: signed.absoluteString, expiresAt: Date().addingTimeInterval(ttl))
+    }
+
+    /// 자격증명을 못 찾았을 때의 실패를 알아볼 수 있는 말로 바꾼다.
+    ///
+    /// 기본 자격증명 체인은 아무것도 못 찾아도 기동을 막지 않는다. 체인 전체가 빈손이면
+    /// Soto 가 그 자리에 "언제나 실패하는" 제공자를 놓고, 실패는 스토리지를 처음 쓰는
+    /// 순간에야 `No credential provider found.` 한 줄로 나온다. 그 문장만 보고
+    /// 무엇을 설정해야 하는지 알 수 있는 사람은 없다.
+    private func explained<T>(_ body: () async throws -> T) async throws -> T {
+        do {
+            return try await body()
+        } catch let error as CredentialProviderError where error == .noProvider {
+            throw StorageError.noCredentials
+        }
     }
 
     /// `{엔드포인트}/{버킷}` 또는 `https://{버킷}.s3.{리전}.amazonaws.com` 을 만든다.

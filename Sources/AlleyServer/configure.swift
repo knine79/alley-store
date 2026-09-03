@@ -141,12 +141,7 @@ private func configureMiddleware(_ app: Application) {
 /// `AWSClient` 는 커넥션 풀을 들고 있어서 요청마다 만들면 안 되고, 종료할 때
 /// 반드시 닫아야 한다. 그래서 애플리케이션 수명에 묶는다.
 private func configureStorage(_ app: Application, config: AppConfig.StorageConfig) throws {
-    let client = AWSClient(
-        credentialProvider: .static(
-            accessKeyId: config.accessKeyID,
-            secretAccessKey: config.secretAccessKey
-        )
-    )
+    let client = AWSClient(credentialProvider: credentialProvider(for: config, logger: app.logger))
 
     let storage: ArtifactStorage
     do {
@@ -160,6 +155,25 @@ private func configureStorage(_ app: Application, config: AppConfig.StorageConfi
 
     app.lifecycle.use(AWSClientLifecycle(client: client))
     app.artifactStorage = storage
+}
+
+/// 스토리지에 무엇으로 인증할지 고른다 (ADR-0024).
+///
+/// 액세스 키를 주면 그것을 쓰고, 안 주면 SDK 기본 체인에 맡긴다. 인스턴스에 붙은
+/// 역할로 인증하는 환경(IRSA 계열)은 액세스 키를 아예 발급하지 않으므로, 키를 필수로
+/// 두면 서버가 뜨지도 못한다.
+///
+/// **기본 체인은 아무것도 못 찾아도 여기서 실패하지 않는다.** 그 실패는 스토리지를
+/// 처음 쓰는 순간에 나오고, `ArtifactStorage` 가 그때 무엇을 설정해야 하는지 말한다.
+private func credentialProvider(
+    for config: AppConfig.StorageConfig,
+    logger: Logger
+) -> CredentialProviderFactory {
+    guard let accessKeyID = config.accessKeyID, let secretAccessKey = config.secretAccessKey else {
+        logger.notice("스토리지 자격증명: 액세스 키가 없어 SDK 기본 체인을 씁니다.")
+        return .default
+    }
+    return .static(accessKeyId: accessKeyID, secretAccessKey: secretAccessKey)
 }
 
 private func configureJWT(_ app: Application, config: AppConfig.SecurityConfig) async {

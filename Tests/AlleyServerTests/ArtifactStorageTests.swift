@@ -115,6 +115,28 @@ struct ArtifactStorageTests {
         #expect(config.storage.keyPrefix.isEmpty)
     }
 
+    // MARK: - 액세스 키
+
+    @Test("액세스 키를 둘 다 비우면 기본 자격증명 체인에 맡긴다")
+    func credentialsMayBeAbsent() throws {
+        let config = try TestSupport.config(
+            overrides: ["S3_ACCESS_KEY_ID": "", "S3_SECRET_ACCESS_KEY": ""]
+        )
+        #expect(config.storage.accessKeyID == nil)
+        #expect(config.storage.secretAccessKey == nil)
+    }
+
+    @Test("액세스 키를 하나만 주면 기동을 막는다", arguments: [
+        "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY",
+    ])
+    func halfConfiguredCredentialsFailToBoot(_ blanked: String) {
+        // 그대로 뜨면 기본 체인으로 조용히 넘어가서, 방금 넣은 키가 왜 안 먹는지
+        // 아무도 모르게 된다.
+        #expect(throws: AppConfig.LoadError.self) {
+            try TestSupport.config(overrides: [blanked: ""])
+        }
+    }
+
     @Test("업로드 방식이 아티팩트 종류로 이어진다", arguments: [
         (UploadKind.unsigned, ArtifactKind.unsigned),
         (UploadKind.signed, ArtifactKind.signed),
