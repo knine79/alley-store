@@ -65,6 +65,13 @@ public struct AppConfig: Sendable {
         /// MinIO 같은 셀프호스팅 스토리지도 그대로 쓴다.
         public var endpoint: String?
 
+        /// **클라이언트에게 내주는** 주소. presigned URL 이 이 주소 위에 만들어진다.
+        ///
+        /// 안 주면 `endpoint` 를 그대로 쓴다. 서버와 브라우저가 같은 주소로 스토리지에
+        /// 닿는 환경(로컬 개발)에서는 나눌 이유가 없다. 나뉘는 곳은 서버가
+        /// `http://minio:9000` 으로 붙고 브라우저는 그 이름을 풀 수 없는 배포 환경이다.
+        public var publicEndpoint: String?
+
         public var region: String
         public var bucket: String
 
@@ -81,7 +88,19 @@ public struct AppConfig: Sendable {
         /// MinIO 등 가상 호스트 방식을 못 쓰는 스토리지를 위한 옵션.
         public var usePathStyle: Bool
         /// 발급하는 presigned URL의 유효 시간(초).
+        ///
+        /// **임시 자격증명으로 서명하면 이 값이 상한일 뿐이다.** 실제 수명은 서명에 쓴
+        /// 세션 토큰이 살아 있는 동안까지다 (ADR-0024).
         public var presignedURLTTL: Int
+
+        /// presigned URL 을 서명할 기준 주소.
+        ///
+        /// 서명은 **호스트를 포함해서** 계산된다. 한 호스트로 서명하고 다른 호스트로
+        /// 내주면 스토리지가 403 으로 거절한다. 그래서 공개 주소가 있으면 그쪽으로 서명한다.
+        public var presignEndpoint: String? {
+            publicEndpoint.flatMap { $0.isEmpty ? nil : $0 }
+                ?? endpoint.flatMap { $0.isEmpty ? nil : $0 }
+        }
     }
 
     public struct OAuthConfig: Sendable {
@@ -237,6 +256,7 @@ extension AppConfig {
             database: DatabaseConfig(url: try required("DATABASE_URL")),
             storage: StorageConfig(
                 endpoint: optional("S3_ENDPOINT"),
+                publicEndpoint: optional("S3_PUBLIC_ENDPOINT"),
                 region: optional("S3_REGION") ?? "us-east-1",
                 bucket: try required("S3_BUCKET"),
                 keyPrefix: keyPrefix("S3_KEY_PREFIX"),

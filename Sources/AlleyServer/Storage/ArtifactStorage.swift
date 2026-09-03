@@ -98,6 +98,7 @@ public struct ArtifactStorage: ArtifactStoring {
         self.s3 = S3(
             client: client,
             region: .init(rawValue: config.region),
+            // 여기는 **서버가** 붙는 주소다. 클라이언트에게 내주는 주소는 objectBase 쪽이다.
             endpoint: config.endpoint.flatMap { $0.isEmpty ? nil : $0 },
             // Soto 는 기본이 path style 이고, 가상 호스트 방식은 옵트인이다.
             // MinIO 는 path style 만 쓴다.
@@ -181,10 +182,13 @@ public struct ArtifactStorage: ArtifactStoring {
 
     /// `{엔드포인트}/{버킷}` 또는 `https://{버킷}.s3.{리전}.amazonaws.com` 을 만든다.
     ///
-    /// presigned URL 은 이 URL 위에 서명을 얹는 것이라, 여기가 틀리면 서명은 맞는데
-    /// 엉뚱한 곳을 가리키는 URL 이 나간다. 테스트에서 직접 확인할 수 있게 열어둔다.
+    /// **공개 주소(`S3_PUBLIC_ENDPOINT`)가 있으면 그것으로 만든다.** 서명은 호스트를
+    /// 포함해서 계산되므로, 여기가 클라이언트가 실제로 붙을 주소여야 한다. 서버가 붙는
+    /// 내부 주소로 서명해서 내주면 스토리지가 403 으로 거절한다.
+    ///
+    /// 테스트에서 직접 확인할 수 있게 열어둔다.
     static func objectBase(config: AppConfig.StorageConfig) throws -> URL {
-        guard let endpoint = config.endpoint.flatMap({ $0.isEmpty ? nil : $0 }) else {
+        guard let endpoint = config.presignEndpoint else {
             // 엔드포인트를 안 주면 AWS S3 로 본다.
             guard let url = URL(string: "https://\(config.bucket).s3.\(config.region).amazonaws.com") else {
                 throw StorageError.invalidEndpoint(config.region)

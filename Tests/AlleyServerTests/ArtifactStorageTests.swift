@@ -11,6 +11,7 @@ import VaporTesting
 struct ArtifactStorageTests {
     private func config(
         endpoint: String? = nil,
+        publicEndpoint: String? = nil,
         usePathStyle: Bool = true,
         bucket: String = "alley-artifacts",
         region: String = "us-east-1",
@@ -18,6 +19,7 @@ struct ArtifactStorageTests {
     ) -> AppConfig.StorageConfig {
         AppConfig.StorageConfig(
             endpoint: endpoint,
+            publicEndpoint: publicEndpoint,
             region: region,
             bucket: bucket,
             keyPrefix: keyPrefix,
@@ -84,6 +86,44 @@ struct ArtifactStorageTests {
         #expect(throws: ArtifactStorage.StorageError.self) {
             try ArtifactStorage.objectBase(config: config(endpoint: "이건 URL 이 아니다"))
         }
+    }
+
+    // MARK: - 공개 주소
+
+    @Test("공개 주소를 주면 그쪽으로 서명한다")
+    func publicEndpointWinsForSigning() throws {
+        // 서명은 호스트를 포함해서 계산된다. 서버가 붙는 내부 주소로 서명해서 내주면
+        // 클라이언트가 받는 순간 서명이 맞지 않아 403 이 난다.
+        let url = try ArtifactStorage.objectBase(
+            config: config(
+                endpoint: "http://minio:9000",
+                publicEndpoint: "https://storage.example.com"
+            )
+        )
+        #expect(url.absoluteString == "https://storage.example.com/alley-artifacts")
+    }
+
+    @Test("공개 주소를 안 주면 내부 주소를 그대로 쓴다")
+    func fallsBackToInternalEndpoint() throws {
+        // 로컬 개발은 서버와 브라우저가 같은 주소로 스토리지에 닿는다. 나눌 이유가 없다.
+        let url = try ArtifactStorage.objectBase(config: config(endpoint: "http://localhost:9000"))
+        #expect(url.absoluteString == "http://localhost:9000/alley-artifacts")
+    }
+
+    @Test("빈 문자열 공개 주소는 없는 것으로 본다")
+    func treatsEmptyPublicEndpointAsUnset() throws {
+        let url = try ArtifactStorage.objectBase(
+            config: config(endpoint: "http://minio:9000", publicEndpoint: "")
+        )
+        #expect(url.absoluteString == "http://minio:9000/alley-artifacts")
+    }
+
+    @Test("공개 주소만 주면 그것으로 만든다")
+    func publicEndpointAloneIsEnough() throws {
+        let url = try ArtifactStorage.objectBase(
+            config: config(publicEndpoint: "https://storage.example.com", usePathStyle: false)
+        )
+        #expect(url.absoluteString == "https://alley-artifacts.storage.example.com")
     }
 
     // MARK: - 키 프리픽스

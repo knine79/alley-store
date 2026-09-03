@@ -218,7 +218,9 @@ swift run alley-server serve
 설정한 도메인 밖의 계정은 서버가 거부합니다.
 
 `docker compose up` 으로 서버까지 컨테이너로 띄우면 compose 가 `DATABASE_URL` 과
-`S3_ENDPOINT` 를 컨테이너 이름으로 덮어쓰므로 `.env` 는 그대로 두면 됩니다.
+`S3_ENDPOINT` 를 컨테이너 이름으로 덮어쓰므로 `.env` 는 그대로 두면 됩니다. 그 이름은
+브라우저가 풀지 못하므로 `S3_PUBLIC_ENDPOINT` 도 함께 채워집니다 (로컬 기본값은
+`http://localhost:9000`).
 
 ## 문서
 

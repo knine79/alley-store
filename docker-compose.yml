@@ -20,6 +20,9 @@ services:
       # 컨테이너 사이 통신은 서비스 이름으로 한다.
       DATABASE_URL: postgres://${POSTGRES_USER:-alley}:${POSTGRES_PASSWORD:-alley}@postgres:5432/${POSTGRES_DB:-alley}
       S3_ENDPOINT: http://minio:9000
+      # 위 이름은 컨테이너 안에서만 풀린다. 브라우저와 스토어 앱에는 밖에서 닿는 주소를
+      # 내줘야 한다 (ADR-0024). .env 에 적으면 그것이 이기고, 없으면 로컬 기본값이다.
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:${S3_PORT:-9000}}
       S3_USE_PATH_STYLE: "true"
     ports:
       - "${SERVER_PORT:-8080}:8080"
