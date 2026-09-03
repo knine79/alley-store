@@ -27,11 +27,19 @@ Alley는 앱 바이너리(zip)를 여기 둡니다. 서버 디스크에 두지 �
 
 오브젝트가 사는 네임스페이스. Alley는 버킷 하나(`S3_BUCKET`)를 씁니다.
 
+버킷을 통째로 쓸 수 없는 환경도 있습니다. 버킷 하나를 여러 프로젝트가 나눠 쓰고 각자
+프리픽스 하나만 소유하는 경우인데, 그때는 `S3_KEY_PREFIX`를 채웁니다. 새로 만드는 키가
+`<프리픽스>/apps/...` 가 됩니다. 이미 저장된 키에는 붙지 않습니다. 저장된 값이 곧 전체
+키이기 때문입니다 ([ADR-0024](adr/0024-storage-prefix-endpoints-credentials.md)).
+
 ### S3 호환
 
 AWS S3의 HTTP API를 흉내내는 것. S3 API가 사실상 표준이 되면서 여러 구현이
-이걸 따릅니다. Alley 코드는 S3 API 하나만 알고, 어디에 붙을지는 `S3_ENDPOINT`
-설정으로 정해집니다. 비우면 AWS S3, 채우면 그 주소.
+이걸 따릅니다. Alley 코드는 S3 API 하나만 알고, 어디에 붙을지는 설정으로 정해집니다.
+
+주소는 둘입니다. `S3_ENDPOINT`는 **서버가** 붙는 주소이고, `S3_PUBLIC_ENDPOINT`는
+**클라이언트에게 내주는** 주소입니다. 둘이 같으면 뒤엣것을 비우면 됩니다. `S3_ENDPOINT`
+까지 비우면 AWS S3로 봅니다.
 
 이것이 [ADR-0004](adr/0004-docker-selfhosting-s3-abstraction.md)의
 "특정 클라우드에 묶이지 않는다"가 지켜지는 방식입니다.
@@ -59,7 +67,8 @@ path style:  http://minio:9000/버킷/키                (MinIO)
 
 presigned URL의 서명은 URL 전체에 대해 계산되므로, **형태를 틀리면 서명은 맞는데
 엉뚱한 곳을 가리키는 URL**이 나갑니다. `ArtifactStorage.objectBase`가 이 조립을
-담당하고, 테스트가 붙어 있습니다.
+담당하고, 테스트가 붙어 있습니다. 호스트도 서명에 들어가므로, 이 조립은
+`S3_PUBLIC_ENDPOINT`(없으면 `S3_ENDPOINT`)를 기준으로 합니다.
 
 ### presigned URL
 
@@ -74,6 +83,11 @@ presigned URL의 서명은 URL 전체에 대해 계산되므로, **형태를 틀
 
 CloudKit에서 `CKAsset`을 받는 방식과 같은 구조입니다. 레코드 응답에 바이트가
 실려 오는 게 아니라 스토리지를 가리키는 URL이 옵니다.
+
+수명은 `S3_PRESIGNED_URL_TTL`이 정하지만, **임시 자격증명(STS)으로 서명하면 그 값은
+상한일 뿐입니다.** URL은 서명에 쓴 세션 토큰이 죽을 때 함께 죽습니다. 액세스 키를
+비우고 인스턴스에 붙은 역할로 인증하는 배포가 여기 해당합니다
+([ADR-0024](adr/0024-storage-prefix-endpoints-credentials.md)).
 
 왜 이렇게 했는지는 [ADR-0009](adr/0009-presigned-artifact-transfer.md)에 있습니다.
 
@@ -310,7 +324,8 @@ Alley 서버는 **켜질 때 데이터베이스를 스스로 건드리지 않습
 Alley 는 웹 콘솔에서 브라우저가 스토리지로 파일을 직접 올립니다
 ([ADR-0009](adr/0009-presigned-artifact-transfer.md)). 콘솔 주소와 스토리지 주소가
 다르기 때문에, 스토리지가 콘솔 주소를 허용해줘야 업로드가 됩니다. 허용하지 않으면
-업로드가 시작도 못 하고 멈춥니다.
+업로드가 시작도 못 하고 멈춥니다. 여기서 말하는 스토리지 주소는 브라우저가 실제로 붙는
+주소, 즉 `S3_PUBLIC_ENDPOINT`(없으면 `S3_ENDPOINT`)입니다.
 
 **CORS 는 접근 통제가 아닙니다.** 브라우저만 지키는 약속이라, `curl` 같은 도구는
 그냥 통과합니다. 업로드를 실제로 막는 것은 여전히 presigned URL 입니다. CORS 를

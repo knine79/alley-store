@@ -204,10 +204,11 @@ docker compose -f docker-compose.yml -f caddy-compose.yml logs caddy
   `요청 출처를 확인할 수 없습니다` 로 막힙니다. `Referer` 가 남아 있으면 그걸로
   대신 판단하지만, 둘 다 없으면 방법이 없습니다
 - **스토리지 주소도 밖에서 닿아야 합니다.** 버전 업로드는 서버를 거치지 않고
-  브라우저에서 스토리지로 바로 갑니다. 그래서 `S3_ENDPOINT` 는 **브라우저가 닿을 수
-  있는 주소**여야 합니다. compose 기본값(`http://minio:9000`)은 컨테이너 안에서만
-  통하는 이름이고, MinIO 포트도 루프백에만 열려 있습니다. 스토리지를 별도
-  서브도메인으로 내보내거나 AWS S3 를 쓰세요
+  브라우저에서 스토리지로 바로 갑니다. 서버가 컨테이너 이름으로 스토리지에 붙는다면
+  (compose 기본값 `http://minio:9000`) 그 이름은 브라우저가 풀지 못합니다.
+  `S3_PUBLIC_ENDPOINT` 에 **브라우저가 닿을 수 있는 주소**를 따로 적으세요.
+  스토리지를 별도 서브도메인으로 내보내거나 AWS S3 를 쓰면 됩니다
+  ([ADR-0024](adr/0024-storage-prefix-endpoints-credentials.md))
 
 `X-Forwarded-Proto` 헤더는 넘겨주면 좋지만 **필수는 아닙니다.** Alley 가 이 헤더를
 읽는 곳은 위의 `Origin` 검사 한 군데뿐이고, 거기서도 `Host` 의 http·https 양쪽과
@@ -248,7 +249,7 @@ curl -fsSL -o .env https://raw.githubusercontent.com/<소유자>/<레포>/main/.
 | `OAUTH_REDIRECT_URI` | 승인된 리디렉션 URI 와 **글자 하나까지** 같아야 합니다 |
 | `JWT_SECRET` | `openssl rand -base64 48` |
 | `PUBLIC_BASE_URL` | 밖에서 보이는 주소 (2번 참조) |
-| `S3_SECRET_ACCESS_KEY` | `openssl rand -base64 32` |
+| `S3_SECRET_ACCESS_KEY` | `openssl rand -base64 32` (역할로 인증하는 환경이면 액세스 키 둘을 비웁니다) |
 | `INITIAL_ADMIN_EMAILS` | 첫 관리자. 이 계정으로 로그인해야 설정을 바꿀 수 있습니다 |
 | `ALLOWED_EMAIL_DOMAINS` | 로그인을 허용할 도메인 |
 | `ALLEY_IMAGE`, `ALLEY_IMAGE_TAG` | 받아올 서버 이미지 (아래) |
@@ -317,6 +318,31 @@ MINIO_CORS_ALLOW_ORIGIN=https://store.example.com,https://console.example.com
 이고 그 주소는 로그인한 사람에게만 발급됩니다. 출처를 좁히는 것은 그 주소가 어떤
 경로로든 다른 사이트에 흘러갔을 때 그 사이트의 스크립트가 브라우저에서 바로 쓰는
 것을 막는 정도입니다.
+
+### 관리형 스토리지에 올릴 때
+
+compose 의 MinIO 대신 이미 있는 오브젝트 스토리지를 쓰면 세 가지가 더 필요할 수
+있습니다. 왜 이렇게 나누었는지는
+[ADR-0024](adr/0024-storage-prefix-endpoints-credentials.md) 에 있습니다.
+
+| 상황 | 채울 것 |
+| --- | --- |
+| 버킷 하나를 여러 프로젝트가 나눠 쓰고 우리 자리는 프리픽스 하나다 | `S3_KEY_PREFIX` |
+| 서버는 클러스터 안 이름으로 붙고 브라우저는 그 이름을 못 푼다 | `S3_PUBLIC_ENDPOINT` |
+| 액세스 키가 없고 인스턴스에 붙은 역할로 인증한다 | 액세스 키 둘을 비웁니다 |
+
+`S3_KEY_PREFIX` 는 **배포할 때 정하고 그 뒤로 바꾸지 마세요.** 이미 올라간 오브젝트는
+옛 자리에 그대로 있고 계속 읽히지만, 바꾸는 시점에 올리는 중이던 업로드와 워커가 물고
+있는 서명 잡은 깨집니다.
+
+`S3_PUBLIC_ENDPOINT` 는 **스토리지가 그 주소로 밖에서 닿을 수 있어야** 값을 합니다.
+presigned URL 의 서명은 호스트를 포함해서 계산되므로, 여기에 적은 주소와 클라이언트가
+실제로 붙는 주소가 다르면 스토리지가 403 으로 거절합니다.
+
+액세스 키를 비우면 SDK 기본 자격증명 체인이 `AWS_*` 환경변수, 웹 아이덴티티 토큰,
+인스턴스 메타데이터, `~/.aws` 를 차례로 봅니다. **둘 중 하나만 채우면 서버가 뜨지
+않습니다.** 반쪽만 설정된 채로 뜨면 기본 체인으로 조용히 넘어가서, 방금 넣은 키가 왜
+안 먹는지 알 수 없게 되기 때문입니다.
 
 ## 4. 서명 워커 설치
 
