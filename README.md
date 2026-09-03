@@ -224,8 +224,8 @@ swift run alley-server serve
 
 | 문서 | 다루는 것 |
 | --- | --- |
-| [설치 가이드](docs/setup.md) | 조직에 올리는 절차. 처음이면 여기부터 |
-| [운영 가이드](docs/operations.md) | 올린 뒤에 하는 일. 업그레이드·백업·문제 해결 |
+| [설치 가이드](docs/setup.md) | 조직에 설치하는 절차. 처음이면 여기부터 |
+| [운영 가이드](docs/operations.md) | 설치한 뒤에 하는 일. 업그레이드·백업·문제 해결 |
 | [Sparkle 서명키](docs/sparkle.md) | appcast 로 스스로 업데이트하는 앱을 배포할 때만 |
 | [설계](docs/design.md) | 무엇을 왜 이렇게 만드는가. 아키텍처와 핵심 설계 |
 | [구현 계획](docs/implementation-plan.md) | 무엇을 언제 만드는가. 단계별 진행 현황 |
