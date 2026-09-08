@@ -57,6 +57,13 @@ public struct AppConfig: Sendable {
 
     public struct DatabaseConfig: Sendable {
         public var url: String
+
+        /// 기동하면서 마이그레이션을 적용할지. **기본값은 꺼짐** (ADR-0028).
+        ///
+        /// 권장 경로는 `alley-server migrate` 를 사람이 돌리는 것이다. 이 값은
+        /// 일회성 명령을 돌릴 수단이 없는 플랫폼을 위한 문이다. 켜면 롤아웃마다
+        /// 마이그레이션이 돌고, 실패하면 서버가 뜨지 않는다.
+        public var migrateOnBoot: Bool
     }
 
     public struct StorageConfig: Sendable {
@@ -317,7 +324,10 @@ extension AppConfig {
                     enforceBundleIDPrefix: boolean("ENFORCE_BUNDLE_ID_PREFIX", default: true)
                 )
             ),
-            database: DatabaseConfig(url: try required("DATABASE_URL")),
+            database: DatabaseConfig(
+                url: try required("DATABASE_URL"),
+                migrateOnBoot: boolean("MIGRATE_ON_BOOT", default: false)
+            ),
             storage: StorageConfig(
                 endpoint: optional("S3_ENDPOINT"),
                 publicEndpoint: optional("S3_PUBLIC_ENDPOINT"),

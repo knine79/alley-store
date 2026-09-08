@@ -14,6 +14,9 @@ public func configure(_ app: Application, config: AppConfig) async throws {
 
     try configureDatabase(app, config: config.database)
     configureMigrations(app)
+    // 옵트인일 때만, 요청을 받기 전에 스키마를 맞춘다 (ADR-0028).
+    // 여기서 던지면 서버가 뜨지 않는다. 그게 의도다.
+    try await BootMigration.runIfEnabled(on: app, config: config)
     await configureJWT(app, config: config.security)
     try configureStorage(app, config: config.storage)
 
