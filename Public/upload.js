@@ -29,6 +29,90 @@
         });
     });
 
+    var readStatus = document.getElementById("bundle-read-status");
+    form.elements.file.addEventListener("change", function () {
+        fillFromBundle().catch(function (error) {
+            // 자동 채우기가 실패해도 업로드는 그대로 할 수 있다. 오류 상자가 아니라
+            // 그 칸 아래 설명으로 알린다. 빨간 배너를 띄우면 올리지 말라는 뜻으로 읽힌다.
+            say("번들에서 값을 읽지 못했습니다. 직접 입력하세요. (" + error.message + ")");
+        });
+    });
+
+    /*
+     * 고른 zip 의 Info.plist 로 버전·빌드·최소 macOS 를 채운다.
+     *
+     * **사람이 이미 적은 값은 건드리지 않는다.** 되돌릴 수 없는 것에 손대지 않는
+     * 편이 낫다. 번들의 값이 그 칸과 다르면 덮어쓰는 대신 무엇이 다른지 알린다.
+     * 일부러 다르게 적는 경우가 있는데(핫픽스 빌드 번호), 그걸 조용히 되돌리면
+     * 올린 사람은 자기가 적은 값이 사라진 것을 모른다.
+     */
+    async function fillFromBundle() {
+        var file = form.elements.file.files[0];
+        if (!file) {
+            say(null);
+            return;
+        }
+        say("번들을 읽는 중…");
+
+        var info = await window.AlleyBundleInfo.read(file);
+        var filled = [];
+        var differs = [];
+
+        [
+            ["shortVersion", info.shortVersion, "버전"],
+            ["buildNumber", info.buildNumber, "빌드 번호"],
+            ["minimumOSVersion", info.minimumOSVersion, "최소 macOS"]
+        ].forEach(function (row) {
+            var field = form.elements[row[0]];
+            var value = row[1];
+            if (!field || !value) return;
+
+            // 빌드 번호는 서버가 정수로 받는다. 번들이 "0.7.10" 처럼 적어두는 일이
+            // 흔해서, 숫자로 읽히지 않으면 채우지 않고 사람에게 맡긴다.
+            if (row[0] === "buildNumber" && !/^\d+$/.test(value)) {
+                differs.push(row[2] + ' 은 번들이 "' + value + '" 라고 적어 숫자로 쓸 수 없습니다');
+                return;
+            }
+
+            if (isOursToFill(field)) {
+                field.value = value;
+                field.dataset.filledFromBundle = "1";
+                filled.push(row[2] + " " + value);
+            } else if (field.value.trim() !== value) {
+                differs.push(row[2] + ' 은 번들이 "' + value + '" 라고 적었습니다');
+            }
+        });
+
+        var lines = [];
+        if (info.bundleID) lines.push("번들 ID: " + info.bundleID);
+        if (filled.length) lines.push("채웠습니다 - " + filled.join(", "));
+        if (differs.length) lines.push("적어둔 값을 그대로 뒀습니다 - " + differs.join("; "));
+        say(lines.length ? lines.join(" / ") : "번들에서 채울 값이 없었습니다.");
+    }
+
+    /*
+     * 이 칸을 우리가 채워도 되는가.
+     *
+     * 셋 중 하나면 된다. 비어 있거나, 앞서 우리가 채운 것이거나, **서버가 제안한
+     * 값 그대로** 인 경우다.
+     *
+     * 마지막 조건이 없으면 빌드 번호가 영영 안 채워진다. 그 칸은 서버가 다음 번호를
+     * 미리 넣어두는데(`suggestedBuildNumber`), 그것을 사람이 적은 값으로 착각해서
+     * 지켜버렸다. 실제로 브라우저로 돌려보고서야 나왔다.
+     */
+    function isOursToFill(field) {
+        if (field.value.trim() === "") return true;
+        if (field.dataset.filledFromBundle === "1") return true;
+        var suggested = field.dataset.suggested;
+        return suggested !== undefined && field.value.trim() === suggested.trim();
+    }
+
+    function say(message) {
+        if (!readStatus) return;
+        readStatus.hidden = message === null;
+        readStatus.textContent = message || "";
+    }
+
     async function start() {
         var file = form.elements.file.files[0];
         if (!file) {

@@ -19,7 +19,7 @@
 | [0009](0009-presigned-artifact-transfer.md) | 바이너리는 서버를 거치지 않고 presigned URL로 주고받는다 | 수락됨 | 2026-08-14 |
 | [0010](0010-cookie-and-bearer-authentication.md) | 세션 토큰을 쿠키와 Authorization 헤더 양쪽에서 받는다 | 수락됨 | 2026-08-14 |
 | [0011](0011-store-settings-in-database.md) | 스토어 설정을 데이터베이스로 옮기고 환경변수는 씨앗으로만 쓴다 | 수락됨 | 2026-08-18 |
-| [0012](0012-browser-upload-script.md) | 콘솔에서 스크립트를 쓰는 화면은 업로드 하나로 한정한다 | 수락됨 | 2026-08-26 |
+| [0012](0012-browser-upload-script.md) | 콘솔에서 스크립트를 쓰는 화면은 업로드 하나로 한정한다 | 일부 대체됨(ADR-0030) | 2026-08-26 |
 | [0013](0013-worker-token-authentication.md) | 워커는 사용자와 다른 신원으로, 해시만 저장하는 토큰으로 인증한다 | 수락됨 | 2026-08-31 |
 | [0014](0014-store-app-without-xcode-project.md) | 스토어 앱을 Xcode 프로젝트 없이 SwiftPM 과 조립 스크립트로 만든다 | 수락됨 | 2026-08-31 |
 | [0015](0015-app-scoped-deploy-tokens.md) | CI 는 앱 하나에 묶인 배포 토큰으로 올린다 | 수락됨 | 2026-08-31 |
@@ -37,6 +37,7 @@
 | [0027](0027-fail-fast-on-unsafe-config.md) | 안전하지 않은 설정으로는 서버가 뜨지 않는다 | 수락됨 | 2026-09-08 |
 | [0028](0028-migrate-on-boot-with-advisory-lock.md) | 부팅 시 마이그레이션을 옵트인으로 열고 advisory lock 으로 한 대만 돌린다 | 수락됨 | 2026-09-08 |
 | [0029](0029-verify-bundle-identifier-before-signing.md) | 번들 ID 는 서명 전에 워커가 대조한다 | 수락됨 | 2026-09-08 |
+| [0030](0030-read-bundle-info-in-browser.md) | 번들 속성은 브라우저가 zip 을 열어 읽는다 | 수락됨 | 2026-09-08 |
 
 ## 언제 쓰나
 
@@ -63,7 +64,7 @@
 ```markdown
 # ADR-NNNN: 결정을 한 문장으로
 
-- 상태: 수락됨 | 대체됨(ADR-MMMM) | 폐기됨
+- 상태: 수락됨 | 일부 대체됨(ADR-MMMM) | 대체됨(ADR-MMMM) | 폐기됨
 - 날짜: YYYY-MM-DD
 
 ## 맥락
@@ -86,3 +87,8 @@
 
 기존 ADR을 고치지 않습니다. 새 ADR을 쓰고 기존 것의 상태를
 `대체됨(ADR-MMMM)`으로 바꿉니다. 왜 바뀌었는지가 기록으로 남아야 합니다.
+
+**결정의 일부만 바뀌었으면** `일부 대체됨(ADR-MMMM)` 으로 두고, 무엇이 무효가 되고
+무엇이 그대로인지를 그 ADR 맨 위에 인용 블록으로 적습니다. 전체를 `대체됨`으로
+바꾸면 아직 유효한 나머지 결정까지 죽은 것으로 읽힙니다. ADR-0012 가 그 예입니다.
+스크립트 경계는 무효가 됐지만 presigned 업로드 구조는 그대로입니다.

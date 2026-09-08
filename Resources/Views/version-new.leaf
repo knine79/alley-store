@@ -19,64 +19,85 @@
       data-create-url="#(createVersionPath)"
       data-version-root="#(versionRootPath)"
       data-app-url="/apps/#(appID)">
-    <label class="field">
-        <span class="field-label">버전</span>
-        <input class="input" type="text" name="shortVersion" required placeholder="1.0.0"
-               autocapitalize="off" autocorrect="off" spellcheck="false">
-        <span class="field-note">사람이 보는 번호입니다. <code>CFBundleShortVersionString</code> 과 맞추세요.</span>
-    </label>
+    <fieldset class="form-group">
+        <legend class="form-group-title">올릴 파일</legend>
 
-    <label class="field">
-        <span class="field-label">빌드 번호</span>
-        <input class="input" type="number" name="buildNumber" required min="1"
-               value="#(suggestedBuildNumber)">
-        <span class="field-note">같은 앱 안에서 겹칠 수 없습니다. macOS 가 이 값으로 최신을 판단합니다.</span>
-    </label>
-
-    <fieldset class="field choice-group">
-        <legend class="field-label">서명 상태</legend>
-        <label class="choice">
-            <input type="radio" name="uploadKind" value="unsigned" checked>
-            <span>
-                <span class="choice-name">미서명</span>
-                <span class="choice-note">서명 워커가 서명·공증까지 대신합니다.</span>
-            </span>
-        </label>
-        <label class="choice">
-            <input type="radio" name="uploadKind" value="signed">
-            <span>
-                <span class="choice-name">서명·공증 완료</span>
-                <span class="choice-note">이미 마친 완성본입니다. 서명 단계를 건너뜁니다.</span>
-            </span>
+        <label class="field">
+            <span class="field-label">앱 zip</span>
+            <input class="input" type="file" name="file" required accept=".zip,application/zip">
+            <span class="field-note"><code>.app</code> 번들은 디렉터리라 그대로 올릴 수 없습니다. zip 으로 압축해서 올리세요.</span>
+            <span class="field-note" id="bundle-read-status" hidden></span>
         </label>
     </fieldset>
 
-    <label class="field">
-        <span class="field-label">최소 macOS 버전 <span class="field-optional">선택</span></span>
-        <input class="input" type="text" name="minimumOSVersion" placeholder="14.0"
-               autocapitalize="off" autocorrect="off" spellcheck="false">
-    </label>
+    <fieldset class="form-group">
+        <legend class="form-group-title">번들이 밝히는 값</legend>
 
-    <label class="field">
-        <span class="field-label">릴리즈 노트 <span class="field-optional">선택</span></span>
-        <textarea class="input" name="releaseNotes" rows="4"></textarea>
-    </label>
+        <label class="field">
+            <span class="field-label">버전</span>
+            <input class="input" type="text" name="shortVersion" required placeholder="1.0.0"
+                   autocapitalize="off" autocorrect="off" spellcheck="false">
+            <span class="field-note">사람이 보는 번호입니다. <code>CFBundleShortVersionString</code> 과 맞추세요.</span>
+        </label>
 
-    <label class="field">
-        <span class="field-label">파일</span>
-        <input class="input" type="file" name="file" required accept=".zip,application/zip">
-        <span class="field-note"><code>.app</code> 번들은 디렉터리라 그대로 올릴 수 없습니다. zip 으로 압축해서 올리세요.</span>
-    </label>
+        <label class="field">
+            <span class="field-label">빌드 번호</span>
+            <!-- `data-suggested` 는 이 값이 서버의 제안이라는 표시다. 사람이 적은
+                 값과 구별해야 번들에서 읽은 값으로 덮을 수 있다 (ADR-0030). -->
+            <input class="input" type="number" name="buildNumber" required min="1"
+                   value="#(suggestedBuildNumber)"
+                   data-suggested="#(suggestedBuildNumber)">
+            <span class="field-note">같은 앱 안에서 겹칠 수 없습니다. macOS 가 이 값으로 최신을 판단합니다.</span>
+        </label>
 
-    <label class="field">
-        <span class="field-label">entitlements <span class="field-optional">선택</span></span>
-        <input class="input" type="file" name="entitlements"
-               accept=".plist,.entitlements,text/xml,application/xml">
-        <span class="field-note">
-            서명할 때 붙일 권한 목록입니다. #(entitlementsWhenNeeded)
-        </span>
-        <span class="field-note">#(entitlementsWhereToFind)</span>
-    </label>
+        <label class="field">
+            <span class="field-label">최소 macOS 버전 <span class="field-optional">선택</span></span>
+            <input class="input" type="text" name="minimumOSVersion" placeholder="14.0"
+                   autocapitalize="off" autocorrect="off" spellcheck="false">
+        </label>
+    </fieldset>
+
+    <fieldset class="form-group">
+        <legend class="form-group-title">어떻게 서명할까</legend>
+
+        <fieldset class="field choice-group">
+            <legend class="field-label">서명 상태</legend>
+            <label class="choice">
+                <input type="radio" name="uploadKind" value="unsigned" checked>
+                <span>
+                    <span class="choice-name">미서명</span>
+                    <span class="choice-note">서명 워커가 서명·공증까지 대신합니다.</span>
+                </span>
+            </label>
+            <label class="choice">
+                <input type="radio" name="uploadKind" value="signed">
+                <span>
+                    <span class="choice-name">서명·공증 완료</span>
+                    <span class="choice-note">이미 마친 완성본입니다. 서명 단계를 건너뜁니다.</span>
+                </span>
+            </label>
+        </fieldset>
+
+        <label class="field field-attached">
+            <span class="field-label">entitlements <span class="field-optional">선택</span></span>
+            <input class="input" type="file" name="entitlements"
+                   accept=".plist,.entitlements,text/xml,application/xml">
+            <span class="field-note">
+                위에서 <strong>미서명</strong>을 골랐을 때만 쓰입니다. 서명할 때 붙일 권한
+                목록입니다. #(entitlementsWhenNeeded)
+            </span>
+            <span class="field-note">#(entitlementsWhereToFind)</span>
+        </label>
+    </fieldset>
+
+    <fieldset class="form-group">
+        <legend class="form-group-title">사용자에게 알릴 것</legend>
+
+        <label class="field">
+            <span class="field-label">릴리즈 노트 <span class="field-optional">선택</span></span>
+            <textarea class="input" name="releaseNotes" rows="4"></textarea>
+        </label>
+    </fieldset>
 
     <div class="progress-row" id="upload-progress" hidden>
         <progress class="progress" id="upload-bar" max="100" value="0"></progress>
@@ -89,6 +110,7 @@
     </div>
 </form>
 
+<script src="/bundle-info.js?v=#(page.assetVersion)" defer></script>
 <script src="/upload.js?v=#(page.assetVersion)" defer></script>
 #endexport
 #endextend

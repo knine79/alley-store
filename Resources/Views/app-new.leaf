@@ -9,7 +9,19 @@
 <p class="notice notice-error">#(error)</p>
 #endif
 
-<form class="form" method="post" action="/apps/new">
+<form class="form" method="post" action="/apps/new" id="app-new-form">
+    <!-- 스크립트가 돌 때만 보인다. 없으면 아래 칸을 직접 채우면 되고, 이 칸은
+         있어도 아무 일도 하지 않으므로 아예 감춘다 (ADR-0030). -->
+    <label class="field" id="bundle-picker" hidden>
+        <span class="field-label">번들에서 값 읽어오기 <span class="field-optional">선택</span></span>
+        <input class="input" type="file" id="bundle-file" accept=".zip,application/zip">
+        <span class="field-note">
+            <strong>이 파일은 올라가지 않습니다.</strong> 번들 ID 와 이름만 읽어서 아래 칸을
+            채웁니다. 실제 업로드는 등록을 마친 다음 버전 화면에서 합니다.
+        </span>
+        <span class="field-note" id="bundle-read-status" hidden></span>
+    </label>
+
     <label class="field">
         <span class="field-label">번들 ID</span>
         <input class="input" type="text" name="bundleID" required
@@ -52,5 +64,8 @@
         <button class="button button-primary" type="submit">등록</button>
     </div>
 </form>
+
+<script src="/bundle-info.js?v=#(page.assetVersion)" defer></script>
+<script src="/app-new.js?v=#(page.assetVersion)" defer></script>
 #endexport
 #endextend
