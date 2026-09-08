@@ -1,20 +1,10 @@
 #extend("layout"):
 #export("content"):
-<div class="page-head">
-    <div>
-        <h1 class="page-title">서명 워커</h1>
-        <p class="page-lead">
-            미서명으로 올라온 버전의 서명과 공증을 대신하는 맥입니다. 인증서는 그 머신의
-            키체인에만 있고 이 서버로 올라오지 않습니다.
-        </p>
-    </div>
-    <div class="head-actions">
-        <a class="button" href="/admin/settings">스토어 설정</a>
-        <a class="button" href="/admin/stats">통계</a>
-        <a class="button" href="/admin/users">역할 관리</a>
-        <a class="button" href="/admin/portal">개발자 포털</a>
-    </div>
-</div>
+<h1 class="page-title">서명 워커</h1>
+<p class="page-lead">
+    미서명으로 올라온 버전의 서명과 공증을 대신하는 맥입니다. 인증서는 그 머신의
+    키체인에만 있고 이 서버로 올라오지 않습니다.
+</p>
 
 #if(error):
 <p class="notice notice-error">#(error)</p>

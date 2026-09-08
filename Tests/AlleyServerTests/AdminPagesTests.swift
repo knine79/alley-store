@@ -9,7 +9,10 @@ import VaporTesting
 struct AdminPageAccessTests {
     @Test(
         "관리자가 아니면 볼 수 없다",
-        arguments: ["/admin", "/admin/settings", "/admin/users", "/admin/workers"]
+        arguments: [
+            "/admin", "/admin/settings", "/admin/users", "/admin/workers",
+            "/admin/stats", "/admin/portal",
+        ]
     )
     func nonAdminsAreBlocked(_ path: String) async throws {
         try await withMigratedApp { app in
@@ -44,6 +47,82 @@ struct AdminPageAccessTests {
                 #expect(response.status == .seeOther)
                 #expect(response.headers.first(name: .location) == "/admin/settings")
             }
+        }
+    }
+}
+
+@Suite("관리자 화면 탭")
+struct AdminNavTests {
+    /// 화면마다 다른 부분집합을 링크로 놓던 것을 하나로 모았다. 그래서 확인할 것은
+    /// "다섯 칸이 어느 화면에서나 같은 순서로 있는가" 다. 여기 적힌 순서가 곧 기대값이고,
+    /// 근거는 `AdminTab` 에 있다.
+    static let expectedOrder = ["스토어 설정", "역할 관리", "서명 워커", "개발자 포털", "통계"]
+
+    @Test("다섯 화면 전부에서 같은 순서로 나오고 지금 있는 곳이 표시된다", arguments: AdminTab.allCases)
+    func tabsAreIdenticalOnEveryAdminPage(_ current: AdminTab) async throws {
+        try await withMigratedApp { app in
+            let (_, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
+
+            try await app.testing().test(
+                .GET, current.path, headers: .sessionCookie(token)
+            ) { response in
+                #expect(response.status == .ok)
+                let nav = try #require(
+                    Self.tabBar(in: response.body.string),
+                    "\(current.path) 에 탭이 없습니다."
+                )
+
+                // 순서가 화면마다 다르면 "어디로 갈 수 있나" 가 화면마다 달라 보인다.
+                #expect(Self.labels(in: nav) == Self.expectedOrder)
+
+                // 지금 있는 곳은 링크가 아니어야 한다. 눌러도 아무 일이 안 일어나는
+                // 클릭을 남겨두지 않는다.
+                #expect(
+                    nav.contains(
+                        #"<span class="tab tab-current" aria-current="page">\#(current.title)</span>"#
+                    )
+                )
+                #expect(!nav.contains(#"href="\#(current.path)""#))
+
+                // 나머지 넷은 눌러서 갈 수 있어야 한다.
+                for other in AdminTab.allCases where other != current {
+                    #expect(nav.contains(#"<a class="tab" href="\#(other.path)">"#))
+                }
+            }
+        }
+    }
+
+    @Test("관리자 화면이 아니면 탭이 나오지 않는다", arguments: ["/apps", "/login"])
+    func tabsDoNotLeakOutsideAdminPages(_ path: String) async throws {
+        try await withMigratedApp { app in
+            let (_, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
+
+            // 관리자로 봐도 안 나와야 한다. 역할이 아니라 "지금 관리자 화면인가" 로
+            // 갈리는 값이라서다 (`PageContext.adminTabs`).
+            try await app.testing().test(.GET, path, headers: .sessionCookie(token)) { response in
+                #expect(Self.tabBar(in: response.body.string) == nil)
+            }
+        }
+    }
+
+    /// 탭 묶음만 떼어낸다. 본문에도 `/admin/...` 링크가 있을 수 있어서 화면 전체를
+    /// 문자열로 훑으면 탭을 보는 것인지 알 수 없다.
+    private static func tabBar(in html: String) -> String? {
+        guard let start = html.range(of: #"<nav class="tabs""#),
+              let end = html.range(of: "</nav>", range: start.upperBound..<html.endIndex)
+        else { return nil }
+        return String(html[start.lowerBound..<end.upperBound])
+    }
+
+    /// 탭에 적힌 글자를 나온 순서대로.
+    private static func labels(in nav: String) -> [String] {
+        nav.split(separator: "<").compactMap { chunk in
+            guard chunk.hasPrefix(#"a class="tab""#)
+                || chunk.hasPrefix(#"span class="tab tab-current""#)
+            else { return nil }
+            guard let close = chunk.firstIndex(of: ">") else { return nil }
+            let text = chunk[chunk.index(after: close)...]
+            return text.isEmpty ? nil : String(text)
         }
     }
 }

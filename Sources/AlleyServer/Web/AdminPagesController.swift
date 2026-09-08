@@ -87,7 +87,7 @@ struct AdminPagesController: RouteCollection, Sendable {
         try await request.view.render(
             "admin-settings",
             StoreSettingsPageContext(
-                page: try await request.pageContext(title: "스토어 설정"),
+                page: try await request.pageContext(adminTab: .settings),
                 values: values,
                 error: error,
                 saved: saved
@@ -141,7 +141,7 @@ struct AdminPagesController: RouteCollection, Sendable {
         return try await request.view.render(
             "admin-users",
             UserListPageContext(
-                page: try await request.pageContext(title: "역할 관리"),
+                page: try await request.pageContext(adminTab: .users),
                 users: try users.map { user in
                     UserRow(user: user, isSelf: try user.requireID() == adminID)
                 },
@@ -219,7 +219,7 @@ struct AdminPagesController: RouteCollection, Sendable {
         return try await request.view.render(
             "admin-workers",
             WorkerListPageContext(
-                page: try await request.pageContext(title: "서명 워커"),
+                page: try await request.pageContext(adminTab: .workers),
                 workers: try workers.map { try WorkerRow(worker: $0) },
                 jobs: jobs.map { SigningJobRow(job: $0) },
                 issued: issued.map { IssuedWorkerToken(name: $0.worker.name, token: $0.token) },
@@ -246,7 +246,7 @@ struct AdminPagesController: RouteCollection, Sendable {
         return try await request.view.render(
             "admin-stats",
             StatsPageContext(
-                page: try await request.pageContext(title: "통계"),
+                page: try await request.pageContext(adminTab: .stats),
                 recentDays: DownloadStats.recentDays,
                 totalDownloads: overview.totalDownloads,
                 recentDownloads: overview.recentDownloads,
@@ -323,7 +323,7 @@ struct AdminPagesController: RouteCollection, Sendable {
         return try await request.view.render(
             "admin-portal",
             PortalPageContext(
-                page: try await request.pageContext(title: "개발자 포털"),
+                page: try await request.pageContext(adminTab: .portal),
                 isConfigured: request.application.alleyConfig.appStoreConnect != nil,
                 certificates: certificates,
                 bundleIDs: bundleIDs,

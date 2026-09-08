@@ -34,6 +34,7 @@
     </header>
 
     <main class="page">
+        #extend("admin-nav")
         #import("content")
     </main>
 </body>

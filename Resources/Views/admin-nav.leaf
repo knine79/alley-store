@@ -1,0 +1,11 @@
+#if(count(page.adminTabs) > 0):
+<nav class="tabs" aria-label="관리자 화면">
+    #for(tab in page.adminTabs):
+    #if(tab.isCurrent):
+    <span class="tab tab-current" aria-current="page">#(tab.title)</span>
+    #else:
+    <a class="tab" href="#(tab.path)">#(tab.title)</a>
+    #endif
+    #endfor
+</nav>
+#endif

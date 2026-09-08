@@ -1,17 +1,7 @@
 #extend("layout"):
 #export("content"):
-<div class="page-head">
-    <div>
-        <h1 class="page-title">스토어 설정</h1>
-        <p class="page-lead">여기서 바꾼 값은 다음 요청부터 바로 반영됩니다. 재시작이 필요 없습니다.</p>
-    </div>
-    <div class="head-actions">
-        <a class="button" href="/admin/users">역할 관리</a>
-        <a class="button" href="/admin/stats">통계</a>
-        <a class="button" href="/admin/workers">서명 워커</a>
-        <a class="button" href="/admin/portal">개발자 포털</a>
-    </div>
-</div>
+<h1 class="page-title">스토어 설정</h1>
+<p class="page-lead">여기서 바꾼 값은 다음 요청부터 바로 반영됩니다. 재시작이 필요 없습니다.</p>
 
 #if(error):
 <p class="notice notice-error">#(error)</p>

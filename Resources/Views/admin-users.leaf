@@ -1,19 +1,9 @@
 #extend("layout"):
 #export("content"):
-<div class="page-head">
-    <div>
-        <h1 class="page-title">역할 관리</h1>
-        <p class="page-lead">
-            한 번이라도 로그인한 계정만 여기 나옵니다. 바뀐 역할은 그 사람의 다음 요청부터 적용됩니다.
-        </p>
-    </div>
-    <div class="head-actions">
-        <a class="button" href="/admin/settings">스토어 설정</a>
-        <a class="button" href="/admin/stats">통계</a>
-        <a class="button" href="/admin/workers">서명 워커</a>
-        <a class="button" href="/admin/portal">개발자 포털</a>
-    </div>
-</div>
+<h1 class="page-title">역할 관리</h1>
+<p class="page-lead">
+    한 번이라도 로그인한 계정만 여기 나옵니다. 바뀐 역할은 그 사람의 다음 요청부터 적용됩니다.
+</p>
 
 #if(error):
 <p class="notice notice-error">#(error)</p>

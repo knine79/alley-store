@@ -1,18 +1,10 @@
 #extend("layout"):
 #export("content"):
-<div class="page-head">
-    <div>
-        <h1 class="page-title">통계</h1>
-        <p class="page-lead">
-            서버가 아는 것은 <strong>누군가 파일을 받아갔다</strong>는 사실까지입니다.
-            실제로 설치했는지, 지금도 쓰는지는 알 수 없습니다.
-        </p>
-    </div>
-    <div class="head-actions">
-        <a class="button" href="/admin/settings">스토어 설정</a>
-        <a class="button" href="/admin/workers">서명 워커</a>
-    </div>
-</div>
+<h1 class="page-title">통계</h1>
+<p class="page-lead">
+    서버가 아는 것은 <strong>누군가 파일을 받아갔다</strong>는 사실까지입니다.
+    실제로 설치했는지, 지금도 쓰는지는 알 수 없습니다.
+</p>
 
 <div class="stat-row">
     <div class="stat">
