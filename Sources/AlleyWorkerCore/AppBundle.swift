@@ -215,15 +215,34 @@ public struct AppBundle: Sendable {
 
     /// `Info.plist` 의 `CFBundleExecutable`.
     static func executableName(fromInfoPlistAt plist: URL) -> String? {
+        string("CFBundleExecutable", fromInfoPlistAt: plist)
+    }
+
+    /// 이 번들이 자기라고 밝히는 번들 ID.
+    ///
+    /// 없을 수 있다. 그때는 이 zip 이 앱 번들 꼴을 하고 있을 뿐 macOS 가 앱으로
+    /// 다루지 않는다는 뜻이다. 판단은 부르는 쪽에 맡긴다.
+    public var bundleIdentifier: String? {
+        Self.string(
+            "CFBundleIdentifier",
+            fromInfoPlistAt: url.appendingPathComponent("Contents/Info.plist")
+        )
+    }
+
+    /// `Info.plist` 에서 문자열 값 하나를 읽는다.
+    ///
+    /// XML 과 바이너리 plist 를 모두 읽는다. `PropertyListSerialization` 이 앞머리를
+    /// 보고 스스로 가른다. 실제 앱은 대부분 바이너리로 들어 있다.
+    static func string(_ key: String, fromInfoPlistAt plist: URL) -> String? {
         guard let data = try? Data(contentsOf: plist),
               let parsed = try? PropertyListSerialization.propertyList(
                   from: data, options: [], format: nil
               ) as? [String: Any],
-              let name = parsed["CFBundleExecutable"] as? String
+              let value = parsed[key] as? String
         else {
             return nil
         }
-        return name
+        return value
     }
 
     // MARK: - Mach-O 판별

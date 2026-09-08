@@ -47,16 +47,28 @@ struct BundleFixture: ~Copyable {
         return url
     }
 
-    /// `CFBundleExecutable` 만 담은 Info.plist.
+    /// Info.plist 를 만든다.
+    ///
+    /// `identifier` 를 주지 않으면 `CFBundleIdentifier` 가 아예 없는 plist 가 된다.
+    /// 그 상태를 재현해야 하는 테스트가 있어서 기본값을 비워둔다.
     @discardableResult
-    func makeInfoPlist(_ path: String, executable: String) throws -> URL {
+    func makeInfoPlist(
+        _ path: String,
+        executable: String,
+        identifier: String? = nil,
+        format: PropertyListSerialization.PropertyListFormat = .xml
+    ) throws -> URL {
         let url = root.appendingPathComponent(path)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true
         )
+        var contents: [String: Any] = ["CFBundleExecutable": executable]
+        if let identifier {
+            contents["CFBundleIdentifier"] = identifier
+        }
         let data = try PropertyListSerialization.data(
-            fromPropertyList: ["CFBundleExecutable": executable],
-            format: .xml,
+            fromPropertyList: contents,
+            format: format,
             options: 0
         )
         try data.write(to: url)

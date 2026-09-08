@@ -24,6 +24,8 @@ public enum SigningFailureCode: String, Codable, Sendable, CaseIterable, Equatab
     case entitlementsRejected = "entitlements_rejected"
     /// zip 안에서 서명할 `.app` 을 정할 수 없다. 없거나 여러 개다.
     case bundleLayoutInvalid = "bundle_layout_invalid"
+    /// 올린 번들이 밝히는 번들 ID 가 등록된 앱과 다르다. 서명하기 전에 멈춘다.
+    case bundleIdentifierMismatch = "bundle_identifier_mismatch"
     /// 우리가 서명 대상에서 지나친 코드가 번들에 남았다. 공증에서 거절된다.
     case unsignedCodeRemains = "unsigned_code_remains"
     /// Apple 이 내용을 보고 공증을 거절했다.
@@ -66,7 +68,8 @@ public enum SigningFailureCode: String, Codable, Sendable, CaseIterable, Equatab
         case .transferFailed, .appleServiceUnavailable, .timedOut:
             return true
         case .signingIdentityUnavailable, .codesignFailed, .entitlementsRejected,
-             .bundleLayoutInvalid, .unsignedCodeRemains, .notarizationRejected, .unknown:
+             .bundleLayoutInvalid, .bundleIdentifierMismatch, .unsignedCodeRemains,
+             .notarizationRejected, .unknown:
             return false
         }
     }
@@ -102,6 +105,7 @@ public enum SigningFailureGuidance {
         case .codesignFailed: return "서명 실패"
         case .entitlementsRejected: return "entitlements 문제"
         case .bundleLayoutInvalid: return "번들 구조 문제"
+        case .bundleIdentifierMismatch: return "번들 ID 불일치"
         case .unsignedCodeRemains: return "서명되지 않은 코드가 남음"
         case .notarizationRejected: return "공증 거절"
         case .transferFailed: return "파일 전송 실패"
@@ -135,6 +139,13 @@ public enum SigningFailureGuidance {
             return """
                 zip 최상위에 `.app` 하나만 담아 다시 올리세요. 앱이 없거나 여러 개면 무엇을 \
                 배포할지 서버가 고를 수 없습니다.
+                """
+        case .bundleIdentifierMismatch:
+            return """
+                올린 앱이 스스로 밝히는 번들 ID 가 이 앱에 등록된 번들 ID 와 다릅니다. 다른 앱의 \
+                빌드를 올렸거나, 빌드 설정의 번들 ID 가 바뀐 것입니다. 서명하기 전에 멈췄으니 \
+                잘못된 앱이 조직 이름으로 서명되지는 않았습니다. 맞는 빌드를 올리거나, 번들 ID 가 \
+                정말 바뀐 것이라면 관리자에게 앱을 새로 등록해 달라고 요청하세요.
                 """
         case .unsignedCodeRemains:
             return """

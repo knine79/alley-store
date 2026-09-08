@@ -83,6 +83,7 @@ public struct SigningPipeline: Sendable {
         let bundle = try AppBundle.locate(in: extracted)
 
         await progress(.validating, "번들: \(bundle.url.lastPathComponent)")
+        try requireDeclaredBundleIdentifier(of: bundle, matches: job.appBundleID)
         let targets = try bundle.codeToSign()
         // 업로더가 준 plist 가 있으면 그것이 진실이다 (ADR-0020).
         let provided = job.entitlements.map { Data($0.utf8) }
@@ -184,6 +185,48 @@ public struct SigningPipeline: Sendable {
         try Entitlements.validate(bundle: bundle.url, declaredKeys: keys)
         try requireJITForElectron(bundle: bundle, declaredKeys: keys)
         return keys
+    }
+
+    /// 올린 번들이 스스로 밝히는 번들 ID 가 등록된 앱과 같은지 본다.
+    ///
+    /// **서명 전에** 본다. 여기를 통과시키면 남의 앱이나 엉뚱한 빌드가 조직의
+    /// Developer ID 로 서명되고 공증까지 받는다. 그건 되돌릴 수 없다. Apple 이 발급한
+    /// 공증 티켓은 회수할 수 없고, 그 사이 누가 받아갔는지도 알 수 없다.
+    ///
+    /// 서명이 되고 나서야 드러나는 두 번째 피해도 있다. 스토어 앱은 설치된 앱을
+    /// `CFBundleIdentifier` 로 찾는다(`InstalledApps`). 등록된 ID 와 실제 번들의 ID 가
+    /// 어긋난 채 배포되면 업데이트가 영영 감지되지 않는다. 그 앱은 스토어에 보이지만
+    /// 사용자 머신에서는 "설치 안 됨"으로 남는다.
+    ///
+    /// `Info.plist` 에 번들 ID 가 아예 없으면 실패로 다룬다. 대조할 것이 없다는 뜻이고,
+    /// 그런 번들은 스토어 앱이 어차피 찾지 못한다. 여기서 관대하게 넘기면 서명은
+    /// 되지만 배포 후에 쓸 수 없는 앱이 된다.
+    func requireDeclaredBundleIdentifier(
+        of bundle: AppBundle,
+        matches registered: String
+    ) throws {
+        guard let declared = bundle.bundleIdentifier else {
+            throw PipelineError.commandFailed(
+                step: "번들 검사",
+                code: .bundleIdentifierMismatch,
+                detail: """
+                    \(bundle.url.lastPathComponent) 의 Info.plist 에 CFBundleIdentifier 가 \
+                    없습니다. 등록된 번들 ID 는 \(registered) 입니다. 번들 ID 가 없는 앱은 \
+                    스토어 앱이 설치 여부를 판단할 수 없어 배포해도 업데이트가 잡히지 않습니다.
+                    """
+            )
+        }
+
+        guard declared == registered else {
+            throw PipelineError.commandFailed(
+                step: "번들 검사",
+                code: .bundleIdentifierMismatch,
+                detail: """
+                    올린 번들은 자기 번들 ID 를 \(declared) 라고 밝히는데, 등록된 번들 ID 는 \
+                    \(registered) 입니다. 서명하지 않고 멈췄습니다.
+                    """
+            )
+        }
     }
 
     /// Electron 을 품었는데 JIT 권한이 없으면 서명하기 전에 멈춘다.
