@@ -21,7 +21,7 @@ public func configure(_ app: Application, config: AppConfig) async throws {
     app.views.use(.leaf)
     // 정적 파일 주소에 붙일 지문. 파일이 바뀌면 값이 바뀌어 브라우저가 새로 받는다.
     app.assetVersion = AssetVersion(publicDirectory: app.directory.publicDirectory)
-    configureMiddleware(app)
+    configureMiddleware(app, config: config)
 
     // 업로드는 presigned URL로 스토리지에 직접 올라가므로
     // 서버가 큰 바디를 받을 일이 없다.
@@ -124,8 +124,15 @@ private func configureMigrations(_ app: Application) {
 /// `{"error":true,...}` 를 보게 된다.
 ///
 /// 순서가 중요하다. 오류 처리가 가장 바깥에 있어야 안쪽에서 난 오류를 다 잡는다.
-private func configureMiddleware(_ app: Application) {
+/// 보안 헤더는 그보다 더 바깥에 둔다. 오류 처리가 **만들어낸** 응답에도 헤더가
+/// 붙어야 하기 때문이다. 안쪽에 두면 404 화면만 헤더 없이 나간다.
+private func configureMiddleware(_ app: Application, config: AppConfig) {
     app.middleware = .init()
+    app.middleware.use(
+        SecurityHeadersMiddleware(
+            storageOrigin: SecurityHeadersMiddleware.storageOrigin(for: config.storage)
+        )
+    )
     app.middleware.use(ConsoleErrorMiddleware())
     // 쿠키로 인증된 상태 변경 요청의 출처를 확인한다 (ADR-0010 후속).
     app.middleware.use(OriginCheckMiddleware())

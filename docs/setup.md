@@ -189,7 +189,7 @@ docker compose -f docker-compose.yml -f caddy-compose.yml logs caddy
 무엇인지 알지 못하고 알 필요도 없습니다. `https://store.example.com` 을 받아
 `http://<서버>:8080` 으로 넘기도록만 하면 됩니다.
 
-맞춰야 할 것은 넷입니다.
+맞춰야 할 것은 다섯입니다.
 
 - **`PUBLIC_BASE_URL` 을 밖에서 보이는 https 주소로.** 서버가 만드는 모든 링크
   (Slack 알림, Sparkle 피드, 웹 화면의 절대 주소)가 이 값에서 나옵니다. 요청의
@@ -208,7 +208,19 @@ docker compose -f docker-compose.yml -f caddy-compose.yml logs caddy
   (compose 기본값 `http://minio:9000`) 그 이름은 브라우저가 풀지 못합니다.
   `S3_PUBLIC_ENDPOINT` 에 **브라우저가 닿을 수 있는 주소**를 따로 적으세요.
   스토리지를 별도 서브도메인으로 내보내거나 AWS S3 를 쓰면 됩니다
-  ([ADR-0024](adr/0024-storage-prefix-endpoints-credentials.md))
+  ([ADR-0024](adr/0024-storage-prefix-endpoints-credentials.md)).
+
+  **이 값이 CSP 에도 들어갑니다.** 서버는 `connect-src` 에 스토리지 주소를 정확히
+  적어 내보냅니다. 여기가 틀리면 브라우저가 업로드 요청을 막고, **화면에는 아무
+  표시도 나지 않습니다.** 브라우저 개발자 도구 콘솔에만 CSP 위반이 찍힙니다
+- **HSTS 는 앞단에서 붙이세요.** Alley 는 `Strict-Transport-Security` 를 보내지
+  않습니다. 서버는 자기가 https 로 서비스되는지 알지 못하고, TLS 를 끊는 자리가
+  이미 붙이는 경우가 많아 헤더가 둘 나가기 때문입니다
+  ([ADR-0026](adr/0026-security-headers.md)). Caddy 는 기본으로 붙입니다.
+
+  나머지 보안 헤더(`Content-Security-Policy`, `X-Content-Type-Options`,
+  `Referrer-Policy`)는 서버가 직접 붙입니다. 앞단에서 **덮어쓰지 마세요.** 특히
+  CSP 를 프록시가 다시 쓰면 스토리지 주소가 빠져 업로드가 조용히 막힙니다
 
 `X-Forwarded-Proto` 헤더는 넘겨주면 좋지만 **필수는 아닙니다.** Alley 가 이 헤더를
 읽는 곳은 위의 `Origin` 검사 한 군데뿐이고, 거기서도 `Host` 의 http·https 양쪽과

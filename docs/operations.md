@@ -207,6 +207,24 @@ JWT_SECRET         | 서버의 .env            | 잃으면 모든 로그인이 �
 
 ## 자주 겪는 문제
 
+**업로드가 `draft` 에서 멈춤 (브라우저 콘솔에 CSP 오류)**
+아래 CORS 항목과 증상이 같지만 원인이 다릅니다. 브라우저 콘솔에
+`Refused to connect ... violates the following Content Security Policy directive`
+가 보이면 CSP 쪽입니다. 서버가 내보내는 `connect-src` 에 스토리지 주소가 안 들어간
+것입니다.
+
+```bash
+curl -sI https://store.example.com/ | grep -i content-security-policy
+```
+
+`connect-src` 뒤에 붙은 주소가 브라우저가 실제로 붙는 스토리지 주소와 같아야 합니다.
+다르면 `S3_PUBLIC_ENDPOINT` 를 고치고 서버를 다시 띄우세요. 앞단 프록시가 CSP 헤더를
+덮어쓰고 있지는 않은지도 확인하세요 ([ADR-0026](adr/0026-security-headers.md)).
+
+**화면 일부가 안 뜨는데 서버 로그는 깨끗함**
+CSP 위반은 서버에 아무것도 남기지 않습니다. 브라우저 개발자 도구 콘솔에만 찍힙니다.
+스토어 로고를 `http://` 주소로 넣으면 여기에 걸립니다. https 로 바꾸세요.
+
 **로그인 화면과 Google 화면 사이를 무한 반복**
 HTTPS 없이 `PUBLIC_BASE_URL` 만 `https://` 로 적어두면 이렇게 됩니다. 세션 쿠키에
 `Secure` 가 붙어 브라우저가 평문 연결에서 그 쿠키를 저장하지 않습니다. 에러도 로그도
