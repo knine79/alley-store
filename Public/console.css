@@ -607,22 +607,18 @@ textarea.input {
 
 /* ── 사람 목록 ───────────────────────────────────────────── */
 
+/* 이름과 이메일 두 조각을 넣는 자리다. 한 줄마다 상자를 두르면
+   내용보다 테두리가 많아진다. 하나의 상자 안에 줄로 나눈다. */
 .person-list {
     list-style: none;
     margin: 0;
     padding: 0;
     display: grid;
-    gap: var(--space-2);
-}
-
-/* 이름과 이메일 두 조각을 넣는 자리다. 한 줄마다 상자를 두르면
-   내용보다 테두리가 많아진다. 하나의 상자 안에 줄로 나눈다. */
-.person-list {
+    gap: 0;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     overflow: hidden;
-    gap: 0;
 }
 
 .person {
