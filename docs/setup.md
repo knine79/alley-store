@@ -309,6 +309,10 @@ docker compose up -d
 버전을 올릴 때도 같은 명령을 씁니다
 ([운영 가이드의 서버 업그레이드](operations.md#서버-업그레이드)).
 
+이 명령을 돌릴 수 없는 플랫폼이라면 `MIGRATE_ON_BOOT` 를 켜는 방법이 있습니다.
+기본값은 꺼짐이고, 돌릴 수 있다면 위 명령이 권장 경로입니다
+([운영 가이드](operations.md#migrate-를-돌릴-수-없는-환경이라면)).
+
 `https://store.example.com` (로컬이면 `http://localhost:8080`)에서 로그인 화면이
 뜹니다. `INITIAL_ADMIN_EMAILS` 에 적은 계정으로 들어가세요.
 
