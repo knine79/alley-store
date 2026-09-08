@@ -36,6 +36,7 @@
 | [0026](0026-security-headers.md) | 보안 헤더를 서버가 붙이고, CSP 는 화면이 실제로 쓰는 것만 연다 | 수락됨 | 2026-09-08 |
 | [0027](0027-fail-fast-on-unsafe-config.md) | 안전하지 않은 설정으로는 서버가 뜨지 않는다 | 수락됨 | 2026-09-08 |
 | [0028](0028-migrate-on-boot-with-advisory-lock.md) | 부팅 시 마이그레이션을 옵트인으로 열고 advisory lock 으로 한 대만 돌린다 | 수락됨 | 2026-09-08 |
+| [0029](0029-verify-bundle-identifier-before-signing.md) | 번들 ID 는 서명 전에 워커가 대조한다 | 수락됨 | 2026-09-08 |
 
 ## 언제 쓰나
 
