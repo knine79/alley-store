@@ -71,6 +71,9 @@ private func configureDatabase(_ app: Application, config: AppConfig.DatabaseCon
     // 운영 환경의 TLS 종단은 인프라 계층이 담당한다.
     postgres.coreConfiguration.tls = .disable
     app.databases.use(.postgres(configuration: postgres), as: .psql)
+    // advisory lock 은 커넥션 풀 밖에서 직접 연결한다. 그 연결이 풀과 같은 값에서
+    // 나와야 하므로 여기서 남긴다 (`AdvisoryLock`).
+    app.postgresConfiguration = postgres.coreConfiguration
 }
 
 private func configureMigrations(_ app: Application) {

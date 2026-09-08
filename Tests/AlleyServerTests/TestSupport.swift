@@ -93,6 +93,23 @@ private actor DatabaseTestLock {
     }
 }
 
+/// 스키마를 건드리는 테스트가 애플리케이션을 직접 만들어야 할 때.
+///
+/// `withMigratedApp` 은 `configure` 를 마친 뒤에 스키마를 올린다. 부팅 시
+/// 마이그레이션은 **`configure` 안에서** 도는 것이 요점이라 그 헬퍼로는 확인할 수
+/// 없다. 그래서 자물쇠만 같은 방식으로 잡아주고 앱 만들기는 본문에 넘긴다.
+/// 되돌리기도 본문 몫이다.
+func withDatabaseLock(_ body: () async throws -> Void) async throws {
+    await DatabaseTestLock.shared.acquire()
+    do {
+        try await body()
+    } catch {
+        await DatabaseTestLock.shared.release()
+        throw error
+    }
+    await DatabaseTestLock.shared.release()
+}
+
 /// 스키마를 올린 뒤 본문을 돌리고, 끝나면 되돌린다.
 ///
 /// 되돌리기를 `defer` 가 아니라 성공·실패 양쪽에서 명시적으로 부르는 이유는,
