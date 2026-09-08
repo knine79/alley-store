@@ -6,9 +6,17 @@ import Vapor
 /// Sparkle 피드와 그 토큰.
 ///
 /// 이 경로만 로그인 없이 열린다. Sparkle 은 우리가 만든 클라이언트가 아니라서
-/// 세션도 헤더도 들고 있지 않기 때문이다(ADR-0006). 대신 앱별 피드 토큰을 질의
-/// 항목으로 받는다. 그 토큰으로 할 수 있는 것은 **그 앱의 출시본을 보고 받는 것**
+/// 세션도 헤더도 들고 있지 않기 때문이다(ADR-0006). 대신 앱별 피드 토큰을 주소에
+/// 실어 받는다. 그 토큰으로 할 수 있는 것은 **그 앱의 출시본을 보고 받는 것**
 /// 뿐이다. 자세한 대가는 ADR-0017 에 있다.
+///
+/// 토큰은 **경로 세그먼트**로 받는다. 질의 항목으로 받던 것을 옮겼다. 질의 항목만
+/// 따로 기록하거나 그것만 훑는 도구가 흔해서 그렇다. **전체 URL 을 통째로 적는 로거
+/// 앞에서는 아무것도 나아지지 않는다.** 무엇이 나아지고 무엇이 그대로인지는
+/// ADR-0025 에 적었다.
+///
+/// 옛 질의 형식도 당분간 받는다. 이미 배포된 앱의 `Info.plist` 에 그 주소가 박혀
+/// 있어서 여기서 끊으면 그 앱들이 조용히 업데이트를 멈춘다.
 public struct AppcastController: RouteCollection, Sendable {
     /// 피드에 싣는 항목 수.
     ///
@@ -20,10 +28,11 @@ public struct AppcastController: RouteCollection, Sendable {
     public init() {}
 
     public func boot(routes: any RoutesBuilder) throws {
-        // 인증 미들웨어를 걸지 않는다. 토큰을 질의 항목으로 직접 확인한다.
-        routes
-            .grouped(APIPath.apps.pathComponents)
-            .get(":appID", "appcast.xml", use: feed)
+        // 인증 미들웨어를 걸지 않는다. 주소에 실린 토큰을 여기서 직접 확인한다.
+        let open = routes.grouped(APIPath.apps.pathComponents)
+        open.get(":appID", "feed", ":token", "appcast.xml", use: feed)
+        // 폐기 예정. 이미 배포된 앱이 들고 있는 형식이라 아직 받는다.
+        open.get(":appID", "appcast.xml", use: legacyFeed)
 
         let managed = routes
             .grouped(SessionAuthenticator(), User.guardMiddleware())
@@ -39,8 +48,37 @@ public struct AppcastController: RouteCollection, Sendable {
 
     @Sendable
     func feed(request: Request) async throws -> Response {
-        let app = try await authorizedApp(on: request)
+        let token = request.parameters.get("token").flatMap { $0.isEmpty ? nil : $0 }
+        return try await feed(request: request, token: token, isLegacyURL: false)
+    }
+
+    /// 토큰을 질의 항목으로 받던 옛 주소.
+    ///
+    /// 응답에 `Deprecation` 을 붙이고 로그를 남긴다. 어느 앱이 아직 옛 주소를 들고
+    /// 있는지 알아야 언젠가 이 경로를 지울 수 있는데, 그 답은 로그에만 있다.
+    /// 언제 지울지는 아직 정하지 않았다 (ADR-0025).
+    @Sendable
+    func legacyFeed(request: Request) async throws -> Response {
+        let token = request.query[String.self, at: APIPath.feedTokenQueryItem]
+            .flatMap { $0.isEmpty ? nil : $0 }
+        let response = try await feed(request: request, token: token, isLegacyURL: true)
+        response.headers.replaceOrAdd(name: "Deprecation", value: "true")
+        return response
+    }
+
+    private func feed(
+        request: Request,
+        token: String?,
+        isLegacyURL: Bool
+    ) async throws -> Response {
+        let (app, feedToken) = try await authorizedApp(on: request, token: token)
         let appID = try app.requireID()
+
+        if isLegacyURL {
+            request.logger.notice(
+                "폐기 예정인 질의 형식 피드 주소 사용 [앱: \(app.bundleID), 토큰: \(feedToken.name)]"
+            )
+        }
 
         let versions = try await Version.query(on: request.db)
             .filter(\.$app.$id == appID)
@@ -77,14 +115,16 @@ public struct AppcastController: RouteCollection, Sendable {
         return response
     }
 
-    /// 질의 항목의 토큰으로 앱을 찾는다.
+    /// 주소에 실린 토큰으로 앱을 찾는다.
     ///
     /// 토큰이 틀리면 앱이 있는지조차 알려주지 않고 404 를 준다. 앱 ID 만 바꿔가며
     /// 어떤 앱이 있는지 훑는 것을 막는다.
-    private func authorizedApp(on request: Request) async throws -> App {
+    private func authorizedApp(
+        on request: Request,
+        token value: String?
+    ) async throws -> (App, FeedToken) {
         guard let appID = request.parameters.get("appID", as: UUID.self),
-              let value = request.query[String.self, at: APIPath.feedTokenQueryItem],
-              !value.isEmpty
+              let value
         else {
             throw Abort(.notFound, reason: "피드를 찾을 수 없습니다.")
         }
@@ -102,7 +142,7 @@ public struct AppcastController: RouteCollection, Sendable {
 
         token.lastUsedAt = Date()
         try await token.save(on: request.db)
-        return token.app
+        return (token.app, token)
     }
 
     // MARK: - 토큰
@@ -195,14 +235,14 @@ enum FeedTokenIssuing {
 
     /// 앱의 `SUFeedURL` 에 그대로 넣을 주소.
     ///
-    /// 토큰을 사람이 손으로 붙이게 하면 물음표와 등호에서 실수가 난다. 완성된 주소를
-    /// 준다.
+    /// 토큰을 사람이 손으로 붙이게 하면 실수가 난다. 완성된 주소를 준다.
+    /// **새 형식으로만 낸다.** 옛 질의 형식은 이미 나가 있는 주소를 받아주기만 한다.
     static func feedURL(baseURL: String, appID: UUID, token: String) -> String {
         var base = baseURL
         while base.hasSuffix("/") {
             base.removeLast()
         }
-        return "\(base)\(APIPath.appcast(ofApp: appID))?\(APIPath.feedTokenQueryItem)=\(token)"
+        return "\(base)\(APIPath.appcast(ofApp: appID, token: token))"
     }
 
     @discardableResult

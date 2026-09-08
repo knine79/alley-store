@@ -57,8 +57,21 @@ public enum APIPath {
         "\(deployTokens(ofApp: appID))/\(tokenID.uuidString)"
     }
 
-    /// Sparkle 이 읽는 appcast. 앱별 피드 토큰으로 인증한다 (ADR-0017).
-    public static func appcast(ofApp id: UUID) -> String {
+    /// Sparkle 이 읽는 appcast. 앱별 피드 토큰을 경로에 싣는다 (ADR-0017, ADR-0025).
+    ///
+    /// 토큰이 경로에 있는 이유는 질의 항목이 액세스 로그에 그대로 남기 때문이다.
+    /// 자세한 것은 ADR-0025 에 있다. Sparkle 은 `SUFeedURL` 을 그대로 GET 하므로
+    /// 토큰이 경로에 있든 질의에 있든 앱 쪽 코드는 달라지지 않는다.
+    public static func appcast(ofApp id: UUID, token: String) -> String {
+        "\(app(id))/feed/\(token)/appcast.xml"
+    }
+
+    /// 폐기 예정인 옛 피드 주소. 토큰을 ``feedTokenQueryItem`` 질의 항목으로 받는다.
+    ///
+    /// **새로 발급하는 주소에 쓰지 않는다.** 이미 배포된 앱의 `Info.plist` 에 이
+    /// 형식이 박혀 있어서 아직 받아줄 뿐이다. 서버는 이 형식으로 들어온 요청에
+    /// `Deprecation` 헤더를 붙이고 로그를 남긴다.
+    public static func legacyAppcast(ofApp id: UUID) -> String {
         "\(app(id))/appcast.xml"
     }
 
@@ -67,9 +80,9 @@ public enum APIPath {
         "\(app(id))/feed-tokens"
     }
 
-    /// 피드 주소에 토큰을 싣는 질의 항목의 이름.
+    /// 옛 피드 주소에 토큰을 싣던 질의 항목의 이름.
     ///
-    /// Sparkle 은 우리가 만든 클라이언트가 아니라 헤더를 붙일 수 없다.
+    /// 폐기 예정이다. ``appcast(ofApp:token:)`` 을 쓴다.
     public static let feedTokenQueryItem = "token"
 
     /// 배포 토큰이 자기가 어느 앱의 것인지 확인하는 경로.

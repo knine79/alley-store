@@ -440,7 +440,7 @@ MVP에서는 사용자가 버튼을 눌러 업데이트합니다. 백그라운�
 서버가 앱별로 appcast를 서빙합니다.
 
 ```
-GET /api/v1/apps/:id/appcast.xml
+GET /api/v1/apps/:id/feed/:token/appcast.xml
 ```
 
 앱에 Sparkle을 통합하고 이 URL을 `SUFeedURL`로 지정하면 스토어 앱 없이도 자체
@@ -450,6 +450,12 @@ GET /api/v1/apps/:id/appcast.xml
 들고 있지 않습니다. appcast와 그 안의 다운로드 URL은 앱별 피드 토큰으로 인증합니다.
 토큰은 웹 콘솔에서 앱 단위로 발급·회전할 수 있게 합니다. 사용자 단위 다운로드
 이력이 남지 않는다는 한계가 있으므로, 이력이 중요한 앱은 경로 A를 씁니다.
+
+토큰은 경로에 싣습니다. 질의 항목(`?token=...`)으로 받던 것을 옮겼습니다. 액세스
+로그에 쿼리스트링을 남기는 환경이 흔하기 때문입니다
+([ADR-0025](adr/0025-feed-token-in-path.md)). 옛 질의 형식도 당분간 받습니다.
+이미 배포된 앱의 `SUFeedURL`이 그것으로 박혀 있을 수 있어서, 여기서 끊으면 그 앱들이
+조용히 업데이트를 멈춥니다.
 
 Sparkle은 내려받은 파일에 EdDSA 서명이 붙어 있어야 설치합니다. 그 서명은 서명 워커가
 만듭니다. 서버가 키를 갖지 않는 이유는 코드 서명 키를 서버에 두지 않는 것과 같습니다
@@ -486,7 +492,8 @@ POST  /api/v1/apps/:id/versions        # 버전 생성 + 업로드 URL 발급
 POST  /api/v1/versions/:id/complete    # 업로드 완료 통지 → 서명 잡 생성
 POST  /api/v1/versions/:id/release
 GET   /api/v1/versions/:id/download    # 인증 → 이력 기록 → presigned URL
-GET   /api/v1/apps/:id/appcast.xml     # Sparkle 피드 (앱별 피드 토큰 인증)
+GET   /api/v1/apps/:id/feed/:token/appcast.xml   # Sparkle 피드 (ADR-0025)
+GET   /api/v1/apps/:id/appcast.xml?token=...     # 위의 옛 형식. 폐기 예정
 GET   /api/v1/worker/jobs/next         # 워커 long-poll (워커 토큰 인증)
 PATCH /api/v1/worker/jobs/:id          # 상태·로그 보고
 POST  /api/v1/admin/workers            # 워커 등록 토큰 발급
@@ -517,6 +524,7 @@ GET   /api/v1/admin/portal/certificates      # 인증서 만료 현황 (ASC API)
 | Vapor 생태계 한계        | OAuth/S3/JWT는 검증된 라이브러리 존재. 없는 것은 REST 직접 호출로 대체               |
 | 조직 정보가 git 히스토리에 유입 | 처음부터 조직 값은 레포 밖 시크릿으로 분리. CI deny list. 공개 전 히스토리 청소가 필요 없는 구조 |
 | 스토어 앱 첫 설치 배포       | 웹 콘솔에서 직접 다운로드(부트스트랩), 이후 자체 업데이트                              |
+| 피드 토큰이 액세스 로그에 남음   | 토큰을 경로로 옮김. 다만 전체 URL을 적는 로거에는 그대로 남으므로, 읽기 전용·앱 단위 범위와 즉시 폐기에 기댐(ADR-0025) |
 
 
 개별 설계 결정의 트레이드오프는 각 [ADR](adr/README.md)의 "결과" 절에 있습니다.

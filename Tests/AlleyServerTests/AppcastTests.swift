@@ -117,7 +117,11 @@ struct FeedTokenTests {
     }
 
     private func feedPath(_ appID: UUID, token: String) -> String {
-        "\(APIPath.appcast(ofApp: appID))?\(APIPath.feedTokenQueryItem)=\(token)"
+        APIPath.appcast(ofApp: appID, token: token)
+    }
+
+    private func legacyFeedPath(_ appID: UUID, token: String) -> String {
+        "\(APIPath.legacyAppcast(ofApp: appID))?\(APIPath.feedTokenQueryItem)=\(token)"
     }
 
     @Test("토큰이 있으면 로그인 없이 피드를 준다")
@@ -220,11 +224,56 @@ struct FeedTokenTests {
                 logger: app.logger
             )
 
-            // 사람이 물음표와 등호를 손으로 붙이면 실수가 난다.
+            // 사람이 손으로 붙이면 실수가 난다.
             #expect(created.feedURL.hasPrefix("https://store.example.com/api/v1/apps/"))
-            #expect(created.feedURL.contains("appcast.xml?token=alleyf_"))
+            #expect(created.feedURL.contains("/feed/alleyf_"))
+            #expect(created.feedURL.hasSuffix("/appcast.xml"))
+            // 새로 내주는 주소에는 질의 형식이 남아 있으면 안 된다.
+            #expect(!created.feedURL.contains("?"))
             // 슬래시가 겹치지 않아야 한다.
             #expect(!created.feedURL.contains("com//api"))
+        }
+    }
+
+    @Test("이미 배포된 앱을 위해 옛 질의 형식도 아직 받는다")
+    func stillServesLegacyQueryURL() async throws {
+        try await withMigratedApp { app in
+            app.useFakeStorage()
+            let seeded = try await seed(on: app)
+
+            // 여기서 끊으면 이미 깔린 앱들이 조용히 업데이트를 멈춘다.
+            try await app.testing().test(
+                .GET, legacyFeedPath(seeded.appID, token: seeded.feed)
+            ) { response in
+                #expect(response.status == .ok)
+                #expect(response.body.string.contains("<sparkle:version>1</sparkle:version>"))
+                // 폐기 예정이라고 응답에 적어둔다.
+                #expect(response.headers.first(name: "Deprecation") == "true")
+            }
+        }
+    }
+
+    @Test("새 형식 응답에는 폐기 표시가 붙지 않는다")
+    func newURLIsNotMarkedDeprecated() async throws {
+        try await withMigratedApp { app in
+            app.useFakeStorage()
+            let seeded = try await seed(on: app)
+
+            try await app.testing().test(
+                .GET, feedPath(seeded.appID, token: seeded.feed)
+            ) { #expect($0.headers.first(name: "Deprecation") == nil) }
+        }
+    }
+
+    @Test("경로에 실린 토큰이 틀리면 앱이 있는지도 알려주지 않는다")
+    func hidesFeedForWrongPathToken() async throws {
+        try await withMigratedApp { app in
+            app.useFakeStorage()
+            let seeded = try await seed(on: app)
+
+            try await app.testing().test(
+                .GET, feedPath(seeded.appID, token: "alleyf_wrong")
+            ) { #expect($0.status == .notFound) }
         }
     }
 
@@ -258,12 +307,14 @@ struct FeedTokenTests {
                 }
             ) { response in
                 #expect(response.status == .created)
-                #expect(response.body.string.contains("token=alleyf_"))
+                // 화면도 새 형식으로 낸다. 옛 형식이 여기서 새로 퍼지면 안 된다.
+                #expect(response.body.string.contains("/feed/alleyf_"))
+                #expect(!response.body.string.contains("appcast.xml?token="))
             }
 
             try await app.testing().test(
                 .GET, path, headers: .sessionCookie(seeded.ownerToken)
-            ) { #expect(!$0.body.string.contains("token=alleyf_")) }
+            ) { #expect(!$0.body.string.contains("alleyf_")) }
         }
     }
 }
@@ -296,8 +347,7 @@ struct SparkleSignatureTests {
 
             // 서명이 없으면 Sparkle 이 설치를 거부한다.
             try await app.testing().test(
-                .GET,
-                "\(APIPath.appcast(ofApp: appID))?\(APIPath.feedTokenQueryItem)=\(created.value)"
+                .GET, APIPath.appcast(ofApp: appID, token: created.value)
             ) { #expect($0.body.string.contains("sparkle:edSignature=\"AbCdEf==\"")) }
         }
     }
