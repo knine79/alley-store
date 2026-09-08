@@ -586,6 +586,12 @@ a.tab:hover {
     gap: var(--space-5);
 }
 
+/* 묶음으로 나뉜 폼은 묶음 사이를 칸 사이보다 넓게 벌린다. 둘이 같으면 묶음 경계가
+   안 보이고 제목만 남아서, 글자가 하나 더 있는 것처럼 읽힌다. */
+.form:has(.form-group) {
+    gap: var(--space-6);
+}
+
 .field {
     display: grid;
     gap: var(--space-2);
@@ -632,6 +638,66 @@ textarea.input {
     display: flex;
     gap: var(--space-2);
     justify-content: flex-end;
+}
+
+/* ── 폼 안의 묶음 (fieldset) ─────────────────────────────── */
+
+/* 관련된 항목을 묶는다. 두 종류가 있다.
+ *
+ * - `.choice-group`: 하나만 고르는 라디오 묶음 (새 버전의 "서명 상태" 같은 것)
+ * - `.form-group`: 한 주제에 딸린 칸들을 모은 폼의 한 구역 (스토어 설정)
+ *
+ * fieldset 을 쓰는 이유는 스크린 리더가 안의 컨트롤을 읽을 때 묶음 이름을 함께
+ * 알려주기 때문이다. "프리픽스에 맞지 않는 앱은 등록을 막습니다" 만 들리면 무엇의
+ * 프리픽스인지 알 수 없다.
+ *
+ * 대신 fieldset 은 브라우저 기본 테두리·여백을 갖고 있고, `min-inline-size` 가
+ * `min-content` 라서 grid·flex 안에서 줄어들지 않는다. 셋 다 지워야 보통 블록처럼
+ * 쓸 수 있다. 두 묶음이 같은 초기화를 쓰므로 한 자리에 모아둔다. 따로 두면 한쪽만
+ * 고치게 된다. */
+.choice-group,
+.form-group {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+}
+
+/* 위 초기화는 둘이 같고, 아래 `gap` 만 다르다.
+ *
+ * 라디오는 한 벌에서 하나를 고르는 것이라 붙여 두는 편이 한 묶음으로 보인다. 폼 구역은
+ * 칸마다 이름과 설명이 붙으니 그보다 벌려야 칸끼리 섞이지 않는다. */
+.choice-group {
+    gap: var(--space-2);
+}
+
+.form-group {
+    gap: var(--space-4);
+}
+
+/* legend 는 grid 항목이 아니다. 브라우저가 fieldset 위쪽에 따로 놓기 때문에 위 규칙의
+   `gap` 이 legend 에는 걸리지 않는다. 그래서 아래 여백을 각자 직접 준다.
+   (grid 항목으로 취급하는 브라우저에서는 여백이 조금 넓어질 뿐 깨지지는 않는다.) */
+.choice-group legend {
+    padding: 0;
+    margin: 0 0 var(--space-1);
+}
+
+/* 묶음 제목.
+ *
+ * 칸 이름(`.field-label`, 14px/500)보다 **크고 굵게** 둔다. 처음에 13px 흐린 글자로
+ * 뒀더니 바로 아래 칸 이름이 더 굵어서 제목이 칸보다 낮아 보였다. 묶음 제목이 그 안의
+ * 항목보다 약하면 묶는 구실을 못 하고 스쳐 지나가는 한 줄이 된다.
+ *
+ * `.choice-group legend` 는 반대로 `.field-label` 과 같은 크기다. 그쪽은 값 하나를
+ * 고르는 칸이라서 칸 이름이 맞고, 이쪽은 칸 여러 개를 덮는 구역이라서 위로 올린다. */
+.form-group-title {
+    padding: 0;
+    margin: 0 0 var(--space-3);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
 }
 
 /* ── 알림 ────────────────────────────────────────────────── */
@@ -733,19 +799,6 @@ textarea.input {
 
 /* ── 라디오 · 체크박스 ───────────────────────────────────── */
 
-.choice-group {
-    border: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: var(--space-2);
-}
-
-.choice-group legend {
-    padding: 0;
-    margin-bottom: var(--space-1);
-}
-
 .choice,
 .check {
     display: flex;
@@ -780,6 +833,25 @@ textarea.input {
     display: block;
     font-size: 13px;
     color: var(--text-muted);
+}
+
+/* 바로 위 칸에 딸린 선택지.
+ *
+ * 독립 항목(.check)은 테두리 상자다. 딸린 것에 같은 상자를 두르면 위 칸과 나란한
+ * 별개 항목으로 읽힌다. 그래서 상자를 벗기고 왼쪽 선과 들여쓰기로 소속을 보인다.
+ *
+ * **`.check` 뒤에 와야 한다.** 클래스 하나씩이라 우선순위가 같아서, 앞에 두면
+ * `.check` 의 padding·border·background 가 이걸 덮어 아무 효과가 없다.
+ *
+ * 위 칸과의 간격도 좁힌다. 묶음 기본 간격(space-4)을 그대로 두면 왼쪽 선이 위 칸에서
+ * 떨어져 떠 보이고, 그러면 무엇에 딸린 것인지 다시 알 수 없다. */
+.check-attached {
+    margin-top: calc(var(--space-2) - var(--space-4));
+    padding: var(--space-2) 0 var(--space-2) var(--space-3);
+    border: 0;
+    border-left: 2px solid var(--border);
+    border-radius: 0;
+    background: transparent;
 }
 
 /* ── 업로드 진행률 ───────────────────────────────────────── */

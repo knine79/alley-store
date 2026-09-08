@@ -11,71 +11,90 @@
 #endif
 
 <form class="form" method="post" action="/admin/settings">
-    <label class="field">
-        <span class="field-label">스토어 이름</span>
-        <input class="input" type="text" name="storeName" required value="#(values.storeName)">
-    </label>
+    <fieldset class="form-group">
+        <legend class="form-group-title">이름과 겉모습</legend>
 
-    <label class="field">
-        <span class="field-label">로고 주소 <span class="field-optional">선택</span></span>
-        <input class="input" type="url" name="logoURL" value="#(values.logoURL)"
-               placeholder="https://example.com/logo.png"
-               autocapitalize="off" autocorrect="off" spellcheck="false">
-        <span class="field-note">비우면 이름만 표시됩니다.</span>
-    </label>
+        <label class="field">
+            <span class="field-label">스토어 이름</span>
+            <input class="input" type="text" name="storeName" required value="#(values.storeName)">
+        </label>
 
-    <label class="field">
-        <span class="field-label">강조색 <span class="field-optional">선택</span></span>
-        <input class="input" type="text" name="accentColor" value="#(values.accentColor)"
-               placeholder="#3b6fd4"
-               autocapitalize="off" autocorrect="off" spellcheck="false">
-        <span class="field-note"><code>#RGB</code>, <code>#RRGGBB</code>, <code>#RRGGBBAA</code> 형식입니다.</span>
-    </label>
+        <label class="field">
+            <span class="field-label">로고 주소 <span class="field-optional">선택</span></span>
+            <input class="input" type="url" name="logoURL" value="#(values.logoURL)"
+                   placeholder="https://example.com/logo.png"
+                   autocapitalize="off" autocorrect="off" spellcheck="false">
+            <span class="field-note">비우면 이름만 표시됩니다.</span>
+        </label>
 
-    <label class="field">
-        <span class="field-label">로그인 허용 도메인</span>
-        <input class="input" type="text" name="allowedEmailDomains"
-               value="#(values.allowedEmailDomains)" placeholder="example.com, example.org"
-               autocapitalize="off" autocorrect="off" spellcheck="false">
-        <span class="field-note">쉼표로 나눠 적습니다. 비우면 <strong>누구나 로그인할 수 있습니다.</strong></span>
-    </label>
+        <label class="field">
+            <span class="field-label">강조색 <span class="field-optional">선택</span></span>
+            <input class="input" type="text" name="accentColor" value="#(values.accentColor)"
+                   placeholder="#3b6fd4"
+                   autocapitalize="off" autocorrect="off" spellcheck="false">
+            <span class="field-note"><code>#RGB</code>, <code>#RRGGBB</code>, <code>#RRGGBBAA</code> 형식입니다.</span>
+        </label>
+    </fieldset>
 
-    <label class="check">
-        <input type="checkbox" name="confirmOpenToAnyDomain" value="on">
-        <span>
-            <span class="check-name">도메인 제한 없이 열어두는 것을 확인합니다</span>
-            <span class="check-note">허용 도메인을 비우려면 이 항목을 켜야 저장됩니다.</span>
-        </span>
-    </label>
+    <fieldset class="form-group">
+        <legend class="form-group-title">로그인 허용 범위</legend>
 
-    <label class="field">
-        <span class="field-label">번들 ID 프리픽스 <span class="field-optional">선택</span></span>
-        <input class="input" type="text" name="bundleIDPrefix" value="#(values.bundleIDPrefix)"
-               placeholder="com.example"
-               autocapitalize="off" autocorrect="off" spellcheck="false">
-    </label>
+        <label class="field">
+            <span class="field-label">허용 도메인</span>
+            <input class="input" type="text" name="allowedEmailDomains"
+                   value="#(values.allowedEmailDomains)" placeholder="example.com, example.org"
+                   autocapitalize="off" autocorrect="off" spellcheck="false">
+            <span class="field-note">쉼표로 나눠 적습니다.</span>
+        </label>
 
-    <label class="check">
-        <input type="checkbox" name="enforceBundleIDPrefix" value="on"
-               #if(values.enforceBundleIDPrefix):checked#endif>
-        <span>
-            <span class="check-name">프리픽스를 강제합니다</span>
-            <span class="check-note">끄면 규칙에서 벗어난 등록을 로그에만 남기고 통과시킵니다.</span>
-        </span>
-    </label>
-
-    <label class="check">
-        <input type="checkbox" name="allowsAnonymousFeedback" value="on"
-               #if(values.allowsAnonymousFeedback):checked#endif>
-        <span>
-            <span class="check-name">피드백을 익명으로 남길 수 있습니다</span>
-            <span class="check-note">
-                끄면 이름을 감춘 피드백이 거절됩니다. 이미 익명으로 남긴 글은 그대로
-                익명으로 남습니다. 남길 때의 약속을 나중에 뒤집으면 그 사람이 쓴 것이
-                다른 뜻이 됩니다.
+        <label class="check check-attached">
+            <input type="checkbox" name="confirmOpenToAnyDomain" value="on">
+            <span>
+                <span class="check-name">위 칸을 비워 누구나 로그인할 수 있게 하겠습니다</span>
+                <span class="check-note">
+                    비우면 Google 계정이 있는 사람은 누구나 들어옵니다. 그렇게 두려면
+                    이것을 켜야 저장됩니다.
+                </span>
             </span>
-        </span>
-    </label>
+        </label>
+    </fieldset>
+
+    <fieldset class="form-group">
+        <legend class="form-group-title">앱 등록 규칙</legend>
+
+        <label class="field">
+            <span class="field-label">번들 ID 프리픽스 <span class="field-optional">선택</span></span>
+            <input class="input" type="text" name="bundleIDPrefix" value="#(values.bundleIDPrefix)"
+                   placeholder="com.example"
+                   autocapitalize="off" autocorrect="off" spellcheck="false">
+        </label>
+
+        <label class="check check-attached">
+            <input type="checkbox" name="enforceBundleIDPrefix" value="on"
+                   #if(values.enforceBundleIDPrefix):checked#endif>
+            <span>
+                <span class="check-name">위 프리픽스에 맞지 않는 앱은 등록을 막습니다</span>
+                <span class="check-note">끄면 막지 않고 로그에만 남깁니다.</span>
+            </span>
+        </label>
+    </fieldset>
+
+    <fieldset class="form-group">
+        <legend class="form-group-title">피드백</legend>
+
+        <label class="check">
+            <input type="checkbox" name="allowsAnonymousFeedback" value="on"
+                   #if(values.allowsAnonymousFeedback):checked#endif>
+            <span>
+                <span class="check-name">피드백을 익명으로 남길 수 있습니다</span>
+                <span class="check-note">
+                    끄면 이름을 감춘 피드백이 거절됩니다. 이미 익명으로 남긴 글은 그대로
+                    익명으로 남습니다. 남길 때의 약속을 나중에 뒤집으면 그 사람이 쓴 것이
+                    다른 뜻이 됩니다.
+                </span>
+            </span>
+        </label>
+    </fieldset>
 
     <div class="form-actions">
         <button class="button button-primary" type="submit">저장</button>
