@@ -24,7 +24,8 @@ enum TestSupport {
         "GOOGLE_CLIENT_ID": "client-id",
         "GOOGLE_CLIENT_SECRET": "client-secret",
         "OAUTH_REDIRECT_URI": "https://store.example.com/auth/google/callback",
-        "JWT_SECRET": "test-secret",
+        // 32 바이트 하한을 넘겨야 로딩된다. 진짜 비밀이 아니라 길이를 맞춘 더미다.
+        "JWT_SECRET": "test-secret-0000000000000000000000000000",
         "PUBLIC_BASE_URL": "https://store.example.com",
     ]
 

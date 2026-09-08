@@ -71,6 +71,64 @@ struct AppConfigTests {
         let config = try TestSupport.config(overrides: ["STORE_APP_URL_SCHEME": "examplestore"])
         #expect(config.store.callbackURLScheme == "examplestore")
     }
+
+    // MARK: - 잘못된 배포 설정
+
+    @Test("loopback 이 아닌 http 공개 주소로는 뜨지 않는다", arguments: [
+        "http://store.example.com",
+        "http://store.example.com:8080",
+        // loopback 이 아닌 IP 도 마찬가지다. RFC 5737 문서용 주소를 쓴다.
+        "http://192.0.2.10",
+    ])
+    func rejectsInsecurePublicBaseURL(_ url: String) {
+        // 이 값의 scheme 이 세션 쿠키의 Secure 를 정한다. 그대로 뜨면 Secure 없는
+        // 쿠키가 아무 경고 없이 나가고, 증상이 없어서 아무도 모른다.
+        #expect(throws: AppConfig.LoadError.self) {
+            try TestSupport.config(overrides: ["PUBLIC_BASE_URL": url])
+        }
+    }
+
+    @Test("로컬 개발은 http 로 계속 된다", arguments: [
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "http://localhost",
+    ])
+    func allowsLoopbackOverHTTP(_ url: String) throws {
+        let config = try TestSupport.config(overrides: ["PUBLIC_BASE_URL": url])
+        #expect(config.publicBaseURL == url)
+    }
+
+    @Test("주소 형식이 아니면 무엇이 틀렸는지 말한다", arguments: [
+        "store.example.com", "ftp://store.example.com", "https://",
+    ])
+    func rejectsMalformedPublicBaseURL(_ url: String) {
+        #expect(throws: AppConfig.LoadError.self) {
+            try TestSupport.config(overrides: ["PUBLIC_BASE_URL": url])
+        }
+    }
+
+    @Test("짧은 JWT 시크릿을 거부하고 고치는 법을 알려준다")
+    func rejectsShortJWTSecret() {
+        // HMAC-SHA256 서명 키다. 해시 출력(32 바이트)보다 짧으면 서명을 깨는 비용이
+        // 그만큼 내려간다.
+        var thrown: AppConfig.LoadError?
+        #expect(throws: AppConfig.LoadError.self) {
+            do {
+                _ = try TestSupport.config(overrides: ["JWT_SECRET": "change-me"])
+            } catch let error as AppConfig.LoadError {
+                thrown = error
+                throw error
+            }
+        }
+        // 오류만 던지고 무엇을 어떻게 하라는 말이 없으면 읽는 사람이 다시 헤맨다.
+        #expect(thrown?.description.contains("openssl") == true)
+    }
+
+    @Test("32 바이트를 채우면 통과한다")
+    func acceptsLongEnoughJWTSecret() throws {
+        let secret = String(repeating: "a", count: 32)
+        #expect(try TestSupport.config(overrides: ["JWT_SECRET": secret]).security.jwtSecret == secret)
+    }
 }
 
 @Suite("스토어 메타 변환")

@@ -94,6 +94,11 @@ URI 가 `http://store.example.com/...` 이면 Google 콘솔이 저장 단계에�
 반대로 `PUBLIC_BASE_URL` 을 `http://` 로 적으면 쿠키는 저장되지만 이번엔 Google 이
 리디렉션 주소를 거부합니다. **둘 다 피하는 길은 실제로 HTTPS 를 붙이는 것뿐입니다.**
 
+**그래서 서버가 아예 뜨지 않습니다.** `PUBLIC_BASE_URL` 이 `http://` 인데 호스트가
+`localhost`·`127.0.0.1` 이 아니면 기동에서 실패합니다. 위 두 증상이 둘 다 조용해서,
+로그인이 안 되기 시작한 다음에 원인을 찾는 것보다 처음부터 막는 편이 낫다고 봤습니다
+([ADR-0027](adr/0027-fail-fast-on-unsafe-config.md)).
+
 ### 서버는 TLS 를 하지 않습니다
 
 Alley 서버 자체는 인증서를 다루지 않습니다. `docker-compose.yml` 이 여는 것은
@@ -259,7 +264,7 @@ curl -fsSL -o .env https://raw.githubusercontent.com/<소유자>/<레포>/main/.
 | --- | --- |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | 1번에서 발급한 것 |
 | `OAUTH_REDIRECT_URI` | 승인된 리디렉션 URI 와 **글자 하나까지** 같아야 합니다 |
-| `JWT_SECRET` | `openssl rand -base64 48` |
+| `JWT_SECRET` | `openssl rand -base64 48` (32 바이트보다 짧으면 서버가 뜨지 않습니다) |
 | `PUBLIC_BASE_URL` | 밖에서 보이는 주소 (2번 참조) |
 | `S3_SECRET_ACCESS_KEY` | `openssl rand -base64 32` (역할로 인증하는 환경이면 액세스 키 둘을 비웁니다) |
 | `INITIAL_ADMIN_EMAILS` | 첫 관리자. 이 계정으로 로그인해야 설정을 바꿀 수 있습니다 |

@@ -221,6 +221,70 @@ extension AppConfig {
             }
         }
 
+        /// 공개 주소가 http 면 로컬에서만 받아준다.
+        ///
+        /// 이 값의 스킴 하나가 세션 쿠키의 `Secure` 를 정한다(`AuthController`).
+        /// 배포 환경에 http 주소를 넣으면 `Secure` 없는 쿠키가 나가고, 그러면 세션
+        /// 토큰이 평문으로 오갈 수 있는 상태가 **아무 경고 없이** 만들어진다.
+        /// 증상도 없다. 로그인은 잘 되고, 잘못됐다는 것을 아무도 모른다.
+        ///
+        /// 로컬 개발은 http 로 계속 돌아야 하므로 loopback 만 예외로 둔다.
+        func validatedPublicBaseURL() throws -> String {
+            let raw = try required("PUBLIC_BASE_URL")
+            guard let components = URLComponents(string: raw),
+                  let scheme = components.scheme?.lowercased(),
+                  let host = components.host, !host.isEmpty
+            else {
+                throw LoadError.invalid(
+                    key: "PUBLIC_BASE_URL",
+                    reason: "scheme 과 host 를 갖춘 절대 주소여야 합니다. 예: https://store.example.com"
+                )
+            }
+            guard ["http", "https"].contains(scheme) else {
+                throw LoadError.invalid(
+                    key: "PUBLIC_BASE_URL",
+                    reason: "http 또는 https 여야 합니다. 지금 값의 scheme 은 '\(scheme)' 입니다."
+                )
+            }
+
+            let loopback = ["localhost", "127.0.0.1", "::1", "[::1]"]
+            guard scheme == "https" || loopback.contains(host.lowercased()) else {
+                throw LoadError.invalid(
+                    key: "PUBLIC_BASE_URL",
+                    reason: "https 로 적어야 합니다. 이 값의 scheme 이 세션 쿠키의 Secure 속성을 정하는데, "
+                        + "http 로 두면 Secure 없는 쿠키가 나갑니다. "
+                        + "TLS 를 앞단(인그레스·리버스 프록시)에서 끊고 있다면 밖에서 보이는 https 주소를 적으세요. "
+                        + "TLS 가 아직 없다면 그것을 먼저 붙이세요. Google OAuth 도 loopback 이 아닌 http "
+                        + "리다이렉트 주소를 거부합니다. 로컬 개발은 http://localhost:8080 처럼 적으면 됩니다."
+                )
+            }
+            return raw
+        }
+
+        /// 세션 토큰을 서명하는 키가 충분히 긴지 본다.
+        ///
+        /// HMAC-SHA256 을 쓴다(`configureJWT`). RFC 2104 는 키를 해시 출력 길이 이상으로
+        /// 두라고 한다. 그보다 짧으면 서명을 깨는 비용이 SHA-256 의 강도가 아니라
+        /// **키를 맞히는 비용**으로 내려앉는다. `.env.example` 을 그대로 복사해 뜬 서버가
+        /// 그 상태다.
+        ///
+        /// 그래서 32 바이트로 잡는다. 사람이 손으로 지은 문구는 이 길이를 잘 넘기지
+        /// 못하고, 무작위로 만들면 넘기지 않기가 더 어렵다.
+        func validatedJWTSecret() throws -> String {
+            let secret = try required("JWT_SECRET")
+            let minimumBytes = 32
+            guard secret.utf8.count >= minimumBytes else {
+                throw LoadError.invalid(
+                    key: "JWT_SECRET",
+                    reason: "\(minimumBytes) 바이트 이상이어야 합니다. 지금 \(secret.utf8.count) 바이트입니다. "
+                        + "HMAC-SHA256 서명 키라 해시 출력(32 바이트)보다 짧으면 서명을 깨는 비용이 그만큼 "
+                        + "내려갑니다. `openssl rand -base64 48` 로 만든 값을 넣으세요. "
+                        + "바꾸면 이미 나간 세션이 모두 끊깁니다."
+                )
+            }
+            return secret
+        }
+
         /// 셋이 다 있을 때만 켠다.
         func appStoreConnectConfig() -> AppStoreConnectConfig? {
             guard let issuer = optional("ASC_ISSUER_ID"),
@@ -271,11 +335,11 @@ extension AppConfig {
                 redirectURI: try required("OAUTH_REDIRECT_URI")
             ),
             security: SecurityConfig(
-                jwtSecret: try required("JWT_SECRET"),
+                jwtSecret: try validatedJWTSecret(),
                 sessionTTL: try integer("SESSION_TTL", default: 60 * 60 * 24 * 7)
             ),
             appStoreConnect: appStoreConnectConfig(),
-            publicBaseURL: try required("PUBLIC_BASE_URL"),
+            publicBaseURL: try validatedPublicBaseURL(),
             // 기본 사흘. presigned 업로드 URL 의 기본 수명(1시간)의 일흔두 배라
             // 아직 올리는 중인 업로드를 지울 여지가 없고, 금요일 저녁에 버려진
             // 업로드가 월요일 아침까지는 남아 있다.

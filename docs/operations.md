@@ -207,6 +207,17 @@ JWT_SECRET         | 서버의 .env            | 잃으면 모든 로그인이 �
 
 ## 자주 겪는 문제
 
+**서버가 아예 뜨지 않고 `환경변수 ... 값이 올바르지 않습니다`**
+설정 실수를 기동 시점에 막습니다. 메시지에 무엇을 어떻게 고쳐야 하는지 적혀 있으니
+그대로 따르면 됩니다. 걸리는 것은 둘입니다
+([ADR-0027](adr/0027-fail-fast-on-unsafe-config.md)).
+
+- `PUBLIC_BASE_URL` 이 `http://` 인데 호스트가 `localhost`·`127.0.0.1` 이 아님.
+  이 값의 스킴이 세션 쿠키의 `Secure` 를 정합니다. http 로 두면 `Secure` 없는 쿠키가
+  나가고, 그 상태는 증상이 없어 아무도 모릅니다
+- `JWT_SECRET` 이 32 바이트보다 짧음. `openssl rand -base64 48` 로 만드세요.
+  **바꾸면 이미 로그인한 사람이 전부 다시 로그인해야 합니다**
+
 **업로드가 `draft` 에서 멈춤 (브라우저 콘솔에 CSP 오류)**
 아래 CORS 항목과 증상이 같지만 원인이 다릅니다. 브라우저 콘솔에
 `Refused to connect ... violates the following Content Security Policy directive`
