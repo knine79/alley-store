@@ -722,10 +722,78 @@ textarea.input {
     color: var(--ok-text);
 }
 
+/* 막지는 않지만 나중에 실패할 수 있다고 알리는 자리.
+ *
+ * 오류(빨강)와 달라야 한다. 빨강은 "지금 잘못됐다" 이고 이것은 "이대로 가면 뒤에서
+ * 걸릴 수 있다" 다. dmg 를 올릴 때 번들 ID 를 손으로 적는 자리가 그렇다. */
+.notice-warn {
+    border-color: #c2870066;
+    background: #c287001a;
+    color: #8a6100;
+}
+
 @media (prefers-color-scheme: dark) {
     .notice-error {
         color: #ef8a8a;
     }
+
+    .notice-warn {
+        color: #e0b355;
+    }
+}
+
+/* ── 파일 놓는 자리 ─────────────────────────────────────── */
+
+/* 파일 입력을 상자 전체로 덮는다.
+ *
+ * `<input type=file>` 의 생김새는 브라우저마다 다르고 바꿀 수도 없다. 그래서 투명하게
+ * 깔아 상자를 덮게 하고, 보이는 것은 우리가 그린다. 클릭도 이 입력이 받으므로 상자
+ * 아무 곳이나 누르면 파일 선택이 열리고, 키보드 초점도 원래대로 이 입력에 간다. */
+.dropzone {
+    position: relative;
+    display: grid;
+    place-items: center;
+    gap: var(--space-1);
+    padding: var(--space-7) var(--space-4);
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    text-align: center;
+    transition: border-color 0.12s, background 0.12s;
+}
+
+.dropzone-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+/* 끌어온 것이 상자 위에 있는 동안. 파일을 놓아도 되는 자리라는 표시다.
+   테두리와 배경 둘로 알린다. 색 하나만 바꾸면 색을 구분하지 못하는 사람에게 안 보인다. */
+.dropzone-armed {
+    border-color: var(--accent);
+    border-style: solid;
+    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.dropzone-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.dropzone-note {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+/* 파일을 고른 뒤. 점선을 실선으로 바꿔 "받았다" 를 알린다. */
+.dropzone-filled {
+    border-style: solid;
+    border-color: var(--accent);
 }
 
 /* ── 사람 목록 ───────────────────────────────────────────── */

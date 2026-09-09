@@ -65,7 +65,8 @@ public struct WorkerLoop: Sendable {
                     state: .succeeded,
                     resultSHA256: output.sha256,
                     resultSize: output.size,
-                    resultEdSignature: output.edSignature
+                    resultEdSignature: output.edSignature,
+                    bundleMetadata: output.bundleMetadata
                 ),
                 for: job.id
             )

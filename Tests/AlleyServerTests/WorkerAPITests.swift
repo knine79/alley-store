@@ -341,6 +341,81 @@ struct SigningJobReportTests {
         "\(APIPath.workerRoot)/jobs/\(try job.requireID().uuidString)"
     }
 
+    // MARK: - 번들이 밝힌 값 반영 (ADR-0033)
+
+    /// dmg 를 올린 경로다. 브라우저가 값을 읽을 수 없어서 버전이 임시값으로 시작하고,
+    /// 워커가 번들에서 읽은 값으로 서버가 고친다.
+    @Test("워커가 보고한 버전 번호로 고친다")
+    func appliesReportedShortVersion() async throws {
+        try await withMigratedApp { app in
+            let storage = app.useFakeStorage()
+            let (token, version, job) = try await claimedJob(on: app, storage: storage)
+            let versionID = try version.requireID()
+
+            let key = app.artifactStorage.newKey(
+                ArtifactStorage.objectKey(
+                    appID: version.$app.id, versionID: versionID, kind: .signed
+                )
+            )
+            try await storage.put(Data(repeating: 0, count: 4096), to: key, contentType: nil)
+
+            try await app.testing().test(
+                .PATCH, try updatePath(job), headers: .bearer(token),
+                beforeRequest: { request in
+                    try request.content.encode(
+                        SigningJobUpdate(
+                            state: .succeeded,
+                            resultSHA256: "ABCDEF",
+                            resultSize: 4096,
+                            bundleMetadata: BundleMetadata(
+                                shortVersion: "2.5.1",
+                                buildVersion: "271",
+                                minimumOSVersion: "15.0"
+                            )
+                        )
+                    )
+                }
+            ) { #expect($0.status == .noContent) }
+
+            let stored = try #require(try await Version.find(versionID, on: app.db))
+            #expect(stored.shortVersion == "2.5.1")
+            #expect(stored.minimumOSVersion == "15.0")
+            // 빌드 번호는 고치지 않는다. 앱 안에서 겹칠 수 없는 값이라 여기서 바꾸면
+            // 다른 버전과 충돌할 수 있고 그 충돌을 풀 방법이 없다.
+            #expect(stored.buildNumber == 1)
+        }
+    }
+
+    /// 이 필드를 모르는 예전 워커가 보고해도 그대로 받아들여야 한다.
+    @Test("보고에 번들 값이 없으면 그대로 둔다")
+    func keepsValuesWhenNotReported() async throws {
+        try await withMigratedApp { app in
+            let storage = app.useFakeStorage()
+            let (token, version, job) = try await claimedJob(on: app, storage: storage)
+            let versionID = try version.requireID()
+
+            let key = app.artifactStorage.newKey(
+                ArtifactStorage.objectKey(
+                    appID: version.$app.id, versionID: versionID, kind: .signed
+                )
+            )
+            try await storage.put(Data(repeating: 0, count: 4096), to: key, contentType: nil)
+
+            try await app.testing().test(
+                .PATCH, try updatePath(job), headers: .bearer(token),
+                beforeRequest: { request in
+                    try request.content.encode(
+                        SigningJobUpdate(state: .succeeded, resultSize: 4096)
+                    )
+                }
+            ) { #expect($0.status == .noContent) }
+
+            let stored = try #require(try await Version.find(versionID, on: app.db))
+            #expect(stored.shortVersion == "1.0.0")
+            #expect(stored.state == .ready)
+        }
+    }
+
     @Test("공증에 들어가면 버전 상태에도 남는다")
     func notarizingIsReflected() async throws {
         try await withMigratedApp { app in

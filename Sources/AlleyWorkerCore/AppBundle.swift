@@ -1,3 +1,4 @@
+import AlleyShared
 import Foundation
 
 /// 서명 대상 앱 번들 하나.
@@ -235,6 +236,20 @@ public struct AppBundle: Sendable {
         Self.string(
             "CFBundleIdentifier",
             fromInfoPlistAt: url.appendingPathComponent("Contents/Info.plist")
+        )
+    }
+
+    /// 서버에 보고할 값들. `Info.plist` 에서 읽는다.
+    ///
+    /// 번들 ID 는 넣지 않는다. 서명 전에 등록된 값과 대조해서 다르면 실패시키므로
+    /// (ADR-0029), 여기까지 왔다는 것은 이미 같다는 뜻이다. 같은 값을 두 번 보내면
+    /// 받는 쪽이 "둘이 다르면 어느 것을 믿나" 를 고민해야 한다.
+    public var metadata: BundleMetadata {
+        let plist = url.appendingPathComponent("Contents/Info.plist")
+        return BundleMetadata(
+            shortVersion: Self.string("CFBundleShortVersionString", fromInfoPlistAt: plist),
+            buildVersion: Self.string("CFBundleVersion", fromInfoPlistAt: plist),
+            minimumOSVersion: Self.string("LSMinimumSystemVersion", fromInfoPlistAt: plist)
         )
     }
 

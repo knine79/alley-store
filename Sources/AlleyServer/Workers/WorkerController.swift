@@ -273,6 +273,10 @@ public struct WorkerController: RouteCollection, Sendable {
             on: request.db
         )
 
+        if let metadata = update.bundleMetadata {
+            applyBundleMetadata(metadata, to: version, logger: request.logger)
+        }
+
         // 공증을 건너뛴 워커도 있을 수 있어서 signing 에서 곧장 오는 경우를 함께 다룬다.
         if version.state == .signing {
             try version.transition(to: .notarizing)
@@ -286,6 +290,48 @@ public struct WorkerController: RouteCollection, Sendable {
         // 앞선 시도에서 일시적 실패로 되돌아온 잡이라면 갈래가 남아 있다. 성공했으니 지운다.
         job.failureCode = nil
         job.finishedAt = Date()
+    }
+
+    /// 워커가 번들에서 읽어온 값을 버전에 맞춘다.
+    ///
+    /// **번들이 진실이다.** 등록할 때 적힌 값은 사람이 짐작한 것일 수 있다. dmg 는
+    /// 브라우저가 열 수 없어서 버전과 빌드 번호를 임시값으로 두고 시작하고
+    /// (ADR-0033), 그것을 여기서 실제 값으로 바꾼다.
+    ///
+    /// **덮어쓰는 것이 맞는 자리다.** 브라우저 자동 채우기는 사람이 적은 값을 지키는데
+    /// (ADR-0030), 그쪽은 아직 올리기 전이라 사람이 고칠 수 있다. 여기는 이미 서명·공증까지
+    /// 끝난 뒤다. 실제로 배포되는 바이너리가 `1.2.4` 인데 목록에 `1.2.3` 으로 적혀 있으면
+    /// 그게 더 나쁘다. 스토어 앱은 번들의 값으로 설치 여부를 판단하므로 어긋난 채 두면
+    /// 업데이트 표시가 틀린다.
+    ///
+    /// 빌드 번호는 손대지 않는다. 앱 안에서 겹칠 수 없는 값이라 바꾸면 다른 버전과
+    /// 충돌할 수 있고, 그 충돌을 여기서 풀 방법이 없다. 대신 다르면 로그에 남긴다.
+    private func applyBundleMetadata(
+        _ metadata: BundleMetadata,
+        to version: Version,
+        logger: Logger
+    ) {
+        if let short = metadata.shortVersion, short != version.shortVersion {
+            logger.notice(
+                """
+                버전 번호를 번들이 밝힌 값으로 고칩니다: \
+                \(version.shortVersion) -> \(short) (버전 \(version.id?.uuidString ?? "?"))
+                """
+            )
+            version.shortVersion = short
+        }
+        if let minimum = metadata.minimumOSVersion, minimum != version.minimumOSVersion {
+            version.minimumOSVersion = minimum
+        }
+        if let build = metadata.buildVersion, build != String(version.buildNumber) {
+            // 고치지 않는다. 위 주석 참고.
+            logger.notice(
+                """
+                번들의 빌드 번호가 등록된 값과 다릅니다: 등록 \(version.buildNumber), \
+                번들 \(build). 겹침 검사 때문에 서버가 고치지 않습니다.
+                """
+            )
+        }
     }
 
     /// 워커가 보고한 실패를 처리한다.

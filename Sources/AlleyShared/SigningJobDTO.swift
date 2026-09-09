@@ -60,6 +60,15 @@ public struct SigningJobUpdate: Codable, Sendable {
     public var resultSize: Int64?
     /// Sparkle 이 요구하는 EdDSA 서명. 워커에 키가 없으면 비어 있다 (ADR-0017).
     public var resultEdSignature: String?
+    /// 번들이 스스로 밝히는 값. 워커가 서명 직전에 `Info.plist` 에서 읽는다.
+    ///
+    /// **이것이 진실이다.** 브라우저는 dmg 를 열 수 없어서 올린 사람이 손으로 적은
+    /// 값을 쓰는데(ADR-0033), 그 값과 다르면 서버가 이쪽으로 고친다. 실제로 배포되는
+    /// 바이너리가 무엇인지는 이 파일만 답할 수 있다.
+    ///
+    /// 옵셔널이라 합성 디코더가 `decodeIfPresent` 로 읽는다. 이 필드를 모르는 예전
+    /// 워커가 보낸 보고도 그대로 받아들인다.
+    public var bundleMetadata: BundleMetadata?
 
     public init(
         state: SigningJobState,
@@ -69,7 +78,8 @@ public struct SigningJobUpdate: Codable, Sendable {
         failureCode: SigningFailureCode? = nil,
         resultSHA256: String? = nil,
         resultSize: Int64? = nil,
-        resultEdSignature: String? = nil
+        resultEdSignature: String? = nil,
+        bundleMetadata: BundleMetadata? = nil
     ) {
         self.state = state
         self.phase = phase
@@ -79,6 +89,35 @@ public struct SigningJobUpdate: Codable, Sendable {
         self.resultSHA256 = resultSHA256
         self.resultSize = resultSize
         self.resultEdSignature = resultEdSignature
+        self.bundleMetadata = bundleMetadata
+    }
+}
+
+/// 번들의 `Info.plist` 에서 읽은 값.
+///
+/// 번들 ID 는 여기 없다. 그것은 서명 전에 등록된 값과 대조해서 다르면 실패시키므로
+/// (ADR-0029), 보고가 도착했다는 것 자체가 이미 같다는 뜻이다.
+public struct BundleMetadata: Codable, Sendable, Equatable {
+    /// `CFBundleShortVersionString`.
+    public var shortVersion: String?
+    /// `CFBundleVersion`. 문자열이다. `1.2.3` 처럼 적는 앱이 흔해서 정수로 두지 않는다.
+    public var buildVersion: String?
+    /// `LSMinimumSystemVersion`.
+    public var minimumOSVersion: String?
+
+    public init(
+        shortVersion: String? = nil,
+        buildVersion: String? = nil,
+        minimumOSVersion: String? = nil
+    ) {
+        self.shortVersion = shortVersion
+        self.buildVersion = buildVersion
+        self.minimumOSVersion = minimumOSVersion
+    }
+
+    /// 하나도 못 읽었으면 보내지 않는다.
+    public var isEmpty: Bool {
+        shortVersion == nil && buildVersion == nil && minimumOSVersion == nil
     }
 }
 

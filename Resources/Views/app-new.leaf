@@ -1,9 +1,6 @@
 #extend("layout"):
 #export("content"):
 <h1 class="page-title">새 앱</h1>
-<p class="page-lead">
-    번들 ID 는 등록 후 바꿀 수 없습니다. macOS 가 이 값으로 앱을 식별하기 때문입니다.
-</p>
 
 #if(error):
 <p class="notice notice-error">#(error)</p>
@@ -14,126 +11,152 @@
 <form class="form" method="post" action="/apps/new" id="app-new-form"
       data-apps-url="#(appsPath)"
       data-version-root="#(versionRootPath)">
-    <fieldset class="form-group">
-        <legend class="form-group-title">앱 파일</legend>
 
-        <!-- 스크립트가 돌 때만 보인다. 없으면 아래 칸을 직접 채워 등록만 하고,
-             파일은 등록 뒤 버전 화면에서 올리면 된다 (ADR-0030). -->
-        <label class="field" id="bundle-picker" hidden>
-            <span class="field-label">앱 파일 <span class="field-optional">선택</span></span>
-            <input class="input" type="file" id="bundle-file" accept=".zip,.dmg,application/zip,application/x-apple-diskimage">
-            <span class="field-note">
-                zip 또는 dmg. 고르면 <strong>등록과 함께 첫 버전으로 올립니다.</strong>
-                지금 올릴 것이 없으면 비워두세요. 나중에 버전 화면에서 올리면 됩니다.
-            </span>
-            <span class="field-note">
-                <strong>zip 으로 올리면</strong> 번들에서 읽은 값으로 아래 칸을 채웁니다.
-                dmg 는 브라우저가 열 수 없어 직접 적으셔야 합니다.
-            </span>
-            <span class="field-note" id="bundle-read-status" hidden></span>
-        </label>
-    </fieldset>
+    <!-- ── 1단계: 파일 ────────────────────────────────────────
+         스크립트가 돌 때만 보인다. 없으면 2단계 폼이 그대로 드러나 있고, 그것을
+         채워 `POST` 하면 앱만 등록된다 (ADR-0030, ADR-0031, ADR-0033). -->
+    <div id="step-file" hidden>
+        <p class="page-lead">올릴 앱 파일을 여기에 끌어다 놓으세요.</p>
 
-    <fieldset class="form-group">
-        <legend class="form-group-title">앱 정보</legend>
+        <div class="dropzone" id="dropzone">
+            <input class="dropzone-input" type="file" id="bundle-file"
+                   accept=".zip,.dmg,application/zip,application/x-apple-diskimage">
+            <span class="dropzone-title">파일을 끌어다 놓거나 눌러서 고르세요</span>
+            <span class="dropzone-note">zip 또는 dmg</span>
+        </div>
 
-        <label class="field">
-            <span class="field-label">번들 ID</span>
-            <input class="input" type="text" name="bundleID" required
-                   value="#(values.bundleID)"
-                   placeholder="#if(bundleIDPrefix):#(bundleIDPrefix).myapp#else:com.example.myapp#endif"
-                   autocapitalize="off" autocorrect="off" spellcheck="false">
-            #if(bundleIDPrefix):
-            <span class="field-note">
-                #if(enforceBundleIDPrefix):
-                <code>#(bundleIDPrefix).</code> 로 시작해야 합니다.
-                #else:
-                <code>#(bundleIDPrefix).</code> 로 시작하는 것을 권장합니다.
+        <p class="field-note" id="dropzone-status" hidden></p>
+
+        <div class="form-actions">
+            <a class="button" href="/apps">취소</a>
+            <button class="button button-quiet" type="button" id="skip-file">
+                파일 없이 앱만 등록
+            </button>
+        </div>
+    </div>
+
+    <!-- ── 2단계: 정보 확인 ───────────────────────────────── -->
+    <div id="step-info">
+        <p class="page-lead" id="step-info-lead">
+            번들 ID 는 등록 후 바꿀 수 없습니다. macOS 가 이 값으로 앱을 식별하기 때문입니다.
+        </p>
+
+        <p class="notice notice-warn" id="dmg-warning" hidden>
+            <strong>dmg 는 브라우저가 열 수 없어 값을 미리 읽지 못합니다.</strong>
+            번들 ID 를 정확히 적어주세요. 실제 앱의 번들 ID 와 다르거나 아래 규칙에
+            맞지 않으면 <strong>파일을 다 올린 뒤 서명 단계에서 실패합니다.</strong>
+            버전과 최소 macOS 는 올린 뒤 서명 워커가 번들에서 읽어 채웁니다.
+        </p>
+
+        <fieldset class="form-group">
+            <legend class="form-group-title">앱 정보</legend>
+
+            <label class="field">
+                <span class="field-label">번들 ID</span>
+                <input class="input" type="text" name="bundleID" required
+                       value="#(values.bundleID)"
+                       placeholder="#if(bundleIDPrefix):#(bundleIDPrefix).myapp#else:com.example.myapp#endif"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+                #if(bundleIDPrefix):
+                <span class="field-note">
+                    #if(enforceBundleIDPrefix):
+                    <code>#(bundleIDPrefix).</code> 로 시작해야 합니다.
+                    #else:
+                    <code>#(bundleIDPrefix).</code> 로 시작하는 것을 권장합니다.
+                    #endif
+                </span>
                 #endif
-            </span>
-            #endif
-        </label>
-
-        <label class="field">
-            <span class="field-label">이름</span>
-            <input class="input" type="text" name="name" required value="#(values.name)">
-        </label>
-
-        <label class="field">
-            <span class="field-label">한 줄 소개 <span class="field-optional">선택</span></span>
-            <input class="input" type="text" name="summary" value="#(values.summary)">
-        </label>
-
-        <label class="field">
-            <span class="field-label">설명 <span class="field-optional">선택</span></span>
-            <textarea class="input" name="description" rows="4">#(values.description)</textarea>
-        </label>
-
-        <label class="field">
-            <span class="field-label">분류 <span class="field-optional">선택</span></span>
-            <input class="input" type="text" name="category" value="#(values.category)">
-        </label>
-    </fieldset>
-
-    <!-- 파일을 골랐을 때만 보인다. 첫 버전으로 함께 올라간다. -->
-    <fieldset class="form-group" id="first-version" hidden>
-        <legend class="form-group-title">첫 버전</legend>
-
-        <label class="field">
-            <span class="field-label">버전</span>
-            <input class="input" type="text" name="shortVersion" placeholder="1.0.0"
-                   autocapitalize="off" autocorrect="off" spellcheck="false">
-        </label>
-
-        <label class="field">
-            <span class="field-label">빌드 번호</span>
-            <input class="input" type="number" name="buildNumber" min="1" value="1"
-                   data-suggested="1">
-        </label>
-
-        <label class="field">
-            <span class="field-label">최소 macOS 버전 <span class="field-optional">선택</span></span>
-            <input class="input" type="text" name="minimumOSVersion" placeholder="14.0"
-                   autocapitalize="off" autocorrect="off" spellcheck="false">
-        </label>
-
-        <fieldset class="field choice-group">
-            <legend class="field-label">서명 상태</legend>
-            <label class="choice">
-                <input type="radio" name="uploadKind" value="unsigned" checked>
-                <span>
-                    <span class="choice-name">미서명</span>
-                    <span class="choice-note">서명 워커가 서명·공증까지 대신합니다.</span>
-                </span>
             </label>
-            <label class="choice">
-                <input type="radio" name="uploadKind" value="signed">
-                <span>
-                    <span class="choice-name">서명·공증 완료</span>
-                    <span class="choice-note">이미 마친 완성본입니다. 서명 단계를 건너뜁니다.</span>
-                </span>
+
+            <label class="field">
+                <span class="field-label">이름</span>
+                <input class="input" type="text" name="name" required value="#(values.name)">
+            </label>
+
+            <label class="field">
+                <span class="field-label">한 줄 소개 <span class="field-optional">선택</span></span>
+                <input class="input" type="text" name="summary" value="#(values.summary)">
+            </label>
+
+            <label class="field">
+                <span class="field-label">설명 <span class="field-optional">선택</span></span>
+                <textarea class="input" name="description" rows="4">#(values.description)</textarea>
+            </label>
+
+            <label class="field">
+                <span class="field-label">분류 <span class="field-optional">선택</span></span>
+                <input class="input" type="text" name="category" value="#(values.category)">
             </label>
         </fieldset>
 
-        <label class="field field-attached">
-            <span class="field-label">entitlements <span class="field-optional">선택</span></span>
-            <input class="input" type="file" name="entitlements"
-                   accept=".plist,.entitlements,text/xml,application/xml">
-            <span class="field-note">
-                위에서 <strong>미서명</strong>을 골랐을 때만 쓰입니다. #(entitlementsWhenNeeded)
-            </span>
-            <span class="field-note">#(entitlementsWhereToFind)</span>
-        </label>
-    </fieldset>
+        <!-- zip 을 골랐을 때만 보인다. dmg 는 값을 읽을 수 없어 감추고, 워커가
+             보고한 값으로 서버가 채운다. -->
+        <fieldset class="form-group" id="first-version" hidden>
+            <legend class="form-group-title">첫 버전</legend>
 
-    <div class="progress-row" id="app-new-progress" hidden>
-        <progress class="progress" id="app-new-bar" max="100" value="0"></progress>
-        <span class="progress-label" id="app-new-status">준비 중…</span>
-    </div>
+            <label class="field">
+                <span class="field-label">버전</span>
+                <input class="input" type="text" name="shortVersion" placeholder="1.0.0"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+            </label>
 
-    <div class="form-actions">
-        <a class="button" href="/apps">취소</a>
-        <button class="button button-primary" type="submit" id="app-new-submit">등록</button>
+            <label class="field">
+                <span class="field-label">빌드 번호</span>
+                <input class="input" type="number" name="buildNumber" min="1" value="1"
+                       data-suggested="1">
+            </label>
+
+            <label class="field">
+                <span class="field-label">최소 macOS 버전 <span class="field-optional">선택</span></span>
+                <input class="input" type="text" name="minimumOSVersion" placeholder="14.0"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+            </label>
+        </fieldset>
+
+        <!-- 파일을 골랐을 때만 보인다. -->
+        <fieldset class="form-group" id="signing-choice" hidden>
+            <legend class="form-group-title">어떻게 서명할까</legend>
+
+            <fieldset class="field choice-group">
+                <legend class="field-label">서명 상태</legend>
+                <label class="choice">
+                    <input type="radio" name="uploadKind" value="unsigned" checked>
+                    <span>
+                        <span class="choice-name">미서명</span>
+                        <span class="choice-note">서명 워커가 서명·공증까지 대신합니다.</span>
+                    </span>
+                </label>
+                <label class="choice">
+                    <input type="radio" name="uploadKind" value="signed">
+                    <span>
+                        <span class="choice-name">서명·공증 완료</span>
+                        <span class="choice-note">이미 마친 완성본입니다. 서명 단계를 건너뜁니다.</span>
+                    </span>
+                </label>
+            </fieldset>
+
+            <label class="field field-attached">
+                <span class="field-label">entitlements <span class="field-optional">선택</span></span>
+                <input class="input" type="file" name="entitlements"
+                       accept=".plist,.entitlements,text/xml,application/xml">
+                <span class="field-note">
+                    위에서 <strong>미서명</strong>을 골랐을 때만 쓰입니다. #(entitlementsWhenNeeded)
+                </span>
+                <span class="field-note">#(entitlementsWhereToFind)</span>
+            </label>
+        </fieldset>
+
+        <div class="progress-row" id="app-new-progress" hidden>
+            <progress class="progress" id="app-new-bar" max="100" value="0"></progress>
+            <span class="progress-label" id="app-new-status">준비 중…</span>
+        </div>
+
+        <div class="form-actions">
+            <!-- 스크립트가 돌 때만 보인다. 없으면 1단계가 없으니 돌아갈 곳도 없다. -->
+            <a class="button" href="/apps" id="cancel-info">취소</a>
+            <button class="button" type="button" id="back-to-file" hidden>뒤로</button>
+            <button class="button button-primary" type="submit" id="app-new-submit">등록</button>
+        </div>
     </div>
 </form>
 

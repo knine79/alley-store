@@ -24,6 +24,8 @@ public struct SigningPipeline: Sendable {
         public var size: Int64
         /// Sparkle 용 EdDSA 서명. 키가 설정되지 않았으면 nil.
         public var edSignature: String?
+        /// 번들이 스스로 밝히는 값. 서버가 등록된 값과 맞춘다 (ADR-0033).
+        public var bundleMetadata: BundleMetadata?
     }
 
     public enum PipelineError: Error, CustomStringConvertible {
@@ -117,6 +119,10 @@ public struct SigningPipeline: Sendable {
 
         var output = try describe(result)
         output.edSignature = try sparkleSignature(for: result)
+        // 서명·스테이플이 `Info.plist` 를 건드리지는 않지만, 실제로 내보내는 번들에서
+        // 읽는 편이 낫다. 앞서 읽어두고 이 사이에 무엇이 달라졌다면 그것이 버그다.
+        let metadata = bundle.metadata
+        output.bundleMetadata = metadata.isEmpty ? nil : metadata
 
         try await client.upload(result, to: job.resultUploadURL)
         return output
