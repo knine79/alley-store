@@ -38,6 +38,7 @@
 | [0028](0028-migrate-on-boot-with-advisory-lock.md) | 부팅 시 마이그레이션을 옵트인으로 열고 advisory lock 으로 한 대만 돌린다 | 수락됨 | 2026-09-08 |
 | [0029](0029-verify-bundle-identifier-before-signing.md) | 번들 ID 는 서명 전에 워커가 대조한다 | 수락됨 | 2026-09-08 |
 | [0030](0030-read-bundle-info-in-browser.md) | 번들 속성은 브라우저가 zip 을 열어 읽는다 | 수락됨 | 2026-09-08 |
+| [0031](0031-register-and-first-upload-in-one-screen.md) | 앱 등록과 첫 버전 업로드를 한 화면에서 한다 | 수락됨 | 2026-09-09 |
 
 ## 언제 쓰나
 

@@ -132,7 +132,11 @@ struct AppPagesController: RouteCollection, Sendable {
                 values: values,
                 error: error,
                 bundleIDPrefix: settings.bundleIDPrefix,
-                enforceBundleIDPrefix: settings.enforceBundleIDPrefix
+                enforceBundleIDPrefix: settings.enforceBundleIDPrefix,
+                appsPath: APIPath.apps,
+                versionRootPath: "\(APIPath.apiRoot)/versions",
+                entitlementsWhenNeeded: EntitlementsGuidance.whenNeeded,
+                entitlementsWhereToFind: EntitlementsGuidance.whereToFind
             )
         ).get()
     }
@@ -678,6 +682,12 @@ struct AppFormContext: Encodable {
     var error: String?
     var bundleIDPrefix: String?
     var enforceBundleIDPrefix: Bool
+    /// 등록과 첫 버전 업로드를 한 화면에서 하려면 이 둘이 필요하다.
+    /// 스크립트가 없으면 폼이 그대로 `POST` 되어 등록만 된다 (ADR-0031).
+    var appsPath: String
+    var versionRootPath: String
+    var entitlementsWhenNeeded: String
+    var entitlementsWhereToFind: String
 }
 
 struct AppDetailContext: Encodable {
