@@ -447,10 +447,29 @@ App Store Connect 에서 받은 .p8 파일이 맞는지 확인하세요."
         fi
     fi
 
+    # 실패 메시지가 헷갈리게 생겼다. 마지막 줄이 `Success. Credentials validated.`
+    # 라서 성공처럼 보이는데, 그건 **Apple 에 물어본 검증**이 됐다는 뜻일 뿐이다.
+    # 키체인에 쓰지 못한 오류는 그 위에 따로 찍힌다:
+    #
+    #   Error: An error occurred while accessing the keychain.
+    #   User interaction is not allowed.
+    #   ...
+    #   Success. Credentials validated.
+    #
+    # 화면이 잠겨 있거나 SSH 로 붙은 셸에서 이렇게 된다. 종료 코드는 1 이라 아래
+    # `|| die` 로 걸리지만, 사람이 출력만 보고 "성공했는데 왜?" 하지 않도록 무엇을
+    # 하면 되는지 함께 적는다.
     info "공증 자격증명을 '$ALLEY_NOTARY_PROFILE' 로 저장합니다..."
     xcrun notarytool store-credentials "$ALLEY_NOTARY_PROFILE" \
         --key "$key" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" \
-        || die "공증 자격증명을 저장하지 못했습니다."
+        || die "공증 자격증명을 키체인에 저장하지 못했습니다.
+
+위 출력의 마지막 줄이 'Success. Credentials validated.' 여도 저장은 실패한 것입니다.
+그 줄은 Apple 에 물어본 검증이 됐다는 뜻이고, 키체인 오류는 그 위에 따로 찍힙니다.
+
+'User interaction is not allowed' 가 보이면 키체인이 잠겨 있는 것입니다.
+이 맥에 화면으로 로그인한 상태에서 터미널을 직접 열어 다시 실행하세요.
+원격(SSH)이나 화면 잠금 상태에서는 키체인에 쓸 수 없습니다."
 }
 
 # 키체인에 Developer ID Application 이 하나뿐이면 그것을 쓴다. 사람이 긴 이름을
