@@ -15,9 +15,9 @@
 #
 # 새 맥에 한 번에 설치하기. 값을 설정 파일 하나에 적습니다:
 #
-#   ./install-worker.sh --config ~/worker.conf   # 없으면 만들어줍니다 (권한 600)
-#   vi ~/worker.conf                             # 값을 채웁니다
-#   ./install-worker.sh --config ~/worker.conf   # 같은 명령으로 설치합니다
+#   ./install-worker.sh --init-config ~/worker.conf   # 채울 파일을 만듭니다 (권한 600)
+#   vi ~/worker.conf                                  # 값을 채웁니다
+#   ./install-worker.sh --config ~/worker.conf        # 설치합니다
 #
 # 설정 파일은 키트 밖에 두세요. 워커 토큰과 인증서 암호가 들어가는 파일이라
 # 키트 디렉터리 안에 두면 그것을 옮기거나 다시 압축할 때 함께 딸려갑니다.
@@ -34,7 +34,8 @@
 #       --asc-issuer 00000000-0000-0000-0000-000000000000
 #
 # 옵션:
-#   --config <경로>       설정 파일. 없으면 채울 파일을 만들어주고 멈춥니다
+#   --config <경로>       채워둔 설정 파일로 설치합니다
+#   --init-config <경로>  채울 설정 파일을 만듭니다 (권한 600, 덮어쓰지 않음)
 #   --bundle <경로>       `.app` 디렉터리 또는 `build-worker-app.sh --sign` 이 만든 zip
 #   --p12 <경로>          Developer ID 인증서+개인키. 암호는 따로 묻습니다
 #   --asc-key <경로>      공증용 App Store Connect API 키 (`.p8`)
@@ -115,22 +116,34 @@ ALLEY_ASC_ISSUER_ID
 ALLEY_BUNDLE_PATH
 "
 
-# 설정 파일이 없으면 채울 파일을 만들어주고 멈춘다.
+# 채울 설정 파일을 만든다.
 #
-# 옵션을 둘로 나누지 않는다. "만드는 옵션" 과 "쓰는 옵션" 이 따로 있으면 무엇이
-# 다른지 매번 확인해야 한다. 없으면 만들고 있으면 쓰는 것이 사람이 기대하는 동작이다.
+# 만드는 것과 쓰는 것을 다른 옵션으로 둔다. `--config` 가 없는 파일을 알아서
+# 만들어주면 편할 것 같지만, 그러면 **경로를 잘못 친 것을 잡을 수 없다.**
+# `--config ~/wroker.conf` 가 오류 대신 빈 설정 파일 하나를 새로 만들고, 사람은
+# 왜 값을 다시 묻는지 모른다. 만드는 것은 한 번뿐이라 그때만 다른 명령을 치면 된다.
 #
 # 만들 때 권한까지 여기서 준다. 본보기를 stdout 으로 찍고 사람이 리다이렉트하게
 # 두면 `chmod 600` 이 별도 단계로 남고, 그것을 잊으면 워커 토큰과 인증서 암호가
 # 든 파일이 남이 읽을 수 있는 채로 남는다.
-create_config() {
+init_config() {
     local path="$1"
+    [ -n "$path" ] || die "--init-config 뒤에 만들 파일 경로가 필요합니다.
+예: ./install-worker.sh --init-config ~/worker.conf"
+
+    case "$path" in '~/'*) path="$HOME/${path#\~/}" ;; esac
+
+    # 이미 채워둔 설정을 덮어쓰지 않는다.
+    [ ! -e "$path" ] || die "이미 있는 파일입니다: $path
+덮어쓰지 않았습니다. 그 파일을 그대로 쓰려면:
+    $0 --config $path"
+
     ( umask 077; config_template > "$path" ) || die "설정 파일을 만들지 못했습니다: $path"
     chmod 600 "$path"
 
-    info "설정 파일이 없어서 새로 만들었습니다: $path"
+    info "설정 파일을 만들었습니다: $path"
     echo
-    echo "  권한은 600 입니다. 값을 채운 뒤 같은 명령을 다시 실행하세요:"
+    echo "  권한은 600 입니다. 값을 채운 뒤 설치합니다:"
     echo "    $0 --config $path"
     echo
     echo "  꼭 채워야 하는 것은 서버 주소와 워커 토큰입니다."
@@ -224,7 +237,7 @@ load_config() {
 
         printf '%s\n' "$CONFIG_KEYS" | grep -qx "$key" \
             || die "$path:$number 모르는 설정 항목입니다: $key
-쓸 수 있는 항목은 이 파일의 주석에 함께 적혀 있습니다."
+쓸 수 있는 항목은 --init-config 로 만든 파일의 주석에 적혀 있습니다."
 
         [ -n "$value" ] || continue
         printf -v "$key" '%s' "$value"
@@ -243,6 +256,10 @@ while [ $# -gt 0 ]; do
             CONFIG_PATH="${2:-}"
             [ -n "$CONFIG_PATH" ] || die "--config 뒤에 설정 파일 경로가 필요합니다."
             shift 2
+            ;;
+        --init-config)
+            init_config "${2:-}"
+            exit 0
             ;;
         --bundle)
             SOURCE_BUNDLE="${2:-}"
@@ -294,10 +311,10 @@ if [ -n "$CONFIG_PATH" ]; then
     # `~/` 는 셸이 아니라 우리가 푼다. 따옴표로 감싸 넘기면 셸이 풀지 않는다.
     case "$CONFIG_PATH" in '~/'*) CONFIG_PATH="$HOME/${CONFIG_PATH#\~/}" ;; esac
 
-    if [ ! -e "$CONFIG_PATH" ]; then
-        create_config "$CONFIG_PATH"
-        exit 0
-    fi
+    # 없는 파일은 오류로 다룬다. 여기서 만들어주면 오타 난 경로를 잡을 수 없다.
+    [ -e "$CONFIG_PATH" ] || die "설정 파일이 없습니다: $CONFIG_PATH
+경로를 확인하세요. 새로 만들려면:
+    $0 --init-config $CONFIG_PATH"
 
     load_config "$CONFIG_PATH"
 

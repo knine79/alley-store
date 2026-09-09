@@ -145,8 +145,8 @@ make_kit() {
     # 있으면 그 자리에서 복사해 채우게 되고, 그러면 비밀이 키트 디렉터리 안에
     # 남는다. 그 디렉터리는 통째로 옮기거나 다시 압축하기 쉬운 자리다.
     #
-    # 대신 `--config` 에 없는 경로를 주면 스크립트가 채울 파일을 만들어준다.
-    # 어디에 둘지는 설치하는 사람이 정한다.
+    # 대신 스크립트의 `--init-config` 가 채울 파일을 만들어준다. 어디에 둘지는
+    # 설치하는 사람이 정한다.
     ditto -c -k --sequesterRsrc --keepParent "$staging" "$KIT"
     rm -rf "$staging"
 }
@@ -159,9 +159,9 @@ print_next_steps() {
     echo "워커 맥에서 키트를 풀고 설정 파일을 채워 한 번에 설치합니다:"
     echo "  ditto -x -k $APP_NAME-kit.zip ."
     echo "  cd kit"
-    echo "  ./install-worker.sh --config ~/worker.conf   # 없으면 만들어줍니다"
-    echo "  vi ~/worker.conf                             # 값을 채웁니다"
-    echo "  ./install-worker.sh --config ~/worker.conf   # 같은 명령으로 설치"
+    echo "  ./install-worker.sh --init-config ~/worker.conf   # 채울 파일을 만듭니다"
+    echo "  vi ~/worker.conf                                  # 값을 채웁니다"
+    echo "  ./install-worker.sh --config ~/worker.conf        # 설치합니다"
     echo
     echo "설정 파일은 키트 밖에 둡니다. 토큰과 인증서 암호가 들어가는 파일이라"
     echo "키트 안에 두면 그 디렉터리를 옮길 때 함께 딸려갑니다."

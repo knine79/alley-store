@@ -456,7 +456,7 @@ export ALLEY_NOTARY_PROFILE="alley"
 ditto -x -k alley-worker-kit.zip .
 cd kit
 
-./install-worker.sh --config ~/worker.conf
+./install-worker.sh --init-config ~/worker.conf
 ```
 
 **설정 파일은 키트 밖에 둡니다.** 워커 토큰과 인증서 암호가 들어가는 파일이라, 키트
