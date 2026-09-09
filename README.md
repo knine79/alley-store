@@ -100,12 +100,26 @@ docker compose up -d
 ([ADR-0022](docs/adr/0022-worker-as-signed-app-bundle.md)).
 
 ```bash
-# 1. 레포와 인증서가 있는 맥에서 번들을 만듭니다
+# 1. 레포와 인증서가 있는 맥에서 설치 키트를 만듭니다.
+#    세 값을 모두 줘야 합니다. ALLEY_NOTARY_PROFILE 을 빼면 공증을 조용히
+#    건너뛰고, 그 번들은 다른 맥에서 Gatekeeper 에 막힙니다.
+export ALLEY_WORKER_BUNDLE_ID="com.example.alley.worker"
+export ALLEY_SIGNING_IDENTITY="Developer ID Application: Example Inc. (TEAMID)"
+export ALLEY_NOTARY_PROFILE="alley"   # xcrun notarytool store-credentials 로 저장한 이름
+
 ./scripts/build-worker-app.sh --sign
 
-# 2. 나온 zip 과 설치 스크립트를 워커 맥으로 옮겨 설치합니다
-./install-worker.sh --bundle alley-worker.zip
+# 2. 나온 alley-worker-kit.zip 을 워커 맥으로 옮깁니다.
+#    번들과 설치 스크립트가 함께 들어 있습니다.
+ditto -x -k alley-worker-kit.zip .
+cd kit
+./install-worker.sh --init-config ~/worker.conf   # 채울 파일을 만듭니다
+vi ~/worker.conf                                  # 서버 주소와 워커 토큰을 넣습니다
+./install-worker.sh --config ~/worker.conf
 ```
+
+인증서와 공증 키를 함께 넘기면 설치 스크립트가 키체인 등록까지 합니다. 값과 절차는
+[설치 가이드 4번](docs/setup.md#4-서명-워커-설치)에 있습니다.
 
 **워커 맥에는 소스도 Swift 툴체인도 필요 없습니다.** zip 하나와 스크립트 하나면
 됩니다. 인증서를 보관하는 맥에 개발 도구를 잔뜩 깔아둘 이유가 없고, 워커를 두 대

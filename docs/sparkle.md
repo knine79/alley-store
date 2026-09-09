@@ -87,12 +87,15 @@ identity 로 서명돼 있습니다. **코드 서명 쪽이 이어져 있는 한
 
 2. **워커를 새 키로 바꾼다**
 
+   설정 파일의 `ALLEY_SPARKLE_PRIVATE_KEY` 를 새 키로 고치고 다시 설치합니다.
+
    ```bash
-   ALLEY_SPARKLE_PRIVATE_KEY="<새 키>" ./install-worker.sh --bundle <지금 쓰는 zip>
+   vi ~/worker.conf                              # ALLEY_SPARKLE_PRIVATE_KEY 를 바꿉니다
+   ./install-worker.sh --config ~/worker.conf
    ```
 
-   키만 바꾸는 것이라 워커 번들은 그대로 두어도 됩니다. 지금 설치된 것과 같은 zip 을
-   다시 주면 됩니다.
+   키만 바꾸는 것이라 워커 번들은 그대로 두어도 됩니다. 지금 설치된 것과 같은
+   키트를 다시 쓰면 됩니다.
 
    이때부터 새로 서명되는 결과물은 전부 새 키로 서명됩니다. appcast 에 이미 올라가
    있는 옛 버전의 서명은 그대로 남아 옛 키로 계속 검증됩니다.
