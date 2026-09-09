@@ -15,10 +15,12 @@
 #
 # 새 맥에 한 번에 설치하기. 값을 설정 파일 하나에 적습니다:
 #
-#   ./install-worker.sh --example-config > worker.conf
-#   chmod 600 worker.conf
-#   vi worker.conf                        # 값을 채웁니다
-#   ./install-worker.sh --config worker.conf
+#   ./install-worker.sh --config ~/worker.conf   # 없으면 만들어줍니다 (권한 600)
+#   vi ~/worker.conf                             # 값을 채웁니다
+#   ./install-worker.sh --config ~/worker.conf   # 같은 명령으로 설치합니다
+#
+# 설정 파일은 키트 밖에 두세요. 워커 토큰과 인증서 암호가 들어가는 파일이라
+# 키트 디렉터리 안에 두면 그것을 옮기거나 다시 압축할 때 함께 딸려갑니다.
 #
 # 인증서를 키체인에 넣고, 공증 프로필을 만들고, 워커를 설치하고, 환경 점검까지
 # 한 번에 합니다. 설정 파일을 다 채웠으면 아무것도 묻지 않습니다.
@@ -32,8 +34,7 @@
 #       --asc-issuer 00000000-0000-0000-0000-000000000000
 #
 # 옵션:
-#   --config <경로>       설정 파일. 아래 우선순위 참고
-#   --example-config      설정 파일 본보기를 찍고 끝냅니다
+#   --config <경로>       설정 파일. 없으면 채울 파일을 만들어주고 멈춥니다
 #   --bundle <경로>       `.app` 디렉터리 또는 `build-worker-app.sh --sign` 이 만든 zip
 #   --p12 <경로>          Developer ID 인증서+개인키. 암호는 따로 묻습니다
 #   --asc-key <경로>      공증용 App Store Connect API 키 (`.p8`)
@@ -114,16 +115,40 @@ ALLEY_ASC_ISSUER_ID
 ALLEY_BUNDLE_PATH
 "
 
-example_config() {
+# 설정 파일이 없으면 채울 파일을 만들어주고 멈춘다.
+#
+# 옵션을 둘로 나누지 않는다. "만드는 옵션" 과 "쓰는 옵션" 이 따로 있으면 무엇이
+# 다른지 매번 확인해야 한다. 없으면 만들고 있으면 쓰는 것이 사람이 기대하는 동작이다.
+#
+# 만들 때 권한까지 여기서 준다. 본보기를 stdout 으로 찍고 사람이 리다이렉트하게
+# 두면 `chmod 600` 이 별도 단계로 남고, 그것을 잊으면 워커 토큰과 인증서 암호가
+# 든 파일이 남이 읽을 수 있는 채로 남는다.
+create_config() {
+    local path="$1"
+    ( umask 077; config_template > "$path" ) || die "설정 파일을 만들지 못했습니다: $path"
+    chmod 600 "$path"
+
+    info "설정 파일이 없어서 새로 만들었습니다: $path"
+    echo
+    echo "  권한은 600 입니다. 값을 채운 뒤 같은 명령을 다시 실행하세요:"
+    echo "    $0 --config $path"
+    echo
+    echo "  꼭 채워야 하는 것은 서버 주소와 워커 토큰입니다."
+    echo "  토큰은 웹 콘솔의 관리 > 서명 워커에서 발급합니다."
+}
+
+config_template() {
     /bin/cat <<'CONFIG_EOF'
 # 서명 워커 설치 설정.
 #
-#   ./install-worker.sh --config worker.conf
+# 값을 채운 뒤:
+#   ./install-worker.sh --config <이 파일>
 #
-# 워커 토큰과 인증서 암호가 들어갑니다. 파일 권한을 600 으로 두세요:
-#   chmod 600 worker.conf
+# **워커 토큰과 인증서 암호가 들어갑니다.** 이 파일은 권한 600 으로 만들어졌습니다.
+# 다른 곳으로 복사하면 권한도 함께 챙기세요. 설치가 끝나면 지워도 됩니다.
 #
 # 값에 따옴표는 필요 없습니다. `#` 로 시작하는 줄은 무시합니다.
+# 경로는 `~/`, 절대 경로, 상대 경로 모두 됩니다.
 
 # ── 서버 ─────────────────────────────────────────────
 ALLEY_SERVER_URL=https://store.example.com
@@ -199,7 +224,7 @@ load_config() {
 
         printf '%s\n' "$CONFIG_KEYS" | grep -qx "$key" \
             || die "$path:$number 모르는 설정 항목입니다: $key
-쓸 수 있는 항목은 --example-config 로 볼 수 있습니다."
+쓸 수 있는 항목은 이 파일의 주석에 함께 적혀 있습니다."
 
         [ -n "$value" ] || continue
         printf -v "$key" '%s' "$value"
@@ -218,10 +243,6 @@ while [ $# -gt 0 ]; do
             CONFIG_PATH="${2:-}"
             [ -n "$CONFIG_PATH" ] || die "--config 뒤에 설정 파일 경로가 필요합니다."
             shift 2
-            ;;
-        --example-config)
-            example_config
-            exit 0
             ;;
         --bundle)
             SOURCE_BUNDLE="${2:-}"
@@ -270,6 +291,14 @@ done
 # 덮는 것이 중요하다. 셸에 남아 있던 `ALLEY_SERVER_URL` 때문에 설정 파일이 조용히
 # 무시되면, 파일을 고쳐도 아무 일이 안 일어나는 상태가 된다.
 if [ -n "$CONFIG_PATH" ]; then
+    # `~/` 는 셸이 아니라 우리가 푼다. 따옴표로 감싸 넘기면 셸이 풀지 않는다.
+    case "$CONFIG_PATH" in '~/'*) CONFIG_PATH="$HOME/${CONFIG_PATH#\~/}" ;; esac
+
+    if [ ! -e "$CONFIG_PATH" ]; then
+        create_config "$CONFIG_PATH"
+        exit 0
+    fi
+
     load_config "$CONFIG_PATH"
 
     [ -n "$P12_PATH" ] || P12_PATH="${ALLEY_P12_PATH:-}"
@@ -278,13 +307,22 @@ if [ -n "$CONFIG_PATH" ]; then
     [ -n "$ASC_ISSUER_ID" ] || ASC_ISSUER_ID="${ALLEY_ASC_ISSUER_ID:-}"
     [ -n "$SOURCE_BUNDLE" ] || SOURCE_BUNDLE="${ALLEY_BUNDLE_PATH:-}"
 
-    # 설정 파일의 경로는 그 파일 기준으로 읽는 편이 자연스럽다. 키트를 풀고
-    # 그 안에서 돌리는 것이 기본 사용법이라 상대 경로를 쓰게 된다.
+    # 경로 값을 다듬는다.
+    #
+    # `~/` 는 셸이 풀어주는 것이라 설정 파일 안에서는 글자 그대로 남는다. 사람은
+    # 당연히 홈 디렉터리로 읽으므로 여기서 풀어준다. 안 풀면 "파일을 찾지 못했습니다"
+    # 만 나오고 왜 그런지는 안 보인다.
+    #
+    # 그다음 상대 경로는 현재 위치에서 먼저 찾고, 없으면 설정 파일이 있는 곳에서
+    # 찾는다. 키트를 풀고 그 안에서 돌리면서 설정 파일은 밖에 두는 것이 기본
+    # 사용법이라 둘 다 필요하다.
     CONFIG_DIR="$(cd "$(dirname "$CONFIG_PATH")" && pwd)"
     for variable in P12_PATH ASC_KEY_PATH SOURCE_BUNDLE; do
         value="${!variable}"
         case "$value" in
-            ''|/*) continue ;;
+            '') continue ;;
+            '~/'*) printf -v "$variable" '%s' "$HOME/${value#\~/}"; continue ;;
+            /*) continue ;;
         esac
         [ -e "$value" ] || [ ! -e "$CONFIG_DIR/$value" ] || printf -v "$variable" '%s' "$CONFIG_DIR/$value"
     done

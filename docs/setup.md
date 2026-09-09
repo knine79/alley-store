@@ -426,7 +426,7 @@ export ALLEY_NOTARY_PROFILE="alley"
 | 파일 | 무엇 |
 | --- | --- |
 | `.build/worker-app/alley-worker.zip` | 번들만 |
-| `.build/worker-app/alley-worker-kit.zip` | **번들 + 설치 스크립트 + 설정 본보기** |
+| `.build/worker-app/alley-worker-kit.zip` | **번들 + 설치 스크립트** |
 
 워커 맥으로는 **키트(kit)** 를 가져갑니다. 설치 스크립트가 번들 옆에 들어 있어서
 따로 챙길 것이 없고, 둘의 버전이 어긋날 일도 없습니다.
@@ -450,17 +450,19 @@ export ALLEY_NOTARY_PROFILE="alley"
 **자격증명은 키트에 넣지 않습니다.** 한 파일에 모으면 그것 하나가 새는 순간 조직의
 서명 권한이 통째로 넘어갑니다.
 
-워커 맥에서 키트를 풀고 설정 파일을 채웁니다.
+워커 맥에서 키트를 풀고 설정 파일을 만듭니다.
 
 ```bash
 ditto -x -k alley-worker-kit.zip .
 cd kit
 
-cp worker.conf.example worker.conf
-chmod 600 worker.conf
+./install-worker.sh --config ~/worker.conf
 ```
 
-`worker.conf` 를 열어 값을 채웁니다. 워커 토큰은 웹 콘솔의 **관리 > 서명 워커** 에서
+**설정 파일은 키트 밖에 둡니다.** 워커 토큰과 인증서 암호가 들어가는 파일이라, 키트
+디렉터리 안에 두면 그것을 다른 곳으로 옮기거나 다시 압축할 때 비밀이 함께 딸려갑니다.
+
+`~/worker.conf` 를 열어 값을 채웁니다. 워커 토큰은 웹 콘솔의 **관리 > 서명 워커** 에서
 발급하고, **발급 직후 한 번만 보입니다.**
 
 ```
@@ -468,18 +470,23 @@ ALLEY_SERVER_URL=https://store.example.com
 ALLEY_WORKER_TOKEN=발급받은-토큰
 ALLEY_BUNDLE_PATH=alley-worker.app
 
-ALLEY_P12_PATH=~/signing.p12 를 옮긴 경로
+ALLEY_P12_PATH=~/signing.p12
 ALLEY_P12_PASSWORD=인증서-암호
 
-ALLEY_ASC_KEY_PATH=AuthKey_XXXXXXXXXX.p8 를 옮긴 경로
+ALLEY_ASC_KEY_PATH=~/AuthKey_XXXXXXXXXX.p8
 ALLEY_ASC_KEY_ID=XXXXXXXXXX
 ALLEY_ASC_ISSUER_ID=00000000-0000-0000-0000-000000000000
 ```
 
+경로는 `~/` 로 시작하는 홈 기준, `/` 로 시작하는 절대 경로, 그냥 이름만 쓰는 상대
+경로 셋 다 됩니다. 상대 경로는 지금 있는 위치에서 먼저 찾고, 없으면 설정 파일이
+있는 곳에서 찾습니다. 위 예시의 `alley-worker.app` 은 키트 안에서 실행하니 그대로
+찾힙니다.
+
 그리고 한 줄로 설치합니다.
 
 ```bash
-./install-worker.sh --config worker.conf
+./install-worker.sh --config ~/worker.conf
 ```
 
 스크립트가 순서대로 합니다.
