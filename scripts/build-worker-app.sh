@@ -118,17 +118,59 @@ fi
 bundle_sign "$APP_DIR"
 
 ARCHIVE="$OUTPUT_DIR/$APP_NAME.zip"
+KIT="$OUTPUT_DIR/$APP_NAME-kit.zip"
+
 bundle_archive "$APP_DIR" "$ARCHIVE"
+
+# 설치 키트를 함께 만든다.
+#
+# 워커 맥으로 옮길 파일을 하나로 줄이려는 것이다. 번들만 보내면 설치 스크립트를
+# 레포에서 따로 꺼내 함께 보내야 하고, 그러면 둘의 버전이 어긋날 수 있다. 스크립트가
+# 번들 옆에 들어 있으면 그 짝이 항상 맞는다.
+#
+# **자격증명은 넣지 않는다.** 인증서와 공증 키는 따로 옮긴다. 한 파일에 모으면
+# 그것 하나가 새는 순간 조직의 서명 권한이 통째로 넘어간다.
+#
+# 스테이플은 번들의 내용을 바꾸므로 공증 뒤에 한 번 더 만들어야 한다.
+make_kit() {
+    local staging="$OUTPUT_DIR/kit"
+    rm -rf "$staging" "$KIT"
+    mkdir -p "$staging"
+    ditto "$APP_DIR" "$staging/$APP_NAME.app"
+    cp "$REPO_ROOT/scripts/install-worker.sh" "$staging/install-worker.sh"
+    chmod +x "$staging/install-worker.sh"
+    # 설정 본보기를 함께 넣는다. 설치하는 사람이 이 파일만 채우면 된다.
+    # 스크립트가 스스로 찍어주므로 본보기가 스크립트와 어긋날 일이 없다.
+    "$staging/install-worker.sh" --example-config > "$staging/worker.conf.example"
+    ditto -c -k --sequesterRsrc --keepParent "$staging" "$KIT"
+    rm -rf "$staging"
+}
+
+print_next_steps() {
+    echo
+    echo "번들만:    $ARCHIVE"
+    echo "설치 키트: $KIT"
+    echo
+    echo "워커 맥에서 키트를 풀고 설정 파일을 채워 한 번에 설치합니다:"
+    echo "  ditto -x -k $APP_NAME-kit.zip ."
+    echo "  cd kit"
+    echo "  cp worker.conf.example worker.conf && chmod 600 worker.conf"
+    echo "  vi worker.conf"
+    echo "  ./install-worker.sh --config worker.conf"
+}
+
+make_kit
 
 if [ -z "${ALLEY_NOTARY_PROFILE:-}" ]; then
     echo
     echo "공증은 건너뜁니다. ALLEY_NOTARY_PROFILE 을 주면 함께 처리합니다."
-    echo "결과: $ARCHIVE"
+    echo "공증하지 않은 번들은 다른 맥에서 Gatekeeper 에 막힙니다."
+    print_next_steps
     exit 0
 fi
 
 bundle_notarize "$APP_DIR" "$ARCHIVE"
+make_kit
 
-info "끝났습니다: $ARCHIVE"
-echo "워커 맥에서 다음으로 설치합니다:"
-echo "  ./scripts/install-worker.sh --bundle <이 zip 의 경로>"
+info "끝났습니다."
+print_next_steps

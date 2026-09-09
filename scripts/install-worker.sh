@@ -9,17 +9,48 @@
 # 설치하는 것은 맨 실행 파일이 아니라 `.app` 번들이다. 이유는 ADR-0022 에 있다.
 #
 # 사용법:
-#   ./scripts/install-worker.sh                     이 레포에서 빌드해 설치한다
-#   ./scripts/install-worker.sh --bundle <경로>     이미 만들어진 번들을 설치한다
-#   ./scripts/install-worker.sh --uninstall         설치한 것을 되돌린다
+#   ./install-worker.sh                     이 레포에서 빌드해 설치한다
+#   ./install-worker.sh --bundle <경로>     이미 만들어진 번들을 설치한다
+#   ./install-worker.sh --uninstall         설치한 것을 되돌린다
 #
-# `--bundle` 에는 `.app` 디렉터리나 `build-worker-app.sh --sign` 이 만든 `.zip` 을
-# 준다. 이 경로는 워커 맥에 소스도 Swift 툴체인도 없을 때 쓴다. 서명·공증된 번들을
-# 한 번 만들어 여러 대에 나눠주는 것이 원래 의도한 방식이다.
+# 새 맥에 한 번에 설치하기. 값을 설정 파일 하나에 적습니다:
 #
-# 설정을 미리 환경변수로 넘기면 묻지 않는다:
+#   ./install-worker.sh --example-config > worker.conf
+#   chmod 600 worker.conf
+#   vi worker.conf                        # 값을 채웁니다
+#   ./install-worker.sh --config worker.conf
+#
+# 인증서를 키체인에 넣고, 공증 프로필을 만들고, 워커를 설치하고, 환경 점검까지
+# 한 번에 합니다. 설정 파일을 다 채웠으면 아무것도 묻지 않습니다.
+#
+# 설정 파일 없이 명령줄로 줄 수도 있습니다:
+#
+#   ./install-worker.sh \
+#       --bundle alley-worker.app \
+#       --p12 signing.p12 \
+#       --asc-key AuthKey_XXXX.p8 --asc-key-id ABC1234567 \
+#       --asc-issuer 00000000-0000-0000-0000-000000000000
+#
+# 옵션:
+#   --config <경로>       설정 파일. 아래 우선순위 참고
+#   --example-config      설정 파일 본보기를 찍고 끝냅니다
+#   --bundle <경로>       `.app` 디렉터리 또는 `build-worker-app.sh --sign` 이 만든 zip
+#   --p12 <경로>          Developer ID 인증서+개인키. 암호는 따로 묻습니다
+#   --asc-key <경로>      공증용 App Store Connect API 키 (`.p8`)
+#   --asc-key-id <값>     그 키의 Key ID (10자)
+#   --asc-issuer <값>     Issuer ID (UUID)
+#   --notary-profile <값> 공증 프로필 이름 (기본값: alley)
+#   --uninstall           설치한 것을 되돌립니다
+#
+# `--p12` 와 `--asc-key` 는 생략해도 됩니다. 이미 그 맥에 인증서와 공증 프로필이
+# 있으면 설치만 합니다.
+#
+# 값을 정하는 순서는 **명령줄 > 설정 파일 > 환경변수 > 물어보기** 입니다.
+# 설정 파일 안의 상대 경로는 그 파일이 있는 디렉터리 기준으로 찾습니다.
+#
+# 환경변수로도 줄 수 있습니다. 이름은 설정 파일의 항목과 같습니다:
 #   ALLEY_SERVER_URL, ALLEY_WORKER_TOKEN, ALLEY_SIGNING_IDENTITY,
-#   ALLEY_NOTARY_PROFILE, ALLEY_WORKER_NAME
+#   ALLEY_NOTARY_PROFILE, ALLEY_WORKER_NAME, ALLEY_P12_PASSWORD
 #
 # Sparkle 자동 업데이트를 쓰는 조직은 서명 키도 넣습니다 (ADR-0017):
 #   ALLEY_SPARKLE_PRIVATE_KEY  Ed25519 시드(base64). `openssl rand -base64 32`
@@ -58,24 +89,214 @@ uninstall() {
 }
 
 SOURCE_BUNDLE=""
-case "${1:-}" in
-    --uninstall)
-        uninstall
-        exit 0
-        ;;
-    --bundle)
-        SOURCE_BUNDLE="${2:-}"
-        [ -n "$SOURCE_BUNDLE" ] || die "--bundle 뒤에 번들이나 zip 경로가 필요합니다."
-        [ -e "$SOURCE_BUNDLE" ] || die "찾지 못했습니다: $SOURCE_BUNDLE"
-        ;;
-    "")
-        ;;
-    *)
-        die "알 수 없는 인자: $1"
-        ;;
-esac
+P12_PATH=""
+ASC_KEY_PATH=""
+ASC_KEY_ID="${ASC_KEY_ID:-}"
+ASC_ISSUER_ID="${ASC_ISSUER_ID:-}"
+CONFIG_PATH=""
+
+# 설정 파일에서 읽을 수 있는 키. 여기 없는 키는 오타로 본다.
+#
+# 조용히 무시하지 않는다. `ALLEY_SERVER_UR=...` 처럼 한 글자 틀린 것을 넘기면
+# 스크립트가 그 값을 묻기 시작하는데, 설정 파일을 쓴 사람은 왜 묻는지 모른다.
+CONFIG_KEYS="
+ALLEY_SERVER_URL
+ALLEY_WORKER_TOKEN
+ALLEY_WORKER_NAME
+ALLEY_SIGNING_IDENTITY
+ALLEY_NOTARY_PROFILE
+ALLEY_SPARKLE_PRIVATE_KEY
+ALLEY_P12_PATH
+ALLEY_P12_PASSWORD
+ALLEY_ASC_KEY_PATH
+ALLEY_ASC_KEY_ID
+ALLEY_ASC_ISSUER_ID
+ALLEY_BUNDLE_PATH
+"
+
+example_config() {
+    /bin/cat <<'CONFIG_EOF'
+# 서명 워커 설치 설정.
+#
+#   ./install-worker.sh --config worker.conf
+#
+# 워커 토큰과 인증서 암호가 들어갑니다. 파일 권한을 600 으로 두세요:
+#   chmod 600 worker.conf
+#
+# 값에 따옴표는 필요 없습니다. `#` 로 시작하는 줄은 무시합니다.
+
+# ── 서버 ─────────────────────────────────────────────
+ALLEY_SERVER_URL=https://store.example.com
+# 웹 콘솔의 관리 > 서명 워커에서 발급합니다. 발급 직후 한 번만 보입니다.
+ALLEY_WORKER_TOKEN=
+# 관리 화면에 보일 이름. 비우면 이 맥의 컴퓨터 이름을 씁니다.
+ALLEY_WORKER_NAME=
+
+# ── 설치할 번들 ──────────────────────────────────────
+# 키트 안의 .app 경로. --bundle 로 줘도 됩니다.
+ALLEY_BUNDLE_PATH=alley-worker.app
+
+# ── 서명 ─────────────────────────────────────────────
+# Developer ID 인증서와 개인키. 이 맥에 이미 있으면 비워두세요.
+ALLEY_P12_PATH=
+ALLEY_P12_PASSWORD=
+# 비우면 키체인에서 Developer ID Application 을 찾아 씁니다.
+# 여러 개면 물어봅니다.
+ALLEY_SIGNING_IDENTITY=
+
+# ── 공증 ─────────────────────────────────────────────
+# App Store Connect API 키. 이 맥에 프로필이 이미 있으면 비워두세요.
+ALLEY_ASC_KEY_PATH=
+ALLEY_ASC_KEY_ID=
+ALLEY_ASC_ISSUER_ID=
+# 공증 자격증명을 저장할 이름.
+ALLEY_NOTARY_PROFILE=alley
+
+# ── Sparkle (쓰는 조직만) ────────────────────────────
+# Ed25519 시드(base64). `openssl rand -base64 32`
+ALLEY_SPARKLE_PRIVATE_KEY=
+CONFIG_EOF
+}
+
+# 설정 파일을 읽어 환경변수로 만든다.
+#
+# `source` 하지 않는다. 설정 파일은 값을 적는 곳이지 코드를 적는 곳이 아니다.
+# 실수로 백틱이나 `$(...)` 가 들어가면 그대로 실행된다.
+load_config() {
+    local path="$1" line key value mode
+    [ -f "$path" ] || die "설정 파일을 찾지 못했습니다: $path"
+
+    # 토큰과 암호가 들어 있는 파일이다. 남이 읽을 수 있으면 알린다.
+    mode="$(stat -f '%Lp' "$path" 2>/dev/null || echo '')"
+    case "$mode" in
+        *[1-7][1-7]|*[1-7]0|*0[1-7])
+            warn "설정 파일을 다른 사용자가 읽을 수 있습니다 (권한 $mode). chmod 600 $path"
+            ;;
+    esac
+
+    local number=0
+    while IFS= read -r line || [ -n "$line" ]; do
+        number=$((number + 1))
+        # 주석과 빈 줄.
+        case "$line" in
+            ''|'#'*) continue ;;
+        esac
+        case "$line" in
+            *=*) ;;
+            *) die "$path:$number 형식이 KEY=value 가 아닙니다: $line" ;;
+        esac
+
+        key="${line%%=*}"
+        value="${line#*=}"
+        # 앞뒤 공백과 감싼 따옴표를 떼어낸다.
+        key="$(printf '%s' "$key" | tr -d '[:space:]')"
+        value="${value#"${value%%[![:space:]]*}"}"
+        value="${value%"${value##*[![:space:]]}"}"
+        case "$value" in
+            \"*\") value="${value#\"}"; value="${value%\"}" ;;
+            \'*\') value="${value#\'}"; value="${value%\'}" ;;
+        esac
+
+        printf '%s\n' "$CONFIG_KEYS" | grep -qx "$key" \
+            || die "$path:$number 모르는 설정 항목입니다: $key
+쓸 수 있는 항목은 --example-config 로 볼 수 있습니다."
+
+        [ -n "$value" ] || continue
+        printf -v "$key" '%s' "$value"
+    done < "$path"
+
+    info "설정을 읽었습니다: $path"
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --uninstall)
+            uninstall
+            exit 0
+            ;;
+        --config)
+            CONFIG_PATH="${2:-}"
+            [ -n "$CONFIG_PATH" ] || die "--config 뒤에 설정 파일 경로가 필요합니다."
+            shift 2
+            ;;
+        --example-config)
+            example_config
+            exit 0
+            ;;
+        --bundle)
+            SOURCE_BUNDLE="${2:-}"
+            [ -n "$SOURCE_BUNDLE" ] || die "--bundle 뒤에 번들이나 zip 경로가 필요합니다."
+            [ -e "$SOURCE_BUNDLE" ] || die "찾지 못했습니다: $SOURCE_BUNDLE"
+            shift 2
+            ;;
+        --p12)
+            P12_PATH="${2:-}"
+            [ -f "$P12_PATH" ] || die "인증서 파일을 찾지 못했습니다: ${2:-}"
+            shift 2
+            ;;
+        --asc-key)
+            ASC_KEY_PATH="${2:-}"
+            [ -f "$ASC_KEY_PATH" ] || die "공증 키 파일을 찾지 못했습니다: ${2:-}"
+            shift 2
+            ;;
+        --asc-key-id)
+            ASC_KEY_ID="${2:-}"
+            shift 2
+            ;;
+        --asc-issuer)
+            ASC_ISSUER_ID="${2:-}"
+            shift 2
+            ;;
+        --notary-profile)
+            ALLEY_NOTARY_PROFILE="${2:-}"
+            shift 2
+            ;;
+        --help|-h)
+            # 맨 위 주석 블록 전체. 줄 수를 박아두면 설명을 늘릴 때마다 잘린다.
+            sed -n '2,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *)
+            die "알 수 없는 인자: $1"
+            ;;
+    esac
+done
 
 [ "$(uname -s)" = "Darwin" ] || die "서명 워커는 macOS 에서만 돕니다."
+
+# 설정 파일은 인자 다음에 읽는다. 명령줄로 준 것이 이긴다.
+#
+# 순서는 **명령줄 > 설정 파일 > 환경변수 > 물어보기** 다. 설정 파일이 환경변수를
+# 덮는 것이 중요하다. 셸에 남아 있던 `ALLEY_SERVER_URL` 때문에 설정 파일이 조용히
+# 무시되면, 파일을 고쳐도 아무 일이 안 일어나는 상태가 된다.
+if [ -n "$CONFIG_PATH" ]; then
+    load_config "$CONFIG_PATH"
+
+    [ -n "$P12_PATH" ] || P12_PATH="${ALLEY_P12_PATH:-}"
+    [ -n "$ASC_KEY_PATH" ] || ASC_KEY_PATH="${ALLEY_ASC_KEY_PATH:-}"
+    [ -n "$ASC_KEY_ID" ] || ASC_KEY_ID="${ALLEY_ASC_KEY_ID:-}"
+    [ -n "$ASC_ISSUER_ID" ] || ASC_ISSUER_ID="${ALLEY_ASC_ISSUER_ID:-}"
+    [ -n "$SOURCE_BUNDLE" ] || SOURCE_BUNDLE="${ALLEY_BUNDLE_PATH:-}"
+
+    # 설정 파일의 경로는 그 파일 기준으로 읽는 편이 자연스럽다. 키트를 풀고
+    # 그 안에서 돌리는 것이 기본 사용법이라 상대 경로를 쓰게 된다.
+    CONFIG_DIR="$(cd "$(dirname "$CONFIG_PATH")" && pwd)"
+    for variable in P12_PATH ASC_KEY_PATH SOURCE_BUNDLE; do
+        value="${!variable}"
+        case "$value" in
+            ''|/*) continue ;;
+        esac
+        [ -e "$value" ] || [ ! -e "$CONFIG_DIR/$value" ] || printf -v "$variable" '%s' "$CONFIG_DIR/$value"
+    done
+
+    [ -z "$P12_PATH" ] || [ -f "$P12_PATH" ] || die "인증서 파일을 찾지 못했습니다: $P12_PATH"
+    [ -z "$ASC_KEY_PATH" ] || [ -f "$ASC_KEY_PATH" ] || die "공증 키 파일을 찾지 못했습니다: $ASC_KEY_PATH"
+    [ -z "$SOURCE_BUNDLE" ] || [ -e "$SOURCE_BUNDLE" ] || die "번들을 찾지 못했습니다: $SOURCE_BUNDLE"
+fi
+
+# 공증 프로필 이름은 기본값을 둔다. 조직마다 다를 이유가 없고, 물어봐야 할 것을
+# 하나 줄인다. 다르게 쓰고 싶으면 --notary-profile 로 준다.
+ALLEY_NOTARY_PROFILE="${ALLEY_NOTARY_PROFILE:-alley}"
 
 # 값이 비어 있으면 묻는다. 토큰은 화면에 찍지 않는다.
 ask() {
@@ -94,12 +315,130 @@ ask() {
     printf -v "$variable" '%s' "$value"
 }
 
+# Xcode Command Line Tools 가 없으면 서명도 공증도 안 된다. 설치는 대화형이라
+# 여기서 대신 해줄 수 없다. 대신 무엇을 하면 되는지 정확히 알려주고 멈춘다.
+require_command_line_tools() {
+    if xcrun --find codesign >/dev/null 2>&1 && xcrun --find notarytool >/dev/null 2>&1; then
+        return
+    fi
+    die "Xcode Command Line Tools 가 없습니다. 먼저 이것을 실행하고 설치가 끝나면 다시 오세요:
+
+    xcode-select --install"
+}
+
+# Developer ID 인증서와 개인키를 로그인 키체인에 넣는다.
+#
+# `-T /usr/bin/codesign` 은 codesign 이 이 키를 쓸 때 허락을 묻지 않게 한다. 이게
+# 없으면 워커가 잡을 받을 때마다 화면에 대화상자가 뜨고, 아무도 없는 빌드 머신에서는
+# 그대로 멈춘다.
+import_certificate() {
+    [ -n "$P12_PATH" ] || return 0
+
+    local password
+    if [ -n "${ALLEY_P12_PASSWORD:-}" ]; then
+        password="$ALLEY_P12_PASSWORD"
+    else
+        read -r -s -p "인증서(.p12) 암호: " password
+        echo
+    fi
+
+    info "인증서를 로그인 키체인에 넣습니다..."
+    # 이미 있으면 security 가 실패한다. 그건 오류가 아니라 "할 일이 없다" 는 뜻이다.
+    local output
+    if output="$(security import "$P12_PATH" -k "$HOME/Library/Keychains/login.keychain-db" \
+        -P "$password" -T /usr/bin/codesign -T /usr/bin/security 2>&1)"
+    then
+        info "인증서를 넣었습니다."
+    elif printf '%s' "$output" | grep -q 'already exists'; then
+        info "인증서가 이미 키체인에 있습니다."
+    else
+        die "인증서를 넣지 못했습니다: $output"
+    fi
+
+    # codesign 이 키를 쓸 때마다 묻지 않도록 파티션 목록을 연다. 암호를 다시
+    # 받아야 하는 자리라 실패해도 멈추지 않는다. 실패하면 첫 서명에서 한 번 묻는다.
+    security set-key-partition-list -S apple-tool:,apple: -s \
+        -k "$password" "$HOME/Library/Keychains/login.keychain-db" >/dev/null 2>&1 \
+        || warn "키 접근 허용 설정에 실패했습니다. 첫 서명에서 키체인 암호를 한 번 물을 수 있습니다."
+}
+
+# 공증 자격증명을 키체인에 프로필 이름으로 저장한다.
+#
+# `.p8` 을 그대로 받는다. `.env` 처럼 한 줄에 `\n` 을 글자로 담고 있는 값에서
+# 만들었다면 PEM 이 깨져 있는데, notarytool 은 그때 `invalidPEMDocument` 만 말하고
+# 무엇이 잘못됐는지는 말하지 않는다. 그래서 여기서 먼저 확인하고 고칠 수 있으면
+# 고친다. 실제로 이 함정에 한 번 빠졌다.
+store_notary_credentials() {
+    [ -n "$ASC_KEY_PATH" ] || return 0
+
+    [ -n "$ASC_KEY_ID" ] || ask ASC_KEY_ID "App Store Connect Key ID (10자)"
+    [ -n "$ASC_ISSUER_ID" ] || ask ASC_ISSUER_ID "App Store Connect Issuer ID (UUID)"
+
+    local key="$ASC_KEY_PATH"
+    if ! openssl pkey -in "$key" -noout >/dev/null 2>&1; then
+        # 한 줄짜리에 `\n` 이 글자로 들어 있는 경우다. 진짜 개행으로 바꿔본다.
+        local repaired
+        repaired="$(mktemp)"
+        chmod 600 "$repaired"
+        printf '%b\n' "$(command cat "$ASC_KEY_PATH")" > "$repaired"
+        if openssl pkey -in "$repaired" -noout >/dev/null 2>&1; then
+            warn "공증 키의 줄바꿈이 깨져 있어 고쳤습니다. 원본 파일은 그대로입니다."
+            key="$repaired"
+            TEMP_KEY="$repaired"
+        else
+            rm -f "$repaired"
+            die "공증 키를 읽지 못했습니다: $ASC_KEY_PATH
+App Store Connect 에서 받은 .p8 파일이 맞는지 확인하세요."
+        fi
+    fi
+
+    info "공증 자격증명을 '$ALLEY_NOTARY_PROFILE' 로 저장합니다..."
+    xcrun notarytool store-credentials "$ALLEY_NOTARY_PROFILE" \
+        --key "$key" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" \
+        || die "공증 자격증명을 저장하지 못했습니다."
+}
+
+# 키체인에 Developer ID Application 이 하나뿐이면 그것을 쓴다. 사람이 긴 이름을
+# 옮겨 적다가 틀리는 일이 흔한데, 틀리면 잡을 받은 뒤에야 드러난다.
+detect_signing_identity() {
+    [ -z "${ALLEY_SIGNING_IDENTITY:-}" ] || return 0
+
+    local found count
+    found="$(security find-identity -v -p codesigning 2>/dev/null \
+        | sed -n 's/.*"\(Developer ID Application: .*\)"$/\1/p')"
+    count="$(printf '%s' "$found" | grep -c '' || true)"
+
+    if [ "$count" = "1" ] && [ -n "$found" ]; then
+        ALLEY_SIGNING_IDENTITY="$found"
+        info "서명 identity 를 찾았습니다: $ALLEY_SIGNING_IDENTITY"
+    fi
+}
+
 info "서명 워커 설치"
 echo
+
+require_command_line_tools
+
+# 자격증명을 먼저 갖춰둔다. 그래야 아래 identity 자동 탐지와 환경 점검이 의미가 있다.
+#
+# 치울 것이 둘(고친 공증 키, 푼 번들)인데 `trap ... EXIT` 는 나중 것이 앞 것을
+# 덮어쓴다. 그래서 하나로 합쳐 여기서 한 번만 건다.
+TEMP_KEY=""
+STAGING_DIR=""
+cleanup() {
+    [ -n "$TEMP_KEY" ] && rm -f "$TEMP_KEY"
+    [ -n "$STAGING_DIR" ] && rm -rf "$STAGING_DIR"
+    return 0
+}
+trap cleanup EXIT
+
+import_certificate
+store_notary_credentials
 
 ask ALLEY_SERVER_URL "서버 주소 (예: https://store.example.com)"
 ask ALLEY_WORKER_TOKEN "워커 토큰 (웹 콘솔의 관리 > 서명 워커에서 발급)" secret
 
+detect_signing_identity
 if [ -z "${ALLEY_SIGNING_IDENTITY:-}" ]; then
     echo
     info "이 맥의 서명 identity:"
@@ -107,15 +446,12 @@ if [ -z "${ALLEY_SIGNING_IDENTITY:-}" ]; then
     echo
 fi
 ask ALLEY_SIGNING_IDENTITY "서명 identity (예: Developer ID Application: Example Inc. (TEAMID))"
-ask ALLEY_NOTARY_PROFILE "공증 프로필 이름 (xcrun notarytool store-credentials 로 저장한 것)"
 
 ALLEY_WORKER_NAME="${ALLEY_WORKER_NAME:-$(scutil --get ComputerName 2>/dev/null || hostname)}"
 
 # 설치할 번들을 마련한다. STAGED 는 복사 원본이 될 `.app` 디렉터리다.
+# `STAGING_DIR` 과 정리 트랩은 위에서 이미 잡아뒀다.
 STAGED=""
-STAGING_DIR=""
-cleanup() { [ -n "$STAGING_DIR" ] && rm -rf "$STAGING_DIR"; return 0; }
-trap cleanup EXIT
 
 if [ -n "$SOURCE_BUNDLE" ]; then
     case "$SOURCE_BUNDLE" in

@@ -380,54 +380,133 @@ macOS 앱은 서명과 공증(notarization, Apple 서버가 악성코드를 검�
 워커는 서명·공증된 `.app` 번들로 배포합니다. 번들을 한 번 만들어 워커 맥에 가져다
 놓는 두 단계입니다.
 
+### 준비: 공증 자격증명
+
+공증은 Apple 서버에 앱을 올려 검사받는 일이라 Apple 계정 인증이 필요합니다. 서명에
+쓰는 인증서(`.p12`)와는 **다른 것**입니다.
+
+| | 서명에 쓰는 것 | 공증에 쓰는 것 |
+| --- | --- | --- |
+| 무엇 | Developer ID Application 인증서 + 개인키 | App Store Connect API 키 |
+| 형식 | `.p12` | `.p8` + Key ID + Issuer ID |
+| 어디서 | developer.apple.com > Certificates | App Store Connect > 사용자 및 액세스 > 통합 > 키 |
+
+App Store Connect 에서 키를 만들 때 **팀 키(Team Key)** 로 만드세요. 개인 키
+(Individual Key)로는 공증이 안 됩니다. `.p8` 파일은 만들 때 한 번만 내려받을 수
+있습니다.
+
+키체인에 이름을 붙여 저장해둡니다.
+
+```bash
+xcrun notarytool store-credentials "alley" \
+    --key ~/AuthKey_XXXXXXXXXX.p8 \
+    --key-id "XXXXXXXXXX" \
+    --issuer "00000000-0000-0000-0000-000000000000"
+```
+
+여기 붙인 이름(`alley`)을 아래에서 `ALLEY_NOTARY_PROFILE` 로 씁니다.
+
 ### 번들 만들기
 
 레포와 Swift 툴체인, Developer ID 인증서가 있는 맥에서 합니다.
 
 ```bash
-# 공증 자격증명을 키체인에 저장합니다 (한 번만)
-xcrun notarytool store-credentials "alley-notary" \
-    --apple-id "you@example.com" \
-    --team-id "TEAMID" \
-    --password "앱 암호"
-
 export ALLEY_WORKER_BUNDLE_ID="com.example.alley.worker"
 export ALLEY_SIGNING_IDENTITY="Developer ID Application: Example Inc. (TEAMID)"
-export ALLEY_NOTARY_PROFILE="alley-notary"
+export ALLEY_NOTARY_PROFILE="alley"
 
 ./scripts/build-worker-app.sh --sign
 ```
 
-`--password` 에 넣는 "앱 암호" 는 Apple ID 비밀번호가 아니라 appleid.apple.com 에서
-따로 발급하는 앱 전용 암호입니다.
+`ALLEY_SIGNING_IDENTITY` 에 넣을 정확한 이름은
+`security find-identity -v -p codesigning` 으로 확인합니다.
 
-`.build/worker-app/alley-worker.zip` 이 나옵니다. 서명·공증·스테이플까지 끝난
-번들입니다. 공증은 Apple 서버가 처리하는 동안 몇 분에서 몇십 분 걸립니다.
+두 파일이 나옵니다.
 
-`--sign` 을 빼면 서명하지 않은 번들만 나옵니다. 그 번들은 만든 맥에서만 쓸 수
-있습니다.
+| 파일 | 무엇 |
+| --- | --- |
+| `.build/worker-app/alley-worker.zip` | 번들만 |
+| `.build/worker-app/alley-worker-kit.zip` | **번들 + 설치 스크립트 + 설정 본보기** |
+
+워커 맥으로는 **키트(kit)** 를 가져갑니다. 설치 스크립트가 번들 옆에 들어 있어서
+따로 챙길 것이 없고, 둘의 버전이 어긋날 일도 없습니다.
+
+공증은 Apple 서버가 처리하는 동안 몇 분에서 몇십 분 걸립니다. `--sign` 을 빼면
+서명하지 않은 번들만 나오고, 그 번들은 만든 맥에서만 쓸 수 있습니다.
 
 ### 워커 맥에 설치하기
 
-**워커 맥에는 소스도 Swift 툴체인도 필요 없습니다.** 필요한 것은 위에서 만든 zip 과
-설치 스크립트 하나뿐입니다. 인증서를 보관하는 맥에 컴파일러와 패키지 매니저를 깔아둘
-이유가 없고, 워커를 두 대 이상 붙일 때도 번들 하나를 나눠주면 됩니다.
+**워커 맥에는 소스도 Swift 툴체인도 필요 없습니다.** Xcode Command Line Tools 만
+있으면 됩니다 (`xcode-select --install`).
+
+워커 맥으로 옮길 파일은 셋입니다.
+
+| 파일 | 어디서 나오나 |
+| --- | --- |
+| `alley-worker-kit.zip` | 위에서 만든 것 |
+| Developer ID 인증서 (`.p12`) | `security export -k login.keychain -t identities -f pkcs12 -o signing.p12` |
+| 공증 API 키 (`.p8`) | App Store Connect 에서 받아둔 것 |
+
+**자격증명은 키트에 넣지 않습니다.** 한 파일에 모으면 그것 하나가 새는 순간 조직의
+서명 권한이 통째로 넘어갑니다.
+
+워커 맥에서 키트를 풀고 설정 파일을 채웁니다.
 
 ```bash
-curl -fsSL -O https://raw.githubusercontent.com/<소유자>/<레포>/main/scripts/install-worker.sh
-chmod +x install-worker.sh
+ditto -x -k alley-worker-kit.zip .
+cd kit
 
-# 웹 콘솔의 관리 > 서명 워커에서 토큰을 발급받은 뒤
-./install-worker.sh --bundle ~/Downloads/alley-worker.zip
+cp worker.conf.example worker.conf
+chmod 600 worker.conf
 ```
 
-스크립트가 번들의 서명을 확인하고, 환경을 점검한 뒤 `launchd` 에 등록합니다.
+`worker.conf` 를 열어 값을 채웁니다. 워커 토큰은 웹 콘솔의 **관리 > 서명 워커** 에서
+발급하고, **발급 직후 한 번만 보입니다.**
+
+```
+ALLEY_SERVER_URL=https://store.example.com
+ALLEY_WORKER_TOKEN=발급받은-토큰
+ALLEY_BUNDLE_PATH=alley-worker.app
+
+ALLEY_P12_PATH=~/signing.p12 를 옮긴 경로
+ALLEY_P12_PASSWORD=인증서-암호
+
+ALLEY_ASC_KEY_PATH=AuthKey_XXXXXXXXXX.p8 를 옮긴 경로
+ALLEY_ASC_KEY_ID=XXXXXXXXXX
+ALLEY_ASC_ISSUER_ID=00000000-0000-0000-0000-000000000000
+```
+
+그리고 한 줄로 설치합니다.
+
+```bash
+./install-worker.sh --config worker.conf
+```
+
+스크립트가 순서대로 합니다.
+
+1. Xcode Command Line Tools 가 있는지 본다
+2. 인증서를 로그인 키체인에 넣는다
+3. 공증 자격증명을 프로필로 저장한다
+4. 서명 identity 를 키체인에서 찾는다 (하나뿐이면 자동)
+5. 번들의 서명을 확인하고 `launchd` 에 등록한다
+6. 환경을 점검한다 (다섯 항목)
+
+**설정 파일을 다 채웠으면 아무것도 묻지 않습니다.** 비워둔 값만 물어봅니다. 이미
+인증서와 공증 프로필이 있는 맥이면 `ALLEY_P12_*` 와 `ALLEY_ASC_*` 를 비워두면 됩니다.
+
+설치가 끝나면 **인증서와 API 키 파일을 그 맥에서 지우세요.** 키체인에 들어갔으니
+파일은 더 필요 없습니다. `worker.conf` 도 토큰과 암호가 들어 있으니 함께 지웁니다.
+
 `launchd` 는 macOS 가 백그라운드 프로그램을 띄우고 죽으면 다시 살리는 장치입니다.
 설치 위치는 `~/Library/Application Support/alley-worker/alley-worker.app` 이고, 로그는
-`~/Library/Logs/alley-worker.log` 에 쌓입니다.
+`~/Library/Logs/alley-worker.log` 에 쌓입니다. 되돌리려면
+`./install-worker.sh --uninstall` 입니다.
 
 레포가 있는 맥에 그대로 설치할 때는 `--bundle` 없이 `./scripts/install-worker.sh` 로
 부릅니다. 그 자리에서 빌드해 설치합니다.
+
+**워커를 여러 대 붙일 때는 토큰을 대마다 따로 발급하세요.** 하나를 나눠 쓰면 관리
+화면에서 어느 맥인지 구분되지 않고, 한 대만 폐기할 수도 없습니다.
 
 **시스템 데몬이 아니라 LaunchAgent 입니다.** 서명에 쓰는 개인키가 로그인 키체인에
 있고, 그 키체인은 로그아웃 상태에서 잠겨 있기 때문입니다. 그 맥은 로그인된 채로
