@@ -23,9 +23,13 @@
         <legend class="form-group-title">올릴 파일</legend>
 
         <label class="field">
-            <span class="field-label">앱 zip</span>
-            <input class="input" type="file" name="file" required accept=".zip,application/zip">
-            <span class="field-note"><code>.app</code> 번들은 디렉터리라 그대로 올릴 수 없습니다. zip 으로 압축해서 올리세요.</span>
+            <span class="field-label">앱 파일</span>
+            <input class="input" type="file" name="file" required accept=".zip,.dmg,application/zip,application/x-apple-diskimage">
+            <span class="field-note">
+                zip 또는 dmg. <code>.app</code> 번들은 디렉터리라 그대로 올릴 수 없습니다.
+                <strong>zip 으로 올리면</strong> 아래 세 칸을 번들에서 읽어 채웁니다.
+                dmg 는 브라우저가 열 수 없어 직접 적으셔야 합니다.
+            </span>
             <span class="field-note" id="bundle-read-status" hidden></span>
         </label>
     </fieldset>

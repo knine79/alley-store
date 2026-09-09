@@ -74,13 +74,14 @@ public struct SigningPipeline: Sendable {
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: workspace) }
 
-        let downloaded = workspace.appendingPathComponent("upload.zip")
+        // 확장자를 `.zip` 으로 박지 않는다. dmg 도 받으므로 이름과 내용이 어긋나면
+        // 나중에 읽는 사람이 헷갈린다. 형식은 `ArtifactFormat` 이 내용을 보고 가른다.
+        let downloaded = workspace.appendingPathComponent("upload")
         await progress(.downloading, nil)
         try await client.download(from: job.artifactDownloadURL, to: downloaded)
 
         let extracted = workspace.appendingPathComponent("extracted", isDirectory: true)
-        try await unzip(downloaded, into: extracted)
-        let bundle = try AppBundle.locate(in: extracted)
+        let bundle = try await extractBundle(from: downloaded, into: extracted)
 
         await progress(.validating, "번들: \(bundle.url.lastPathComponent)")
         try requireDeclaredBundleIdentifier(of: bundle, matches: job.appBundleID)
@@ -141,6 +142,120 @@ public struct SigningPipeline: Sendable {
                 step: "압축 풀기",
                 code: Self.code(exitCode: result.exitCode, otherwise: .bundleLayoutInvalid),
                 detail: result.combinedOutput
+            )
+        }
+    }
+
+    /// 올라온 아티팩트에서 `.app` 을 꺼낸다.
+    ///
+    /// zip 과 dmg 를 모두 받는다. 빌드 도구가 뱉는 것은 대개 dmg 인데, 그것만 받지
+    /// 않으면 올리는 사람이 매번 마운트해서 `.app` 을 꺼내 다시 압축해야 한다
+    /// (ADR-0032).
+    func extractBundle(from archive: URL, into directory: URL) async throws -> AppBundle {
+        switch ArtifactFormat.detect(at: archive) {
+        case .zip:
+            try await unzip(archive, into: directory)
+            return try AppBundle.locate(in: directory)
+        case .diskImage:
+            return try await copyFromDiskImage(archive, into: directory)
+        case .unknown:
+            throw PipelineError.commandFailed(
+                step: "압축 풀기",
+                code: .bundleLayoutInvalid,
+                detail: """
+                    올린 파일이 zip 도 dmg 도 아닙니다. 앱을 담은 zip 이나 dmg 를 올리세요.
+                    `.app` 은 디렉터리라 그대로 올릴 수 없습니다.
+                    """
+            )
+        }
+    }
+
+    /// 디스크 이미지를 붙였다 떼면서 `.app` 을 복사해 나온다.
+    ///
+    /// **신뢰할 수 없는 이미지를 붙이는 자리다.** 다음을 지킨다.
+    ///
+    /// - `-readonly` 로 붙여 이미지 자체가 바뀌지 않게 한다
+    /// - `-nobrowse` 로 Finder 에 뜨지 않게 한다. 워커 맥에 사람이 로그인해 있다
+    /// - `-noautoopen` 으로 이미지 안의 것이 저절로 열리지 않게 한다
+    /// - 마운트 지점을 우리가 정한 작업 디렉터리 안으로 못 박는다. `/Volumes` 에
+    ///   붙이면 이름이 겹칠 때 남의 볼륨을 건드릴 수 있고, 잡이 여럿이면 서로 밟는다
+    ///
+    /// 붙인 것은 반드시 뗀다. 떼지 못하면 워커 맥에 마운트가 쌓이고, 그 상태로는
+    /// 다음 잡의 마운트도 실패하기 시작한다.
+    private func copyFromDiskImage(_ image: URL, into directory: URL) async throws -> AppBundle {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let mountPoint = directory.appendingPathComponent("mnt", isDirectory: true)
+        try FileManager.default.createDirectory(at: mountPoint, withIntermediateDirectories: true)
+
+        let attach = await Shell.runDetached(
+            "/usr/bin/hdiutil",
+            [
+                "attach", image.path,
+                "-mountpoint", mountPoint.path,
+                "-readonly", "-nobrowse", "-noautoopen",
+                // 검증을 건너뛴다. 무결성은 우리가 해시로 이미 확인했고, 큰 이미지에서
+                // 이 단계가 몇 분씩 걸린다.
+                "-noverify",
+            ],
+            timeout: 600
+        )
+        guard attach.succeeded else {
+            throw PipelineError.commandFailed(
+                step: "디스크 이미지 열기",
+                code: Self.code(exitCode: attach.exitCode, otherwise: .bundleLayoutInvalid),
+                detail: """
+                    dmg 를 열지 못했습니다. 암호가 걸려 있거나 사용권 동의(SLA)를 \
+                    요구하는 이미지는 받을 수 없습니다. 그런 이미지는 사람이 눌러줘야 \
+                    붙는데 워커에는 눌러줄 사람이 없습니다. zip 으로 올리세요.
+
+                    \(attach.combinedOutput)
+                    """
+            )
+        }
+
+        // 붙인 것은 반드시 뗀다. `defer` 는 async 를 기다리지 못해서 여기서는 쓸 수
+        // 없다. 떼기 전에 작업 디렉터리가 지워지면 마운트가 워커 맥에 남는다.
+        do {
+            let found = try AppBundle.locate(in: mountPoint)
+
+            // 마운트에서 바로 서명할 수 없다. 읽기 전용이고 떼고 나면 사라진다.
+            // `ditto` 를 쓰는 이유는 zip 을 풀 때와 같다. 심볼릭 링크와 확장 속성을
+            // 그대로 옮기는 것이 이것뿐이다.
+            let destination = directory.appendingPathComponent(found.url.lastPathComponent)
+            let copy = await Shell.runDetached(
+                "/usr/bin/ditto", [found.url.path, destination.path], timeout: 600
+            )
+            guard copy.succeeded else {
+                throw PipelineError.commandFailed(
+                    step: "디스크 이미지에서 복사",
+                    code: Self.code(exitCode: copy.exitCode, otherwise: .bundleLayoutInvalid),
+                    detail: copy.combinedOutput
+                )
+            }
+            await detach(mountPoint)
+            return AppBundle(url: destination)
+        } catch {
+            await detach(mountPoint)
+            throw error
+        }
+    }
+
+    /// 마운트를 뗀다.
+    ///
+    /// 실패해도 던지지 않는다. 여기서 던지면 원래 실패 원인이 "떼지 못했습니다" 로
+    /// 덮인다. 대신 로그에 남겨서 마운트가 쌓이는 것을 사람이 알아챌 수 있게 한다.
+    private func detach(_ mountPoint: URL) async {
+        let result = await Shell.runDetached(
+            "/usr/bin/hdiutil", ["detach", mountPoint.path, "-force"], timeout: 120
+        )
+        if !result.succeeded {
+            await progress(
+                .validating,
+                """
+                디스크 이미지를 떼지 못했습니다: \(mountPoint.path)
+                워커 맥에 마운트가 남았을 수 있습니다. 쌓이면 다음 잡의 마운트도 실패합니다.
+                \(result.combinedOutput)
+                """
             )
         }
     }

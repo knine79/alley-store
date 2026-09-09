@@ -20,12 +20,15 @@
         <!-- 스크립트가 돌 때만 보인다. 없으면 아래 칸을 직접 채워 등록만 하고,
              파일은 등록 뒤 버전 화면에서 올리면 된다 (ADR-0030). -->
         <label class="field" id="bundle-picker" hidden>
-            <span class="field-label">앱 zip <span class="field-optional">선택</span></span>
-            <input class="input" type="file" id="bundle-file" accept=".zip,application/zip">
+            <span class="field-label">앱 파일 <span class="field-optional">선택</span></span>
+            <input class="input" type="file" id="bundle-file" accept=".zip,.dmg,application/zip,application/x-apple-diskimage">
             <span class="field-note">
-                고르면 번들에서 읽을 수 있는 값을 아래에 채우고, <strong>등록과 함께
-                첫 버전으로 올립니다.</strong> 지금 올릴 것이 없으면 비워두세요.
-                나중에 버전 화면에서 올리면 됩니다.
+                zip 또는 dmg. 고르면 <strong>등록과 함께 첫 버전으로 올립니다.</strong>
+                지금 올릴 것이 없으면 비워두세요. 나중에 버전 화면에서 올리면 됩니다.
+            </span>
+            <span class="field-note">
+                <strong>zip 으로 올리면</strong> 번들에서 읽은 값으로 아래 칸을 채웁니다.
+                dmg 는 브라우저가 열 수 없어 직접 적으셔야 합니다.
             </span>
             <span class="field-note" id="bundle-read-status" hidden></span>
         </label>

@@ -14,12 +14,21 @@ public struct AppBundle: Sendable {
         case notFound(directory: URL)
         case ambiguous(names: [String])
 
+        // 올린 사람이 읽는 문장이다. 우리 쪽 임시 경로(`extracted`, `mnt`)나 형식
+        // (zip/dmg)을 적지 않는다. 그 사람은 dmg 를 올렸는데 "zip 안에" 라고 하면
+        // 자기 이야기가 아닌 줄 안다. 무엇을 담아 올려야 하는지만 말한다.
         public var description: String {
             switch self {
-            case .notFound(let directory):
-                return "\(directory.lastPathComponent) 안에서 .app 번들을 찾지 못했습니다. zip 안에 앱이 있는지 확인하세요."
+            case .notFound:
+                return """
+                    올린 파일 안에서 `.app` 번들을 찾지 못했습니다. 최상위에 `.app` 하나가 \
+                    담긴 zip 이나 dmg 를 올리세요.
+                    """
             case .ambiguous(let names):
-                return "zip 안에 .app 번들이 여러 개 있습니다: \(names.joined(separator: ", "))"
+                return """
+                    올린 파일 안에 `.app` 번들이 여러 개 있습니다: \(names.joined(separator: ", "))
+                    어느 것을 배포할지 정할 수 없습니다. 하나만 담아 올리세요.
+                    """
             }
         }
     }

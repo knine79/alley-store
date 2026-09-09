@@ -70,7 +70,18 @@
                 break;
             }
         }
-        if (eocd < 0) throw new Error("zip 형식이 아닙니다.");
+        if (eocd < 0) {
+            // dmg 는 흔한 실수가 아니라 정상적인 선택지다. 서버는 받아준다.
+            // 다만 브라우저가 APFS·HFS+ 디스크 이미지를 열 방법이 없어서 자동
+            // 채우기만 안 된다. "형식이 아니다" 로 끝내면 못 올리는 줄 안다.
+            if (await looksLikeDiskImage(file)) {
+                throw new Error(
+                    "dmg 는 브라우저가 열 수 없어 값을 읽지 못합니다. " +
+                    "올리는 데는 문제 없으니 아래 칸만 직접 채우세요."
+                );
+            }
+            throw new Error("zip 형식이 아닙니다.");
+        }
 
         var count = tail.getUint16(eocd + 10, true);
         var size = tail.getUint32(eocd + 12, true);
@@ -103,6 +114,19 @@
             at += 46 + nameLength + extraLength + commentLength;
         }
         return entries;
+    }
+
+    /*
+     * UDIF(dmg) 인가. 파일 **끝** 512바이트가 트레일러이고 그 앞 4바이트가 `koly` 다.
+     *
+     * 워커 쪽 `ArtifactFormat` 과 같은 판정이다. 두 곳에 있는 이유는 쓰임이 달라서다.
+     * 워커는 어떻게 풀지 정하려고 보고, 여기서는 "왜 자동 채우기가 안 되는지" 를
+     * 정확히 말하려고 본다.
+     */
+    async function looksLikeDiskImage(file) {
+        if (file.size < 512) return false;
+        var trailer = new Uint8Array(await file.slice(file.size - 512, file.size - 508).arrayBuffer());
+        return new TextDecoder("ascii").decode(trailer) === "koly";
     }
 
     /*
