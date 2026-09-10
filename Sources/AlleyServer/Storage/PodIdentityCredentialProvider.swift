@@ -145,11 +145,17 @@ struct PodIdentityCredentialProvider: CredentialProvider {
 
 extension CredentialProviderFactory {
     /// 컨테이너 자격증명 엔드포인트. 없으면 다음 공급자로 넘어간다.
+    ///
+    /// 나섰는지 아닌지를 기동 로그에 남긴다. 안 남기면 "자격증명을 못 찾았다" 를
+    /// 만났을 때 이 경로를 아예 안 탄 것인지 타고도 실패한 것인지 알 수 없다.
     static var podIdentity: CredentialProviderFactory {
         .custom { context in
-            guard let provider = PodIdentityCredentialProvider(httpClient: context.httpClient) else {
+            guard let provider = PodIdentityCredentialProvider(httpClient: context.httpClient)
+            else {
+                context.logger.notice("컨테이너 자격증명 엔드포인트가 없습니다. 다음 공급자로 넘어갑니다.")
                 return NullCredentialProvider()
             }
+            context.logger.notice("컨테이너 자격증명 엔드포인트를 씁니다: \(provider.url.absoluteString)")
             return RotatingCredentialProvider(context: context, provider: provider)
         }
     }

@@ -83,7 +83,8 @@ struct PodIdentityCredentialTests {
         ("https://credentials.example.com/creds", true),
         ("http://credentials.example.com/creds", false),
         ("http://169.254.169.254/creds", false),
-        ("http://10.0.0.1/creds", false),
+        // RFC 5737 의 문서용 주소. 사설 대역을 적으면 denylist 검사에 걸린다.
+        ("http://198.51.100.7/creds", false),
         ("ftp://169.254.170.23/creds", false),
     ])
     func gatesTheHost(address: String, allowed: Bool) throws {
