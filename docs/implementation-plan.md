@@ -116,8 +116,10 @@
 - [x] 워커 토큰 발급·폐기 (API + 관리자 화면, [ADR-0013](adr/0013-worker-token-authentication.md))
 - [x] codesign → notarytool → staple 파이프라인
 - [x] entitlements 검사 (restricted 항목이 있는데 프로필이 없으면 서명 전 실패)
-- [x] 업로더가 entitlements 를 함께 올린다 (API·CLI·콘솔, `.app` 에만 적용,
-      Electron JIT 검사, [ADR-0020](adr/0020-uploader-provides-entitlements.md))
+- [x] 업로더가 entitlements 를 함께 올린다 (API·CLI, `.app` 에만 적용,
+      Electron JIT 검사, [ADR-0020](adr/0020-uploader-provides-entitlements.md)).
+      웹 콘솔은 올릴 때 묻지 않고 실패한 자리에서 받는다
+      ([ADR-0036](adr/0036-ask-for-entitlements-only-when-needed.md))
 - [x] launchd 설치 스크립트 (`scripts/install-worker.sh`)
 - [x] 워커 번들 조립·서명 (`scripts/build-worker-app.sh`, 스토어 앱과 공통 절차를 쓰는
       `scripts/lib/bundle.sh`, [ADR-0022](adr/0022-worker-as-signed-app-bundle.md))

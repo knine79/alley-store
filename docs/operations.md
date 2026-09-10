@@ -380,7 +380,10 @@ presigned URL 의 서명은 **호스트를 포함해서** 계산됩니다. 서�
 entitlements 를 먼저 의심하세요. 앱 상세 화면의 버전 줄에서 어떤 권한으로 서명됐는지
 볼 수 있습니다. 아무것도 안 보이면 권한 없이 서명된 것입니다. JIT 를 쓰는 런타임은
 `com.apple.security.cs.allow-jit` 없이 Hardened Runtime 아래에서 실행되지 않습니다.
-plist 를 갖춰 새 빌드를 다시 올리세요.
+
+Electron 은 서명 전에 잡히지만 JVM·Mono 처럼 다른 JIT 런타임은 그대로 통과합니다
+([ADR-0036](adr/0036-ask-for-entitlements-only-when-needed.md) 의 대가). 번들에
+`.entitlements` 를 박아 새 빌드를 올리거나, CLI 의 `--entitlements` 로 함께 주세요.
 
 ## 다음
 
