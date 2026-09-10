@@ -42,6 +42,30 @@ struct BundleIDRuleVisibilityTests {
         }
     }
 
+    @Test("올리기 전 팝업이 규칙과 버튼 둘을 갖춘다")
+    func dialogCarriesRuleAndButtons() async throws {
+        try await withMigratedApp { app in
+            try await seedSettings(on: app, prefix: "com.example", enforce: true)
+            let (_, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+
+            try await app.testing().test(
+                .GET, "/apps/new", headers: .sessionCookie(token)
+            ) { response in
+                let body = response.body.string
+                #expect(body.contains(#"<dialog class="modal" id="dmg-dialog""#))
+                #expect(body.contains("업로드가 완료된 후에 번들 ID 와 앱 정보를 읽을 수 있습니다"))
+                #expect(body.contains("다시 빌드해서 올려주세요"))
+                #expect(body.contains(#"value="upload""#))
+                #expect(body.contains(#"value="cancel""#))
+
+                // 취소가 먼저 와야 Enter 로 닫았을 때 올라가지 않는다.
+                let cancel = try #require(body.range(of: #"value="cancel""#))
+                let upload = try #require(body.range(of: #"value="upload""#))
+                #expect(cancel.lowerBound < upload.lowerBound)
+            }
+        }
+    }
+
     /// 강제하지 않는 스토어에서 "실패합니다" 라고 하면 거짓말이다.
     @Test("강제하지 않으면 실패한다고 말하지 않는다")
     func silentWhenNotEnforced() async throws {
@@ -52,7 +76,12 @@ struct BundleIDRuleVisibilityTests {
             try await app.testing().test(
                 .GET, "/apps/new", headers: .sessionCookie(token)
             ) { response in
-                #expect(!response.body.string.contains("시작하지 않으면 그때 실패합니다"))
+                let body = response.body.string
+                #expect(!body.contains("시작하지 않으면 그때 실패합니다"))
+                // 팝업은 그대로 뜬다. 올린 뒤에야 정보를 안다는 사실은 정책과
+                // 무관하게 사실이다. 다만 규칙 문장만 빠진다.
+                #expect(body.contains("dmg-dialog"))
+                #expect(!body.contains("다시 빌드해서 올려주세요"))
             }
         }
     }

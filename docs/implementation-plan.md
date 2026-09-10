@@ -190,6 +190,8 @@ entitlements 세 개를 그대로 유지한 채 통과했습니다.
 - [x] entitlements 를 올릴 때 묻지 않고, 권한이 모자라 실패한 자리에서 받는다
       ([ADR-0036](adr/0036-ask-for-entitlements-only-when-needed.md))
 - [x] 번들 ID 접두어 규칙을 안내 문구에 실제 값으로 넣는다. 화면에서 "서명 워커" 를 걷어냈다
+- [x] dmg 업로드 확인을 `<dialog>` 팝업(취소/업로드)으로
+      ([ADR-0037](adr/0037-confirm-disk-image-upload-in-a-dialog.md))
 
 콘솔은 빌드 스텝 없는 중립 CSS 한 장으로 만듭니다. 강조색과 로고는 스토어 설정에서
 와서, 다른 조직이 띄우면 그 조직 것으로 보입니다. 사내용 고급 화면이 필요해지면

@@ -931,6 +931,50 @@ textarea.input {
     margin: 0;
 }
 
+/* ── 팝업 ───────────────────────────────────────────────
+   네이티브 <dialog> 다. 열고 닫기·Esc·초점 가두기는 브라우저가 한다 (ADR-0037). */
+
+.modal {
+    max-width: 30rem;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+}
+
+.modal::backdrop {
+    background: rgb(0 0 0 / 45%);
+}
+
+.modal-title {
+    margin: 0;
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border);
+    font-size: 16px;
+}
+
+.modal-body {
+    padding: var(--space-3) var(--space-4);
+}
+
+.modal-body p {
+    margin: 0 0 var(--space-2);
+    line-height: 1.6;
+}
+
+.modal-body p:last-child {
+    margin-bottom: 0;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    border-top: 1px solid var(--border);
+}
+
 /* 실패한 버전 옆에서 entitlements 를 받는 폼. 표 안이라 좁게 쓴다 (ADR-0036). */
 .attach-form {
     display: grid;

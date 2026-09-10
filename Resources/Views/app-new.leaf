@@ -49,13 +49,7 @@
             번들 ID 는 등록 후 바꿀 수 없습니다. macOS 가 이 값으로 앱을 식별하기 때문입니다.
         </p>
 
-        <p class="notice notice-warn" id="dmg-warning" hidden>
-            이 파일은 열어볼 수 없어서 <strong>적을 것이 없습니다.</strong> 올리고 나면
-            번들에서 번들 ID 와 버전을 읽어 채웁니다.
-            #if(bundleIDPrefix):#if(enforceBundleIDPrefix):번들 ID 가 <code>#(bundleIDPrefix).</code> 로 시작하지 않으면 그때 실패합니다.#endif#endif
-        </p>
-
-        <fieldset class="form-group">
+        <fieldset class="form-group" id="app-info-group">
             <legend class="form-group-title">앱 정보</legend>
 
             <label class="field" id="bundle-id-field">
@@ -144,6 +138,34 @@
         </div>
     </div>
 </form>
+
+<!-- 올리기 직전에 한 번 멈춰 세운다.
+     dmg 는 다 올려야 무엇인지 알 수 있어서, 규칙에 안 맞으면 몇백 MB 를 보낸 뒤에
+     실패한다. 그 사실을 보내기 전에 알려준다 (ADR-0037).
+
+     네이티브 `<dialog>` 를 쓴다. Esc 와 초점 가두기, 배경 가림이 딸려 온다.
+     `method="dialog"` 라서 누른 버튼의 `value` 가 `returnValue` 로 나온다. -->
+<dialog class="modal" id="dmg-dialog" aria-labelledby="dmg-dialog-title">
+    <form method="dialog">
+        <h2 class="modal-title" id="dmg-dialog-title">이대로 올릴까요?</h2>
+
+        <div class="modal-body">
+            <p>dmg 파일은 업로드가 완료된 후에 번들 ID 와 앱 정보를 읽을 수 있습니다.</p>
+            #if(bundleIDPrefix):#if(enforceBundleIDPrefix):
+            <p>
+                그때 번들 ID 가 <code>#(bundleIDPrefix).</code> 로 시작하지 않으면
+                실패합니다. 맞지 않으면 다시 빌드해서 올려주세요.
+            </p>
+            #endif#endif
+        </div>
+
+        <!-- 취소가 먼저라 Enter 로 닫으면 안 올라간다. Esc 도 마찬가지다. -->
+        <div class="modal-actions">
+            <button class="button" type="submit" value="cancel">취소</button>
+            <button class="button button-primary" type="submit" value="upload">업로드</button>
+        </div>
+    </form>
+</dialog>
 
 <script src="/bundle-info.js?v=#(page.assetVersion)" defer></script>
 <script src="/app-new.js?v=#(page.assetVersion)" defer></script>

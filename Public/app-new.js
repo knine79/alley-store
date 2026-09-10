@@ -41,7 +41,7 @@
 
     var dropStatus = document.getElementById("dropzone-status");
     var infoLead = document.getElementById("step-info-lead");
-    var dmgWarning = document.getElementById("dmg-warning");
+    var dmgDialog = document.getElementById("dmg-dialog");
     var firstVersion = document.getElementById("first-version");
     var errorBox = document.getElementById("app-new-error");
     var submit = document.getElementById("app-new-submit");
@@ -50,6 +50,7 @@
     var skipFile = document.getElementById("skip-file");
     var optionalFields = document.getElementById("optional-fields");
     var bundleIDField = document.getElementById("bundle-id-field");
+    var appInfoGroup = document.getElementById("app-info-group");
     var progressRow = document.getElementById("app-new-progress");
     var bar = document.getElementById("app-new-bar");
     var progressLabel = document.getElementById("app-new-status");
@@ -137,12 +138,10 @@
         if (info) {
             fill(info);
             infoLead.textContent = "번들에서 읽은 값입니다. 확인하고 모자란 것을 채우세요.";
-            dmgWarning.hidden = true;
             firstVersion.hidden = false;
         } else if (hasFile) {
             infoLead.textContent =
                 "이 파일은 열어볼 수 없어서 올린 뒤에 앱 정보를 읽습니다.";
-            dmgWarning.hidden = false;
             // 버전도 번들 ID 도 묻지 않는다. 사람이 짐작해 적을 값이 아니고, 적게
             // 하면 실제와 어긋난 채로 올라간다. 워커가 번들에서 읽어 확정한다.
             firstVersion.hidden = true;
@@ -153,7 +152,6 @@
         } else {
             infoLead.textContent =
                 "앱만 먼저 등록합니다. 파일은 등록 뒤 버전 화면에서 올리면 됩니다.";
-            dmgWarning.hidden = true;
             firstVersion.hidden = true;
         }
 
@@ -178,6 +176,10 @@
         // 조용히 제출을 막지 않는다.
         bundleIDField.hidden = hideOptional;
         form.elements.bundleID.required = !hideOptional;
+
+        // 둘 다 감추면 이 묶음에 제목만 남는다. 빈 상자에 "앱 정보" 라고 써 있으면
+        // 뭘 채워야 하는지 찾게 된다.
+        appInfoGroup.hidden = bundleIDField.hidden && optionalFields.hidden;
 
         // 버튼 이름을 하는 일에 맞춘다. 파일이 있으면 올리는 것이 이 단계의 일이다.
         submit.textContent = hasFile ? "업로드" : "등록";
@@ -236,35 +238,66 @@
         // 번들 ID 를 우리가 정하지 못한 채로 올린다. 그 사실과 대가를 올리기 직전에
         // 한 번 확인받는다. 몇백 MB 를 보낸 뒤에 "규칙에 안 맞아 실패했다" 를 처음
         // 듣게 하지 않으려는 것이다.
-        if (bundleIDField.hidden && !confirmPolicy()) return;
-
-        run().catch(function (error) {
+        var asked = bundleIDField.hidden ? confirmPolicy() : Promise.resolve(true);
+        asked.then(function (agreed) {
+            if (!agreed) return;
+            return run();
+        }).catch(function (error) {
             fail(error.message || "등록에 실패했습니다.");
         });
     });
 
     /*
-     * 올리기 직전 확인.
+     * 올리기 직전 확인 (ADR-0037).
      *
-     * `confirm` 은 투박하지만 이 자리에는 맞다. 되돌리기 어려운 일을 하기 전에
-     * 멈춰 세우는 것이 목적이고, 브라우저가 그리는 창은 사람이 이미 아는 모양이다.
-     * 직접 만든 대화상자는 초점 가두기와 Esc 처리를 다시 만들어야 하는데, 이 콘솔에
-     * 그런 장치가 아직 없다.
+     * 네이티브 `<dialog>` 라서 Esc·초점 가두기·배경 가림이 딸려 온다. 문구는
+     * 템플릿에 있다. 접두어 정책이 서버 설정이라 여기서 조립하면 두 군데가 어긋난다.
+     *
+     * **`close` 이벤트를 믿지 않는다.** Chrome 152 헤드리스에서는 `dialog.close()`
+     * 로 닫아도 `close` 가 오지 않았다. 그 이벤트만 기다리면 업로드를 눌러도 아무
+     * 일이 일어나지 않는다. 실제로 그렇게 만들었다가 브라우저로 몰아보고 잡았다.
+     * 대신 확실히 오는 둘에 건다. 버튼은 폼 `submit`, Esc 는 `cancel` 이다.
+     * `close` 도 함께 달아두지만 셋 중 먼저 오는 것 하나만 쓴다.
+     *
+     * `<dialog>` 를 모르는 브라우저에서는 확인을 건너뛰지 않고 `confirm` 으로
+     * 떨어진다. 확인 없이 몇백 MB 를 보내게 두는 것보다 투박한 창이 낫다.
      */
     function confirmPolicy() {
-        var rule = form.dataset.bundleIdPrefix;
-        var lines = [
-            "이 파일은 열어볼 수 없어서 앱 정보를 모른 채로 올립니다.",
-            "",
-            "올리고 나면 번들을 열어 번들 ID 를 읽습니다."
-        ];
-        if (rule) {
-            lines.push(
-                "그 값이 " + rule + ". 로 시작하지 않으면 업로드가 끝난 뒤 실패합니다."
-            );
+        var dialogForm = dmgDialog && dmgDialog.querySelector("form");
+        if (!dmgDialog || !dialogForm || typeof dmgDialog.showModal !== "function") {
+            return Promise.resolve(window.confirm(dialogText() + "\n\n계속할까요?"));
         }
-        lines.push("", "계속할까요?");
-        return window.confirm(lines.join("\n"));
+
+        return new Promise(function (resolve) {
+            function settle(agreed) {
+                dialogForm.removeEventListener("submit", onSubmit);
+                dmgDialog.removeEventListener("cancel", onCancel);
+                dmgDialog.removeEventListener("close", onClose);
+                if (dmgDialog.open) dmgDialog.close();
+                resolve(agreed);
+            }
+            // 어느 버튼인지 모르면 안 올린다. 되돌릴 수 없는 쪽으로 기울지 않는다.
+            function onSubmit(event) {
+                settle(!!event.submitter && event.submitter.value === "upload");
+            }
+            function onCancel() { settle(false); }
+            function onClose() { settle(dmgDialog.returnValue === "upload"); }
+
+            dmgDialog.returnValue = "";
+            dialogForm.addEventListener("submit", onSubmit);
+            dmgDialog.addEventListener("cancel", onCancel);
+            dmgDialog.addEventListener("close", onClose);
+            dmgDialog.showModal();
+        });
+    }
+
+    /** 팝업 본문을 한 줄로. `confirm` 으로 떨어졌을 때 같은 말을 하려고 읽는다. */
+    function dialogText() {
+        var body = dmgDialog && dmgDialog.querySelector(".modal-body");
+        if (!body) return "올린 뒤에야 앱 정보를 읽을 수 있습니다.";
+        return Array.prototype.map.call(body.querySelectorAll("p"), function (node) {
+            return node.textContent.replace(/\s+/g, " ").trim();
+        }).join("\n");
     }
 
     async function run() {
