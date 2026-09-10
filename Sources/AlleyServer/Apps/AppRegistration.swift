@@ -25,12 +25,18 @@ enum AppRegistration {
             throw Abort(.badRequest, reason: "앱 이름이 비어 있습니다.")
         }
 
-        let bundleID = payload.bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
-        try validateBundleID(bundleID, settings: settings, logger: logger)
+        // 번들 ID 를 안 보냈으면 임시값으로 만든다. dmg 를 올릴 때가 그렇고, 워커가
+        // 번들에서 읽은 값으로 확정한다 (ADR-0034).
+        let requested = payload.bundleID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pending = requested?.isEmpty != false
+        let bundleID = pending ? provisionalBundleID() : requested!
 
-        // 형식이 맞아도 이미 쓰는 ID 면 안 된다. 같은 번들 ID 를 가진 앱이 둘이면
-        // macOS 쪽에서 어느 쪽이 설치돼 있는지 구분할 방법이 없다.
-        try await requireUnusedBundleID(bundleID, on: database)
+        if !pending {
+            try validateBundleID(bundleID, settings: settings, logger: logger)
+            // 형식이 맞아도 이미 쓰는 ID 면 안 된다. 같은 번들 ID 를 가진 앱이 둘이면
+            // macOS 쪽에서 어느 쪽이 설치돼 있는지 구분할 방법이 없다.
+            try await requireUnusedBundleID(bundleID, on: database)
+        }
 
         let app = App(
             bundleID: bundleID,
@@ -38,7 +44,8 @@ enum AppRegistration {
             summary: normalized(payload.summary),
             details: normalized(payload.description),
             category: normalized(payload.category),
-            ownerID: try owner.requireID()
+            ownerID: try owner.requireID(),
+            bundleIDPending: pending
         )
 
         do {
@@ -77,6 +84,50 @@ enum AppRegistration {
                 : try StoreSettingsValidation.validatedLogoURL(iconURL)
         }
         try await app.save(on: database)
+    }
+
+    // MARK: - 임시 번들 ID
+
+    /// 아직 모르는 번들 ID 자리에 넣을 값.
+    ///
+    /// `bundle_id` 는 UNIQUE 이고 NOT NULL 이다. 비워둘 수 없어서 겹치지 않는 값을
+    /// 넣어둔다. UUID 라 충돌하지 않고, 접두어가 있어 로그나 DB 에서 눈에 띈다.
+    ///
+    /// **화면에는 보여주지 않는다.** 앱 목록·상세·통계·확인 화면이 모두 "확인 중" 으로
+    /// 바꿔 그린다. API 에는 진짜 값이 그대로 나가고 `bundleIDPending` 이 함께 붙는다.
+    /// 가려서 내보내면 API 를 쓰는 쪽에 거짓말이 된다.
+    static let provisionalPrefix = "alley-pending."
+
+    static func provisionalBundleID() -> String {
+        "\(provisionalPrefix)\(UUID().uuidString.lowercased())"
+    }
+
+    static func isProvisional(_ bundleID: String) -> Bool {
+        bundleID.hasPrefix(provisionalPrefix)
+    }
+
+    /// 워커가 번들에서 읽어온 값으로 번들 ID 를 확정한다.
+    ///
+    /// 여기서도 프리픽스와 형식을 본다. 워커도 서명 전에 같은 검사를 하지만
+    /// (ADR-0034), 워커는 우리가 준 설정으로 판단하고 이쪽은 지금 설정으로 판단한다.
+    /// 그 사이 관리자가 정책을 바꿨을 수 있고, 정책의 주인은 서버다.
+    static func confirmBundleID(
+        _ app: App,
+        readFromBundle bundleID: String,
+        settings: StoreSettings,
+        on database: any Database,
+        logger: Logger
+    ) async throws {
+        guard app.bundleIDPending else { return }
+
+        let trimmed = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+        try validateBundleID(trimmed, settings: settings, logger: logger)
+        try await requireUnusedBundleID(trimmed, on: database)
+
+        app.bundleID = trimmed
+        app.bundleIDPending = false
+        try await app.save(on: database)
+        logger.notice("번들 ID 를 확정했습니다: \(trimmed) (앱 \(app.id?.uuidString ?? "?"))")
     }
 
     // MARK: - 보조

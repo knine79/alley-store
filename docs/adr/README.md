@@ -41,6 +41,7 @@
 | [0031](0031-register-and-first-upload-in-one-screen.md) | 앱 등록과 첫 버전 업로드를 한 화면에서 한다 | 수락됨 | 2026-09-09 |
 | [0032](0032-accept-disk-images.md) | dmg 도 받고, 내용을 보고 형식을 가른다 | 수락됨 | 2026-09-09 |
 | [0033](0033-drop-file-first-then-confirm.md) | 파일을 먼저 놓고 값을 확인한다 | 수락됨 | 2026-09-09 |
+| [0034](0034-worker-decides-bundle-id-for-disk-images.md) | dmg 는 번들 ID 를 묻지 않고 워커가 정한다 | 수락됨 | 2026-09-10 |
 
 ## 언제 쓰나
 

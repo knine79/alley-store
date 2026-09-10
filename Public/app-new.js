@@ -50,6 +50,7 @@
     var cancelInfo = document.getElementById("cancel-info");
     var skipFile = document.getElementById("skip-file");
     var optionalFields = document.getElementById("optional-fields");
+    var bundleIDField = document.getElementById("bundle-id-field");
     var progressRow = document.getElementById("app-new-progress");
     var bar = document.getElementById("app-new-bar");
     var progressLabel = document.getElementById("app-new-status");
@@ -140,12 +141,14 @@
             dmgWarning.hidden = true;
             firstVersion.hidden = false;
         } else if (hasFile) {
-            infoLead.textContent = "이 파일에서는 값을 읽지 못했습니다. 번들 ID 를 적어주세요.";
+            infoLead.textContent =
+                "이 파일은 열어볼 수 없어서 올린 뒤에 앱 정보를 읽습니다.";
             dmgWarning.hidden = false;
-            // 버전 칸을 감춘다. 사람이 짐작해 적을 값이 아니다. 워커가 채운다.
+            // 버전도 번들 ID 도 묻지 않는다. 사람이 짐작해 적을 값이 아니고, 적게
+            // 하면 실제와 어긋난 채로 올라간다. 워커가 번들에서 읽어 확정한다.
             firstVersion.hidden = true;
             if (whyNotRead) say(whyNotRead);
-            // 이름은 파일 이름에서 짐작해 둔다. 나중에 고칠 수 있는 값이다.
+            // 이름은 파일 이름에서 짐작해 둔다. 확인 화면에서 고친다.
             var guess = input.files[0].name.replace(/\.(zip|dmg)$/i, "");
             if (!form.elements.name.value.trim()) form.elements.name.value = guess;
         } else {
@@ -173,14 +176,22 @@
         optionalFields.hidden = hideOptional;
         form.elements.name.required = !hideOptional;
 
+        // dmg 면 번들 ID 도 묻지 않는다. 서버가 임시값으로 만들어두고 워커가 번들에서
+        // 읽은 값으로 확정한다 (ADR-0034). 감출 때 `required` 를 떼야 브라우저가
+        // 조용히 제출을 막지 않는다.
+        bundleIDField.hidden = hideOptional;
+        form.elements.bundleID.required = !hideOptional;
+
         // 버튼 이름을 하는 일에 맞춘다. 파일이 있으면 올리는 것이 이 단계의 일이다.
         submit.textContent = hasFile ? "업로드" : "등록";
 
         stepFile.hidden = true;
         stepInfo.hidden = false;
-        (form.elements.bundleID.value.trim()
-            ? form.elements.name
-            : form.elements.bundleID).focus();
+        if (!bundleIDField.hidden && !form.elements.bundleID.value.trim()) {
+            form.elements.bundleID.focus();
+        } else if (!optionalFields.hidden) {
+            form.elements.name.focus();
+        }
     }
 
     function fill(info) {
@@ -224,10 +235,40 @@
         if (!input.files[0]) return;
 
         event.preventDefault();
+
+        // 번들 ID 를 우리가 정하지 못한 채로 올린다. 그 사실과 대가를 올리기 직전에
+        // 한 번 확인받는다. 몇백 MB 를 보낸 뒤에 "규칙에 안 맞아 실패했다" 를 처음
+        // 듣게 하지 않으려는 것이다.
+        if (bundleIDField.hidden && !confirmPolicy()) return;
+
         run().catch(function (error) {
             fail(error.message || "등록에 실패했습니다.");
         });
     });
+
+    /*
+     * 올리기 직전 확인.
+     *
+     * `confirm` 은 투박하지만 이 자리에는 맞다. 되돌리기 어려운 일을 하기 전에
+     * 멈춰 세우는 것이 목적이고, 브라우저가 그리는 창은 사람이 이미 아는 모양이다.
+     * 직접 만든 대화상자는 초점 가두기와 Esc 처리를 다시 만들어야 하는데, 이 콘솔에
+     * 그런 장치가 아직 없다.
+     */
+    function confirmPolicy() {
+        var rule = form.dataset.bundleIdPrefix;
+        var lines = [
+            "이 파일은 열어볼 수 없어서 앱 정보를 모른 채로 올립니다.",
+            "",
+            "올리고 나면 서명 워커가 번들을 열어 번들 ID 를 읽습니다."
+        ];
+        if (rule) {
+            lines.push(
+                "그 값이 " + rule + ". 로 시작하지 않으면 업로드가 끝난 뒤 실패합니다."
+            );
+        }
+        lines.push("", "계속할까요?");
+        return window.confirm(lines.join("\n"));
+    }
 
     async function run() {
         var file = input.files[0];
@@ -263,7 +304,10 @@
 
     async function createApp() {
         return await postJSON(form.dataset.appsUrl, {
-            bundleID: form.elements.bundleID.value.trim(),
+            // 감춰져 있으면 보내지 않는다. 서버가 임시값을 만들고 워커가 확정한다.
+            bundleID: bundleIDField.hidden
+                ? null
+                : form.elements.bundleID.value.trim(),
             name: form.elements.name.value.trim(),
             summary: emptyToNull(form.elements.summary.value),
             description: emptyToNull(form.elements.description.value),

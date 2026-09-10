@@ -49,7 +49,14 @@ public struct UserDTO: Codable, Sendable, Identifiable, Equatable {
 public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
     public var id: UUID
     /// 앱마다 고유해야 한다. macOS가 이 값으로 앱을 식별한다.
+    ///
+    /// `bundleIDPending` 이 참이면 이 값은 서버가 자리를 채우려고 넣은 임시값이다.
+    /// 그 앱은 아직 출시할 수 없다 (ADR-0034).
     public var bundleID: String
+    /// 번들 ID 가 아직 확정되지 않았다. dmg 로 올린 직후가 그렇다.
+    ///
+    /// 옵셔널이라 이 필드를 모르는 예전 클라이언트도 그대로 동작한다.
+    public var bundleIDPending: Bool?
     public var name: String
     public var summary: String?
     public var description: String?
@@ -66,6 +73,7 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
     public init(
         id: UUID,
         bundleID: String,
+        bundleIDPending: Bool? = nil,
         name: String,
         summary: String? = nil,
         description: String? = nil,
@@ -79,6 +87,7 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
     ) {
         self.id = id
         self.bundleID = bundleID
+        self.bundleIDPending = bundleIDPending
         self.name = name
         self.summary = summary
         self.description = description
@@ -145,14 +154,22 @@ public struct VersionDTO: Codable, Sendable, Identifiable, Equatable {
 // MARK: - 요청 페이로드
 
 public struct CreateAppRequest: Codable, Sendable {
-    public var bundleID: String
+    /// 등록할 번들 ID. **비워 보낼 수 있다.**
+    ///
+    /// dmg 로 올릴 때가 그렇다. 브라우저가 디스크 이미지를 열 수 없어서 올리기 전에는
+    /// 이 값을 알 수 없다. 비워 보내면 서버가 임시 ID 를 만들어두고, 워커가 번들에서
+    /// 읽은 값으로 확정한다 (ADR-0034).
+    ///
+    /// 옵셔널이라 합성 디코더가 `decodeIfPresent` 로 읽는다. 이 값을 늘 보내던 예전
+    /// 클라이언트는 그대로 동작한다.
+    public var bundleID: String?
     public var name: String
     public var summary: String?
     public var description: String?
     public var category: String?
 
     public init(
-        bundleID: String,
+        bundleID: String? = nil,
         name: String,
         summary: String? = nil,
         description: String? = nil,

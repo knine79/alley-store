@@ -86,7 +86,7 @@ public struct SigningPipeline: Sendable {
         let bundle = try await extractBundle(from: downloaded, into: extracted)
 
         await progress(.validating, "번들: \(bundle.url.lastPathComponent)")
-        try requireDeclaredBundleIdentifier(of: bundle, matches: job.appBundleID)
+        try requireAcceptableBundleIdentifier(of: bundle, for: job)
         let targets = try bundle.codeToSign()
         // 업로더가 준 plist 가 있으면 그것이 진실이다 (ADR-0020).
         let provided = job.entitlements.map { Data($0.utf8) }
@@ -121,7 +121,10 @@ public struct SigningPipeline: Sendable {
         output.edSignature = try sparkleSignature(for: result)
         // 서명·스테이플이 `Info.plist` 를 건드리지는 않지만, 실제로 내보내는 번들에서
         // 읽는 편이 낫다. 앞서 읽어두고 이 사이에 무엇이 달라졌다면 그것이 버그다.
-        let metadata = bundle.metadata
+        var metadata = bundle.metadata
+        // 등록값이 확정된 앱에서는 번들 ID 를 보내지 않는다. 이미 대조해서 같다는
+        // 것을 알고, 같은 값을 또 보내면 받는 쪽이 판단할 거리가 늘어난다.
+        if job.appBundleIDPending != true { metadata.bundleIdentifier = nil }
         output.bundleMetadata = metadata.isEmpty ? nil : metadata
 
         try await client.upload(result, to: job.resultUploadURL)
@@ -306,6 +309,63 @@ public struct SigningPipeline: Sendable {
         try Entitlements.validate(bundle: bundle.url, declaredKeys: keys)
         try requireJITForElectron(bundle: bundle, declaredKeys: keys)
         return keys
+    }
+
+    /// 번들 ID 가 받아들일 만한지 본다. 서명 전에 한다.
+    ///
+    /// 두 갈래다.
+    ///
+    /// - 등록된 ID 가 있으면 **그것과 같은지** 본다 (ADR-0029)
+    /// - 등록된 ID 가 임시값이면 **조직 정책에 맞는지** 본다 (ADR-0034)
+    ///
+    /// 임시값인 경우는 dmg 로 올렸을 때다. 브라우저가 디스크 이미지를 열 수 없어
+    /// 등록 시점에 번들 ID 를 알 수 없고, 사람에게 손으로 적게 하지 않기로 했다.
+    /// 그러면 대조할 것이 없으므로 **정책 검사가 그 자리를 대신한다.** 이것이 없으면
+    /// 아무 앱이나 올려서 조직 Developer ID 로 서명받을 수 있다.
+    func requireAcceptableBundleIdentifier(
+        of bundle: AppBundle,
+        for job: SigningJobDTO
+    ) throws {
+        guard job.appBundleIDPending == true else {
+            try requireDeclaredBundleIdentifier(of: bundle, matches: job.appBundleID)
+            return
+        }
+        try requireBundleIdentifierMatchesPolicy(of: bundle, for: job)
+    }
+
+    /// 번들이 밝히는 ID 가 조직의 접두어 정책에 맞는가.
+    func requireBundleIdentifierMatchesPolicy(
+        of bundle: AppBundle,
+        for job: SigningJobDTO
+    ) throws {
+        guard let declared = bundle.bundleIdentifier else {
+            throw PipelineError.commandFailed(
+                step: "번들 검사",
+                code: .bundleIdentifierMismatch,
+                detail: """
+                    \(bundle.url.lastPathComponent) 의 Info.plist 에 CFBundleIdentifier 가 \
+                    없습니다. 번들 ID 가 없는 앱은 스토어 앱이 설치 여부를 판단할 수 없어 \
+                    배포해도 업데이트가 잡히지 않습니다.
+                    """
+            )
+        }
+
+        guard let prefix = job.requiredBundleIDPrefix, !prefix.isEmpty else { return }
+        guard declared != prefix, !declared.hasPrefix(prefix + ".") else { return }
+
+        // 정책이 "권장" 이면 막지 않는다. 서버가 그렇게 정해서 보냈다.
+        guard job.enforceBundleIDPrefix == true else { return }
+
+        throw PipelineError.commandFailed(
+            step: "번들 검사",
+            code: .bundleIdentifierMismatch,
+            detail: """
+                올린 앱의 번들 ID 는 \(declared) 인데, 이 스토어는 \(prefix). 로 시작하는 \
+                앱만 받습니다. 서명하지 않고 멈췄습니다.
+
+                이 앱을 정말 여기서 배포해야 한다면 관리자에게 번들 ID 규칙을 확인하세요.
+                """
+        )
     }
 
     /// 올린 번들이 스스로 밝히는 번들 ID 가 등록된 앱과 같은지 본다.

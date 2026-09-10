@@ -255,7 +255,12 @@ struct AdminPagesController: RouteCollection, Sendable {
                     StatsRow(
                         id: row.appID.uuidString,
                         name: row.appName,
-                        bundleID: row.bundleID,
+                        // 확정 전 임시값은 보여주지 않는다 (ADR-0034). 통계에 잡히려면
+                        // 다운로드가 있어야 하고 그러려면 출시돼 있어야 하니 실제로는
+                        // 거의 안 걸리지만, 임시값이 새는 자리를 남겨두지 않는다.
+                        bundleID: AppRegistration.isProvisional(row.bundleID)
+                            ? "확인 중"
+                            : row.bundleID,
                         total: row.total,
                         recent: row.recent,
                         people: row.people,

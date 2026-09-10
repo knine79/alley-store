@@ -49,7 +49,8 @@ struct VersionPagesController: RouteCollection, Sendable {
                 page: try await request.pageContext(title: "올린 것 확인"),
                 appID: appID.uuidString,
                 appName: app.name,
-                bundleID: app.bundleID,
+                bundleID: app.bundleIDPending ? "" : app.bundleID,
+                bundleIDPending: app.bundleIDPending,
                 summary: app.summary ?? "",
                 description: app.details ?? "",
                 category: app.category ?? "",
@@ -227,7 +228,9 @@ struct VersionConfirmContext: Encodable {
     var page: PageContext
     var appID: String
     var appName: String
+    /// 확정 전이면 빈 문자열이다. 임시 ID 는 밖으로 내보내지 않는다.
     var bundleID: String
+    var bundleIDPending: Bool
     var summary: String
     var description: String
     var category: String

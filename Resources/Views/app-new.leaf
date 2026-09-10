@@ -10,7 +10,8 @@
 
 <form class="form" method="post" action="/apps/new" id="app-new-form"
       data-apps-url="#(appsPath)"
-      data-version-root="#(versionRootPath)">
+      data-version-root="#(versionRootPath)"
+      data-bundle-id-prefix="#(bundleIDPrefix)">
 
     <!-- ── 1단계: 파일 ────────────────────────────────────────
          스크립트가 돌 때만 보인다. 없으면 2단계 폼이 그대로 드러나 있고, 그것을
@@ -22,14 +23,14 @@
             <input class="dropzone-input" type="file" id="bundle-file"
                    accept=".zip,.dmg,application/zip,application/x-apple-diskimage">
             <span class="dropzone-title">파일을 끌어다 놓거나 눌러서 고르세요</span>
-            <span class="dropzone-note">zip 또는 dmg</span>
+            <span class="dropzone-note">zip 또는 dmg. 앱 정보를 읽어 자동으로 채워줍니다.</span>
         </div>
 
         <!-- 고르기 전에 알려준다. 고른 뒤에 말하면 늦다. -->
         <p class="notice notice-hint">
-            <strong>zip 이 편합니다.</strong> 열어서 번들 ID 와 버전을 읽어 채워줍니다.
-            dmg 는 열 수 없어서 번들 ID 를 직접 적어야 하고, 틀리면 다 올린 뒤에
-            막힙니다.
+            <strong>zip 이 편합니다.</strong> dmg 는 업로드가 완료되기 전에는 앱 정보를
+            읽을 수 없어서 번들 ID 를 직접 적어야 하고, 실제와 다르면 업로드가 완료된
+            후 실패할 수 있습니다.
         </p>
 
         <p class="field-note" id="dropzone-status" hidden></p>
@@ -56,7 +57,7 @@
         <fieldset class="form-group">
             <legend class="form-group-title">앱 정보</legend>
 
-            <label class="field">
+            <label class="field" id="bundle-id-field">
                 <span class="field-label">번들 ID</span>
                 <input class="input" type="text" name="bundleID" required
                        value="#(values.bundleID)"

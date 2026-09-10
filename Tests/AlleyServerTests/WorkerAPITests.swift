@@ -317,11 +317,22 @@ struct SigningJobReportTests {
     /// 워커가 잡을 하나 가져간 상태를 만든다.
     private func claimedJob(
         on app: Application,
-        storage: FakeArtifactStorage
+        storage: FakeArtifactStorage,
+        bundleIDPending: Bool = false
     ) async throws -> (token: String, version: Version, job: SigningJob) {
         let (_, token) = try await app.makeWorker()
         let (owner, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
-        let record = try await app.seedApp(bundleID: "com.example.tool", name: "도구", owner: owner)
+        let record = try await app.seedApp(
+            bundleID: bundleIDPending
+                ? AppRegistration.provisionalBundleID()
+                : "com.example.tool",
+            name: "도구",
+            owner: owner
+        )
+        if bundleIDPending {
+            record.bundleIDPending = true
+            try await record.save(on: app.db)
+        }
         let version = try await app.seedVersion(
             appID: try record.requireID(), short: "1.0.0", build: 1, state: .uploaded, by: owner
         )
@@ -383,6 +394,92 @@ struct SigningJobReportTests {
             // 빌드 번호는 고치지 않는다. 앱 안에서 겹칠 수 없는 값이라 여기서 바꾸면
             // 다른 버전과 충돌할 수 있고 그 충돌을 풀 방법이 없다.
             #expect(stored.buildNumber == 1)
+        }
+    }
+
+    /// dmg 로 올린 앱은 번들 ID 가 임시값이다. 워커가 읽어온 값으로 확정돼야 한다.
+    @Test("임시 번들 ID 를 워커가 읽어온 값으로 확정한다")
+    func confirmsPendingBundleID() async throws {
+        try await withMigratedApp { app in
+            let storage = app.useFakeStorage()
+            let (token, version, job) = try await claimedJob(
+                on: app, storage: storage, bundleIDPending: true
+            )
+            let versionID = try version.requireID()
+
+            let key = app.artifactStorage.newKey(
+                ArtifactStorage.objectKey(
+                    appID: version.$app.id, versionID: versionID, kind: .signed
+                )
+            )
+            try await storage.put(Data(repeating: 0, count: 4096), to: key, contentType: nil)
+
+            try await app.testing().test(
+                .PATCH, try updatePath(job), headers: .bearer(token),
+                beforeRequest: { request in
+                    try request.content.encode(
+                        SigningJobUpdate(
+                            state: .succeeded,
+                            resultSize: 4096,
+                            bundleMetadata: BundleMetadata(
+                                shortVersion: "1.2.3",
+                                bundleIdentifier: "com.example.fromdmg"
+                            )
+                        )
+                    )
+                }
+            ) { #expect($0.status == .noContent) }
+
+            let stored = try #require(try await App.find(version.$app.id, on: app.db))
+            #expect(stored.bundleID == "com.example.fromdmg")
+            #expect(stored.bundleIDPending == false)
+
+            let storedVersion = try #require(try await Version.find(versionID, on: app.db))
+            #expect(storedVersion.state == .ready)
+        }
+    }
+
+    /// 확정에 실패하면 서명이 끝났어도 배포 준비됨으로 넘기지 않는다.
+    /// 확정되지 않은 앱은 출시할 수 없어서, 넘겨두면 아무도 못 받는 채로 남는다.
+    @Test("확정할 수 없는 값이면 실패로 남긴다")
+    func failsWhenReportedBundleIDCollides() async throws {
+        try await withMigratedApp { app in
+            let storage = app.useFakeStorage()
+            let (owner, _) = try await app.makeUser(email: "other@example.com", role: .developer)
+            // 이미 그 번들 ID 를 쓰는 앱이 있다.
+            _ = try await app.seedApp(
+                bundleID: "com.example.taken", name: "먼저 등록된 앱", owner: owner
+            )
+
+            let (token, version, job) = try await claimedJob(
+                on: app, storage: storage, bundleIDPending: true
+            )
+            let versionID = try version.requireID()
+            let key = app.artifactStorage.newKey(
+                ArtifactStorage.objectKey(
+                    appID: version.$app.id, versionID: versionID, kind: .signed
+                )
+            )
+            try await storage.put(Data(repeating: 0, count: 4096), to: key, contentType: nil)
+
+            try await app.testing().test(
+                .PATCH, try updatePath(job), headers: .bearer(token),
+                beforeRequest: { request in
+                    try request.content.encode(
+                        SigningJobUpdate(
+                            state: .succeeded,
+                            resultSize: 4096,
+                            bundleMetadata: BundleMetadata(bundleIdentifier: "com.example.taken")
+                        )
+                    )
+                }
+            ) { #expect($0.status == .noContent) }
+
+            let storedVersion = try #require(try await Version.find(versionID, on: app.db))
+            #expect(storedVersion.state == .failed)
+
+            let storedApp = try #require(try await App.find(version.$app.id, on: app.db))
+            #expect(storedApp.bundleIDPending == true)
         }
     }
 

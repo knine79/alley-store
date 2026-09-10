@@ -152,10 +152,18 @@ public struct WorkerController: RouteCollection, Sendable {
             )
         )
 
+        // 번들 ID 가 아직 임시값이면 워커가 대조 대신 정책 검사를 한다 (ADR-0034).
+        // 그러려면 정책을 함께 보내야 한다. 워커는 조직 설정을 모른다.
+        let settings = try await request.storeSettings()
+        let pending = job.version.app.bundleIDPending
+
         return SigningJobDTO(
             id: try job.requireID(),
             versionID: versionID,
             appBundleID: job.version.app.bundleID,
+            appBundleIDPending: pending ? true : nil,
+            requiredBundleIDPrefix: pending ? settings.bundleIDPrefix : nil,
+            enforceBundleIDPrefix: pending ? settings.enforceBundleIDPrefix : nil,
             artifactDownloadURL: download.url,
             resultUploadURL: upload.url,
             // 올린 사람이 준 것이 있으면 실어 보낸다. 미서명 업로드에는 워커가 읽어낼
@@ -204,9 +212,13 @@ public struct WorkerController: RouteCollection, Sendable {
         guard let jobID = request.parameters.get("jobID", as: UUID.self) else {
             throw Abort(.badRequest, reason: "잡 ID 형식이 올바르지 않습니다.")
         }
+        // 앱까지 함께 읽는다. 성공 보고를 처리할 때 번들 ID 를 확정해야 할 수 있고
+        // (ADR-0034), 그 자리에서 관계를 다시 읽으면 eager load 가 안 된 채로 만져
+        // 프로세스가 죽는다. 실제로 그렇게 죽었다.
         guard let job = try await SigningJob.query(on: request.db)
             .filter(\.$id == jobID)
-            .with(\.$version)
+            // 트레일링 클로저로 쓰면 `guard` 본문으로 파싱된다. 괄호 안에 넣는다.
+            .with(\.$version, { $0.with(\.$app) })
             .first()
         else {
             throw Abort(.notFound, reason: "잡을 찾을 수 없습니다.")
@@ -275,6 +287,34 @@ public struct WorkerController: RouteCollection, Sendable {
 
         if let metadata = update.bundleMetadata {
             applyBundleMetadata(metadata, to: version, logger: request.logger)
+
+            // 번들 ID 가 임시값이었으면 워커가 읽어온 값으로 확정한다.
+            //
+            // 여기서 실패하면(정책 위반이나 중복) 서명은 이미 끝난 뒤다. 그래도
+            // **버전을 배포 준비됨으로 넘기지 않는다.** 확정되지 않은 앱은 출시할 수
+            // 없으므로 그대로 두면 아무도 받지 못하는 채로 남는다 (ADR-0034).
+            if let declared = metadata.bundleIdentifier, version.app.bundleIDPending {
+                do {
+                    try await AppRegistration.confirmBundleID(
+                        version.app,
+                        readFromBundle: declared,
+                        settings: try await request.storeSettings(),
+                        on: request.db,
+                        logger: request.logger
+                    )
+                } catch let abort as any AbortError {
+                    try await fail(
+                        job,
+                        reason: """
+                            서명은 끝났지만 번들 ID 를 확정하지 못했습니다: \(abort.reason)
+                            읽어온 값: \(declared)
+                            """,
+                        code: nil,
+                        on: request
+                    )
+                    return
+                }
+            }
         }
 
         // 공증을 건너뛴 워커도 있을 수 있어서 signing 에서 곧장 오는 경우를 함께 다룬다.

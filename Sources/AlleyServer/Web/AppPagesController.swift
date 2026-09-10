@@ -579,7 +579,9 @@ struct AppRow: Encodable {
 
     init(app: App, latestReleased: Version?, rating: RatingSummary? = nil) throws {
         self.id = try app.requireID().uuidString
-        self.bundleID = app.bundleID
+        // 확정 전에는 임시값 대신 상태를 보여준다. `alley-pending.<uuid>` 는 우리가
+        // 자리를 채우려고 넣은 값이지 이 앱의 정체성이 아니다 (ADR-0034).
+        self.bundleID = app.bundleIDPending ? "확인 중" : app.bundleID
         self.name = app.name
         self.summary = app.summary
         self.details = app.details

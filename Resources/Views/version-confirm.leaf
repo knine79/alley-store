@@ -30,7 +30,13 @@
         </div>
     </div>
 
-    <p class="field-note" id="analysis-bundle-id">번들 ID <code>#(bundleID)</code></p>
+    <p class="field-note" id="analysis-bundle-id">
+        #if(bundleIDPending):
+        번들 ID 는 워커가 번들에서 읽어 정합니다.
+        #else:
+        번들 ID <code>#(bundleID)</code>
+        #endif
+    </p>
 
     <p class="notice notice-error" id="analysis-error" hidden></p>
 </section>

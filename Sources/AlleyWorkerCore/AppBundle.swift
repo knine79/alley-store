@@ -249,7 +249,8 @@ public struct AppBundle: Sendable {
         return BundleMetadata(
             shortVersion: Self.string("CFBundleShortVersionString", fromInfoPlistAt: plist),
             buildVersion: Self.string("CFBundleVersion", fromInfoPlistAt: plist),
-            minimumOSVersion: Self.string("LSMinimumSystemVersion", fromInfoPlistAt: plist)
+            minimumOSVersion: Self.string("LSMinimumSystemVersion", fromInfoPlistAt: plist),
+            bundleIdentifier: Self.string("CFBundleIdentifier", fromInfoPlistAt: plist)
         )
     }
 

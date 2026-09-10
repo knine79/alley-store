@@ -8,6 +8,20 @@ public struct SigningJobDTO: Codable, Sendable, Identifiable, Equatable {
     public var id: UUID
     public var versionID: UUID
     public var appBundleID: String
+    /// `appBundleID` 가 아직 확정되지 않은 임시값이다.
+    ///
+    /// dmg 로 올리면 브라우저가 번들을 열 수 없어 등록 시점에 번들 ID 를 알 수 없다
+    /// (ADR-0034). 그때 서버가 임시값을 넣어 보내고, 워커는 등록값과 **대조하는 대신**
+    /// 번들에서 읽은 값이 조직 정책에 맞는지 본다. 맞으면 그 값을 보고하고 서버가
+    /// 확정한다.
+    ///
+    /// 옵셔널이라 이 필드를 모르는 예전 워커는 늘 대조하던 대로 동작한다. 그 워커는
+    /// 임시값과 실제 값이 달라 실패시키는데, **그것이 안전한 쪽이다.**
+    public var appBundleIDPending: Bool?
+    /// 조직이 요구하는 번들 ID 접두어. 없으면 정책이 없다.
+    public var requiredBundleIDPrefix: String?
+    /// 접두어에 맞지 않을 때 막을지, 로그만 남길지.
+    public var enforceBundleIDPrefix: Bool?
     /// 미서명 아티팩트를 받아올 만료 있는 URL.
     public var artifactDownloadURL: String
     /// 서명·공증을 마친 결과물을 올릴 만료 있는 URL.
@@ -23,6 +37,9 @@ public struct SigningJobDTO: Codable, Sendable, Identifiable, Equatable {
         id: UUID,
         versionID: UUID,
         appBundleID: String,
+        appBundleIDPending: Bool? = nil,
+        requiredBundleIDPrefix: String? = nil,
+        enforceBundleIDPrefix: Bool? = nil,
         artifactDownloadURL: String,
         resultUploadURL: String,
         entitlements: String? = nil,
@@ -31,6 +48,9 @@ public struct SigningJobDTO: Codable, Sendable, Identifiable, Equatable {
         self.id = id
         self.versionID = versionID
         self.appBundleID = appBundleID
+        self.appBundleIDPending = appBundleIDPending
+        self.requiredBundleIDPrefix = requiredBundleIDPrefix
+        self.enforceBundleIDPrefix = enforceBundleIDPrefix
         self.artifactDownloadURL = artifactDownloadURL
         self.resultUploadURL = resultUploadURL
         self.entitlements = entitlements
@@ -104,20 +124,29 @@ public struct BundleMetadata: Codable, Sendable, Equatable {
     public var buildVersion: String?
     /// `LSMinimumSystemVersion`.
     public var minimumOSVersion: String?
+    /// `CFBundleIdentifier`. **등록값이 임시일 때만 담는다.**
+    ///
+    /// 확정된 앱에서는 보내지 않는다. 서명 전에 이미 대조해서 같다는 것을 알고
+    /// (ADR-0029), 같은 값을 또 보내면 받는 쪽이 "다르면 어느 쪽을 믿나" 를 고민해야
+    /// 한다. 임시일 때만 서버가 이 값으로 확정한다 (ADR-0034).
+    public var bundleIdentifier: String?
 
     public init(
         shortVersion: String? = nil,
         buildVersion: String? = nil,
-        minimumOSVersion: String? = nil
+        minimumOSVersion: String? = nil,
+        bundleIdentifier: String? = nil
     ) {
         self.shortVersion = shortVersion
         self.buildVersion = buildVersion
         self.minimumOSVersion = minimumOSVersion
+        self.bundleIdentifier = bundleIdentifier
     }
 
     /// 하나도 못 읽었으면 보내지 않는다.
     public var isEmpty: Bool {
         shortVersion == nil && buildVersion == nil && minimumOSVersion == nil
+            && bundleIdentifier == nil
     }
 }
 
