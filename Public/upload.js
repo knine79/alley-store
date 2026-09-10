@@ -30,8 +30,22 @@
     });
 
     var readStatus = document.getElementById("bundle-read-status");
+
+    /** 받을 수 없는 파일이면 그 이유. 없으면 null. */
+    var refusal = null;
+
     form.elements.file.addEventListener("change", function () {
+        refusal = null;
+        showError(null);
         fillFromBundle().catch(function (error) {
+            if (error.kind === "notAnArchive" || error.kind === "notAnAppBundle") {
+                // **올려봐야 서명할 것이 없다.** 여기서 막지 않으면 다 올린 뒤에
+                // 워커가 실패시킨다.
+                refusal = error.message;
+                say(null);
+                showError(error.message);
+                return;
+            }
             // 자동 채우기가 실패해도 업로드는 그대로 할 수 있다. 오류 상자가 아니라
             // 그 칸 아래 설명으로 알린다. 빨간 배너를 띄우면 올리지 말라는 뜻으로 읽힌다.
             say("번들에서 값을 읽지 못했습니다. 직접 입력하세요. (" + error.message + ")");
@@ -117,6 +131,10 @@
         var file = form.elements.file.files[0];
         if (!file) {
             fail("올릴 파일을 고르세요.");
+            return;
+        }
+        if (refusal) {
+            fail(refusal);
             return;
         }
 

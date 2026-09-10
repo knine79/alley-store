@@ -122,10 +122,32 @@
         readBundle(file).then(function (info) {
             go(info);
         }).catch(function (error) {
-            // 읽지 못하는 것은 dmg 이거나 우리가 다루지 못하는 zip 이다. 둘 다
-            // 올리는 데는 문제가 없다. 값만 사람이 채우면 된다.
-            go(null, error.message);
+            switch (error.kind) {
+            case "diskImage":
+                // 열어볼 수 없는 것이 정상이다. 아무것도 묻지 않고 확인만 받는다.
+                go(null, null, true);
+                break;
+            case "notAnArchive":
+            case "notAnAppBundle":
+                // **올려봐야 서명할 것이 없다.** 여기서 막지 않으면 몇백 MB 를 보낸
+                // 뒤에 워커가 "번들이 없다" 로 실패시킨다. 브라우저가 이미 알고 있는
+                // 사실을 굳이 스토리지까지 다녀와서 알려줄 이유가 없다.
+                refuse(error.message);
+                break;
+            default:
+                // zip 이긴 한데 우리가 못 읽었다(zip64 등). 올리는 데는 문제 없으니
+                // 사람이 값을 채우게 한다.
+                go(null, error.message, false);
+            }
         });
+    }
+
+    /** 받을 수 없는 파일. 고른 것을 지우고 왜인지 말한다. */
+    function refuse(message) {
+        input.value = "";
+        dropzone.classList.remove("dropzone-filled");
+        say(null);
+        showError(message);
     }
 
     async function readBundle(file) {
@@ -137,14 +159,14 @@
     /*
      * `info` 가 있으면 zip 을 읽어낸 것이다. 없으면 dmg 이거나 파일을 안 골랐다.
      */
-    function go(info, whyNotRead) {
+    function go(info, whyNotRead, isDiskImage) {
         var hasFile = !!input.files[0];
 
         if (info) {
             fill(info);
             infoLead.textContent = "번들에서 읽은 값입니다. 확인하고 모자란 것을 채우세요.";
             firstVersion.hidden = false;
-        } else if (hasFile) {
+        } else if (hasFile && isDiskImage) {
             infoLead.textContent =
                 "이 파일은 열어볼 수 없어서 올린 뒤에 앱 정보를 읽습니다.";
             // 버전도 번들 ID 도 묻지 않는다. 사람이 짐작해 적을 값이 아니고, 적게
@@ -154,6 +176,11 @@
             // 이름은 파일 이름에서 짐작해 둔다. 확인 화면에서 고친다.
             var guess = input.files[0].name.replace(/\.(zip|dmg)$/i, "");
             if (!form.elements.name.value.trim()) form.elements.name.value = guess;
+        } else if (hasFile) {
+            // zip 인데 값을 못 읽었다. 올릴 수는 있으니 사람이 채우게 한다.
+            infoLead.textContent = "번들에서 값을 읽지 못했습니다. 직접 채우세요.";
+            firstVersion.hidden = false;
+            if (whyNotRead) say(whyNotRead);
         } else {
             infoLead.textContent =
                 "앱만 먼저 등록합니다. 파일은 등록 뒤 버전 화면에서 올리면 됩니다.";
@@ -172,7 +199,9 @@
         // 감출 때 `required` 도 떼어야 한다. 안 떼면 브라우저가
         // "invalid form control is not focusable" 로 제출을 막는데 화면에는 아무
         // 표시도 나지 않는다. 사람은 등록 버튼이 죽은 줄 안다.
-        var hideOptional = hasFile && !info;
+        // **읽지 못한 것과 dmg 는 다르다.** 예전에는 둘을 같이 다뤄서, 앱이 아닌
+        // zip 을 올려도 dmg 처럼 아무것도 묻지 않고 넘어갔다.
+        var hideOptional = hasFile && isDiskImage === true;
         optionalFields.hidden = hideOptional;
         form.elements.name.required = !hideOptional;
 

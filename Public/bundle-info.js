@@ -25,6 +25,23 @@
     ];
 
     /*
+     * 왜 못 읽었는지 부르는 쪽이 알아야 한다.
+     *
+     *   diskImage      dmg 다. 정상적인 선택지고, 열어볼 수만 없다
+     *   notAnArchive   zip 도 dmg 도 아니다
+     *   notAnAppBundle zip 인데 최상위에 `.app` 이 없다
+     *   unreadable     zip 이고 `.app` 도 있는데 우리가 못 읽는다 (zip64 등)
+     *
+     * 앞의 둘은 올려봐야 서명할 것이 없다. 문구로 구분하면 말을 다듬을 때마다
+     * 부르는 쪽이 조용히 깨진다.
+     */
+    function failure(kind, message) {
+        var error = new Error(message);
+        error.kind = kind;
+        return error;
+    }
+
+    /*
      * zip 에서 최상위 `.app` 의 Info.plist 를 찾아 읽는다.
      *
      * 최상위만 본다. 번들 안의 헬퍼 앱에도 Info.plist 가 있고, 그것을 집으면 엉뚱한
@@ -34,7 +51,10 @@
         var directory = await readCentralDirectory(file);
         var entry = pickInfoPlist(directory);
         if (!entry) {
-            throw new Error("zip 안에서 최상위 .app 의 Info.plist 를 찾지 못했습니다.");
+            throw failure(
+                "notAnAppBundle",
+                "zip 안에 최상위 .app 이 없습니다. 앱 번들을 담은 zip 을 올려주세요."
+            );
         }
 
         var bytes = await inflateEntry(file, entry);
@@ -75,12 +95,15 @@
             // 다만 브라우저가 APFS·HFS+ 디스크 이미지를 열 방법이 없어서 자동
             // 채우기만 안 된다. "형식이 아니다" 로 끝내면 못 올리는 줄 안다.
             if (await looksLikeDiskImage(file)) {
-                throw new Error(
-                    "dmg 는 브라우저가 열 수 없어 값을 읽지 못합니다. " +
-                    "올리는 데는 문제 없으니 아래 칸만 직접 채우세요."
+                throw failure(
+                    "diskImage",
+                    "dmg 는 브라우저가 열 수 없어 값을 읽지 못합니다."
                 );
             }
-            throw new Error("zip 형식이 아닙니다.");
+            throw failure(
+                "notAnArchive",
+                "zip 도 dmg 도 아닙니다. macOS 앱을 담은 zip 이나 dmg 를 올려주세요."
+            );
         }
 
         var count = tail.getUint16(eocd + 10, true);
@@ -91,7 +114,7 @@
         // 65535 개를 넘으면 그렇게 된다. 그 형식까지 읽지는 않는다. 앱 하나가 그
         // 크기라면 자동 채우기가 아니라 다른 것을 걱정해야 한다.
         if (offset === 0xffffffff || size === 0xffffffff || count === 0xffff) {
-            throw new Error("zip64 형식은 읽지 못합니다. 값을 직접 입력하세요.");
+            throw failure("unreadable", "zip64 형식은 읽지 못합니다. 값을 직접 입력하세요.");
         }
 
         var view = new DataView(await file.slice(offset, offset + size).arrayBuffer());
@@ -155,7 +178,7 @@
             await file.slice(entry.localHeaderOffset, entry.localHeaderOffset + 30).arrayBuffer()
         );
         if (header.getUint32(0, true) !== 0x04034b50) {
-            throw new Error("zip 항목의 헤더가 깨졌습니다.");
+            throw failure("unreadable", "zip 항목의 헤더가 깨졌습니다.");
         }
         var start = entry.localHeaderOffset + 30
             + header.getUint16(26, true)
@@ -164,7 +187,7 @@
         var blob = file.slice(start, start + entry.compressedSize);
         if (entry.method === 0) return new Uint8Array(await blob.arrayBuffer());
         if (entry.method !== 8) {
-            throw new Error("압축 방식 " + entry.method + " 은 읽지 못합니다.");
+            throw failure("unreadable", "압축 방식 " + entry.method + " 은 읽지 못합니다.");
         }
 
         // zip 의 deflate 는 zlib 헤더가 없는 raw deflate 다.
@@ -197,11 +220,11 @@
         var text = new TextDecoder("utf-8").decode(bytes);
         var document = new DOMParser().parseFromString(text, "application/xml");
         if (document.querySelector("parsererror")) {
-            throw new Error("Info.plist 를 해석하지 못했습니다.");
+            throw failure("unreadable", "Info.plist 를 해석하지 못했습니다.");
         }
 
         var dict = document.querySelector("plist > dict");
-        if (!dict) throw new Error("Info.plist 에 최상위 dict 가 없습니다.");
+        if (!dict) throw failure("unreadable", "Info.plist 에 최상위 dict 가 없습니다.");
 
         // `key` 다음 형제가 그 값이다. 중첩 dict 안의 key 는 건너뛴다.
         var result = {};
@@ -228,7 +251,7 @@
      */
     function parseBinaryPlist(bytes) {
         var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-        if (bytes.byteLength < 40) throw new Error("Info.plist 가 너무 짧습니다.");
+        if (bytes.byteLength < 40) throw failure("unreadable", "Info.plist 가 너무 짧습니다.");
 
         // 트레일러는 마지막 32 바이트다.
         var trailer = bytes.byteLength - 32;
@@ -245,7 +268,7 @@
 
         var root = readObject(rootRef);
         if (!root || root.type !== "dict") {
-            throw new Error("Info.plist 의 최상위가 dict 가 아닙니다.");
+            throw failure("unreadable", "Info.plist 의 최상위가 dict 가 아닙니다.");
         }
 
         var result = {};
