@@ -125,17 +125,19 @@
             </label>
         </fieldset>
 
-        <div class="progress-row" id="app-new-progress" hidden>
-            <progress class="progress" id="app-new-bar" max="100" value="0"></progress>
-            <span class="progress-label" id="app-new-status">준비 중…</span>
-        </div>
-
         <div class="form-actions">
             <!-- 스크립트가 돌 때만 보인다. 없으면 1단계가 없으니 돌아갈 곳도 없다. -->
             <a class="button" href="/apps" id="cancel-info">취소</a>
             <button class="button" type="button" id="back-to-file" hidden>뒤로</button>
             <button class="button button-primary" type="submit" id="app-new-submit">등록</button>
         </div>
+    </div>
+
+    <!-- 두 단계 밖에 둔다. dmg 는 1단계에서 곧장 올라가기 때문에, 2단계 안에 두면
+         몇백 MB 가 아무 표시 없이 나간다. -->
+    <div class="progress-row" id="app-new-progress" hidden>
+        <progress class="progress" id="app-new-bar" max="100" value="0"></progress>
+        <span class="progress-label" id="app-new-status">준비 중…</span>
     </div>
 </form>
 

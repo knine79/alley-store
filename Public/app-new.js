@@ -55,6 +55,9 @@
     var bar = document.getElementById("app-new-bar");
     var progressLabel = document.getElementById("app-new-status");
 
+    /** 올리는 중인가. 1단계에 머문 채로 올라가므로 그 화면의 조작을 잠가야 한다. */
+    var locked = false;
+
     // 스크립트가 도니 1단계부터 시작한다.
     stepFile.hidden = false;
     stepInfo.hidden = true;
@@ -83,6 +86,7 @@
     });
 
     dropzone.addEventListener("drop", function (event) {
+        if (locked) return;
         var files = event.dataTransfer && event.dataTransfer.files;
         if (!files || !files.length) return;
         // 파일 입력에 넣어둔다. 업로드할 때 그 자리에서 다시 꺼내 쓴다.
@@ -91,6 +95,7 @@
     });
 
     input.addEventListener("change", function () {
+        if (locked) return;
         if (input.files[0]) accept(input.files[0]);
     });
 
@@ -184,6 +189,14 @@
         // 버튼 이름을 하는 일에 맞춘다. 파일이 있으면 올리는 것이 이 단계의 일이다.
         submit.textContent = hasFile ? "업로드" : "등록";
 
+        // dmg 는 2단계에 적을 것이 하나도 없다. 화면 하나를 더 거치게 하는 대신
+        // 곧장 확인 팝업을 띄운다 (ADR-0037). 1단계에 머무르므로 취소하면 다른
+        // 파일을 바로 고를 수 있다.
+        if (hideOptional) {
+            askThenUpload();
+            return;
+        }
+
         stepFile.hidden = true;
         stepInfo.hidden = false;
         if (!bundleIDField.hidden && !form.elements.bundleID.value.trim()) {
@@ -191,6 +204,26 @@
         } else if (!optionalFields.hidden) {
             form.elements.name.focus();
         }
+    }
+
+    /**
+     * 확인 팝업을 띄우고, 승낙하면 바로 올린다.
+     *
+     * 취소하면 고른 것을 지운다. 1단계에는 "다음" 이 없어서, 남겨두면 같은 파일을
+     * 다시 고르기 전에는 아무 데도 갈 수 없다.
+     */
+    function askThenUpload() {
+        confirmPolicy().then(function (agreed) {
+            if (!agreed) {
+                input.value = "";
+                dropzone.classList.remove("dropzone-filled");
+                say(null);
+                return;
+            }
+            return run();
+        }).catch(function (error) {
+            fail(error.message || "등록에 실패했습니다.");
+        });
     }
 
     function fill(info) {
@@ -413,8 +446,13 @@
     }
 
     function busy(isBusy) {
+        locked = isBusy;
         submit.disabled = isBusy;
         backButton.disabled = isBusy;
+        // dmg 는 1단계에 머문 채로 올라간다. 그 화면의 조작도 함께 잠근다.
+        input.disabled = isBusy;
+        skipFile.disabled = isBusy;
+        dropzone.classList.toggle("dropzone-locked", isBusy);
         submit.textContent = isBusy
             ? (input.files[0] ? "올리는 중…" : "등록하는 중…")
             : (input.files[0] ? "업로드" : "등록");

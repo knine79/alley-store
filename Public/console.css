@@ -809,6 +809,12 @@ textarea.input {
     border-color: var(--accent);
 }
 
+/* 올리는 동안. 여기서 다른 파일을 놓으면 올라가던 것이 무엇인지 알 수 없게 된다. */
+.dropzone-locked {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
 /* 읽어두면 좋지만 막지는 않는 안내. 오류(빨강)나 경고(노랑)와 달라야 한다. */
 .notice-hint {
     color: var(--text-muted);
