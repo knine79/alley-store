@@ -59,8 +59,9 @@ enum BundleVerifier {
 
     /// 서버가 알려준 해시와 대조한다.
     ///
-    /// 서버가 해시를 모르는 경우가 있다(웹 콘솔로 완성본을 올린 경우, ADR-0012).
-    /// 그때는 대조할 것이 없으므로 통과시킨다. 서명과 공증 검사가 남아 있다.
+    /// 서버가 해시를 모르는 경우에는 대조할 것이 없으므로 통과시킨다. 서명과 공증
+    /// 검사가 남아 있다. 지금은 모든 버전이 워커를 지나며 해시를 남기지만
+    /// (ADR-0035), 그 전에 올라온 버전은 비어 있다.
     static func verifyHash(of file: URL, expected: String?) throws {
         guard let expected = expected?.lowercased(), !expected.isEmpty else { return }
         let actual = try sha256(of: file)

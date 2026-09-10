@@ -7,8 +7,8 @@ import Foundation
 ///                       └────── failed (재시도 가능) ──────┘
 /// ```
 ///
-/// 로컬에서 이미 서명·공증을 마친 완성본을 올리는 경우에는
-/// `uploaded`에서 서명 단계를 건너뛰고 바로 `ready`로 간다.
+/// 이미 서명·공증을 마친 번들을 올려도 같은 길을 지난다. 워커가 열어보고 서명이
+/// 다 됐다고 판정하면 서명·공증 작업만 건너뛴다 (ADR-0035).
 public enum VersionState: String, Codable, Sendable, CaseIterable {
     /// 메타데이터만 만들어졌고 아직 바이너리가 없다.
     case draft
