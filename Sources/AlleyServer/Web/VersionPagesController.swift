@@ -43,6 +43,7 @@ struct VersionPagesController: RouteCollection, Sendable {
 
         let version = try await request.findVersion()
         let appID = try app.requireID()
+        let settings = try await request.storeSettings()
         return try await request.view.render(
             "version-confirm",
             VersionConfirmContext(
@@ -51,6 +52,8 @@ struct VersionPagesController: RouteCollection, Sendable {
                 appName: app.name,
                 bundleID: app.bundleIDPending ? "" : app.bundleID,
                 bundleIDPending: app.bundleIDPending,
+                bundleIDPrefix: settings.bundleIDPrefix,
+                enforceBundleIDPrefix: settings.enforceBundleIDPrefix,
                 summary: app.summary ?? "",
                 description: app.details ?? "",
                 category: app.category ?? "",
@@ -244,6 +247,10 @@ struct VersionConfirmContext: Encodable {
     /// 확정 전이면 빈 문자열이다. 임시 ID 는 밖으로 내보내지 않는다.
     var bundleID: String
     var bundleIDPending: Bool
+    /// 아직 확정 전이면 무엇을 만족해야 하는지 이 자리에서 알려준다. 규칙을 말하지
+    /// 않고 "규칙에 맞아야 합니다" 만 쓰면 알려주는 것이 아니다.
+    var bundleIDPrefix: String?
+    var enforceBundleIDPrefix: Bool
     var summary: String
     var description: String
     var category: String

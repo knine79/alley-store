@@ -52,8 +52,8 @@
         if (isSettled(version.state)) return;
         if (Date.now() - startedAt > GIVE_UP_AFTER) {
             status.textContent =
-                "서명 워커가 아직 가져가지 않았습니다. 워커가 꺼져 있을 수 있습니다. " +
-                "이 화면을 닫아도 되고, 앱 화면에서 상태를 계속 볼 수 있습니다.";
+                "아직 서명이 시작되지 않았습니다. 이 화면을 닫아도 되고, 앱 화면에서 " +
+                "상태를 계속 볼 수 있습니다. 오래 걸리면 관리자에게 알려주세요.";
             return;
         }
         again();
@@ -94,7 +94,7 @@
 
     function phase(state) {
         switch (state) {
-            case "uploaded": return "서명 워커가 가져가기를 기다리는 중…";
+            case "uploaded": return "서명 차례를 기다리는 중…";
             case "signing": return "서명하는 중…";
             case "notarizing": return "Apple 공증을 기다리는 중… 몇 분 걸립니다.";
             default: return "처리 중…";

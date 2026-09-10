@@ -28,9 +28,9 @@
 
         <!-- 고르기 전에 알려준다. 고른 뒤에 말하면 늦다. -->
         <p class="notice notice-hint">
-            <strong>zip 이 편합니다.</strong> dmg 는 업로드가 완료되기 전에는 앱 정보를
-            읽을 수 없어서, 올린 뒤 서명 워커가 열어보고 정합니다. 그때 번들 ID 가
-            이 스토어의 규칙에 맞지 않으면 실패합니다.
+            <strong>zip 이 편합니다.</strong> dmg 는 다 올리기 전에는 열어볼 수 없어서
+            앱 정보를 올린 뒤에야 확인합니다.
+            #if(bundleIDPrefix):#if(enforceBundleIDPrefix):번들 ID 가 <code>#(bundleIDPrefix).</code> 로 시작하지 않으면 그때 실패합니다.#endif#endif
         </p>
 
         <p class="field-note" id="dropzone-status" hidden></p>
@@ -51,8 +51,8 @@
 
         <p class="notice notice-warn" id="dmg-warning" hidden>
             이 파일은 열어볼 수 없어서 <strong>적을 것이 없습니다.</strong> 올리고 나면
-            서명 워커가 번들을 열어 번들 ID 와 버전을 읽습니다. 그 값이 이 스토어의
-            규칙에 맞지 않으면 그때 실패합니다.
+            번들에서 번들 ID 와 버전을 읽어 채웁니다.
+            #if(bundleIDPrefix):#if(enforceBundleIDPrefix):번들 ID 가 <code>#(bundleIDPrefix).</code> 로 시작하지 않으면 그때 실패합니다.#endif#endif
         </p>
 
         <fieldset class="form-group">
@@ -79,8 +79,8 @@
                  하나뿐인데 아래 네 칸이 비어 있으면 무엇을 더 해야 하는지 찾게 된다.
                  접어두는 것으로는 부족했다. 접힌 것도 "열어서 채워야 하나" 로 읽힌다.
 
-                 이름은 파일 이름에서 채워두고, 올린 뒤 확인 화면에서 워커가 읽은 값과
-                 함께 고친다 (ADR-0033).
+                 이름은 파일 이름에서 채워두고, 올린 뒤 확인 화면에서 번들에서 읽은
+                 값과 함께 고친다 (ADR-0033).
 
                  zip 은 읽은 값을 보여주는 것이 이 단계의 목적이라 드러낸다. -->
             <div id="optional-fields">

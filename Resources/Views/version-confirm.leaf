@@ -3,13 +3,13 @@
 <nav class="breadcrumb"><a href="/apps">앱</a> · <a href="/apps/#(appID)">#(appName)</a></nav>
 <h1 class="page-title">올린 것 확인</h1>
 <p class="page-lead">
-    파일은 다 올라갔습니다. 서명 워커가 번들을 열어 읽은 값입니다.
+    파일은 다 올라갔습니다. 번들에서 읽은 값입니다.
 </p>
 
 <section id="analysis"
          data-version-path="#(versionPath)"
          data-app-id="#(appID)">
-    <p class="field-note" id="analysis-status">서명 워커가 번들을 여는 중…</p>
+    <p class="field-note" id="analysis-status">번들을 여는 중…</p>
 
     <div class="stat-row" id="analysis-facts" hidden>
         <div class="stat">
@@ -32,7 +32,8 @@
 
     <p class="field-note" id="analysis-bundle-id">
         #if(bundleIDPending):
-        번들 ID 는 워커가 번들에서 읽어 정합니다.
+        번들 ID 는 번들에서 읽어 정합니다.
+        #if(bundleIDPrefix):#if(enforceBundleIDPrefix):<code>#(bundleIDPrefix).</code> 로 시작해야 합니다.#endif#endif
         #else:
         번들 ID <code>#(bundleID)</code>
         #endif

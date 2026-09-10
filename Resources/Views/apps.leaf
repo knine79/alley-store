@@ -16,8 +16,8 @@
      워커가 실패하면 이 줄이 유일한 입구다 (ADR-0034). -->
 #if(count(pendingApps) > 0):
 <p class="notice notice-warn">
-    아직 확인 중인 등록이 #(count(pendingApps))개 있습니다. 서명 워커가 번들을 열어
-    번들 ID 를 읽으면 목록에 나타납니다.
+    아직 확인 중인 등록이 #(count(pendingApps))개 있습니다. 올린 파일에서 번들 ID 를
+    읽으면 목록에 나타납니다.
     #for(app in pendingApps):
     <a href="/apps/#(app.id)">#(app.name)</a>#if(!isLast): · #endif
     #endfor
