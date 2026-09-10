@@ -127,7 +127,24 @@ struct VersionPagesController: RouteCollection, Sendable {
 
     @Sendable
     func release(request: Request) async throws -> Response {
-        try await changeRelease(on: request) { try $0.transition(to: .released) }
+        try await changeRelease(on: request) { version in
+            // 번들 ID 가 확정되지 않은 앱은 출시할 수 없다 (ADR-0034).
+            //
+            // 스토어 앱은 `CFBundleIdentifier` 로 설치 여부를 판단한다. 임시값인 채로
+            // 내보내면 받은 사람의 맥에서 영영 "설치 안 됨" 으로 남고, 업데이트도
+            // 잡히지 않는다. 받아간 뒤에 고쳐도 이미 나간 것은 되돌릴 수 없다.
+            guard !version.app.bundleIDPending else {
+                throw Abort(
+                    .conflict,
+                    reason: """
+                        번들 ID 가 아직 확정되지 않아 출시할 수 없습니다. 서명 워커가 \
+                        번들을 열어 번들 ID 를 읽어야 확정됩니다. 서명이 실패했다면 \
+                        고친 뒤 다시 올리세요.
+                        """
+                )
+            }
+            try version.transition(to: .released)
+        }
     }
 
     /// 출시 철회. 배포 가능하지만 비공개인 `ready` 로 돌아간다.

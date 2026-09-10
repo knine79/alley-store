@@ -12,6 +12,18 @@
     #endif
 </div>
 
+<!-- 등록이 끝나지 않은 앱. 목록에는 안 넣지만 올린 사람이 찾아갈 길은 남긴다.
+     워커가 실패하면 이 줄이 유일한 입구다 (ADR-0034). -->
+#if(count(pendingApps) > 0):
+<p class="notice notice-warn">
+    아직 확인 중인 등록이 #(count(pendingApps))개 있습니다. 서명 워커가 번들을 열어
+    번들 ID 를 읽으면 목록에 나타납니다.
+    #for(app in pendingApps):
+    <a href="/apps/#(app.id)">#(app.name)</a>#if(!isLast): · #endif
+    #endfor
+</p>
+#endif
+
 #if(count(apps) == 0):
 <div class="empty">
     <p>아직 등록된 앱이 없습니다.</p>

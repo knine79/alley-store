@@ -51,11 +51,35 @@ struct AppPagesController: RouteCollection, Sendable {
             ofApps: apps.map { try $0.requireID() },
             on: request.db
         )
-        let rows: [AppRow] = try apps.compactMap { app in
+        // 등록이 끝나지 않은 앱은 목록에 넣지 않는다.
+        //
+        // 번들 ID 가 임시값이라 아직 어떤 앱인지 정해지지 않았다. 이름도 파일 이름에서
+        // 짐작한 값이다. 그 상태로 목록에 끼면 "확인 중" 이 여럿 늘어서서 무엇이
+        // 무엇인지 알 수 없다 (ADR-0034).
+        let (settled, unsettled) = try apps.reduce(
+            into: ([App](), [App]())
+        ) { result, app in
+            if app.bundleIDPending {
+                result.1.append(app)
+            } else {
+                result.0.append(app)
+            }
+        }
+
+        let rows: [AppRow] = try settled.compactMap { app in
             let appID = try app.requireID()
             let released = latest[appID]
             guard released != nil || user.role.canPublish else { return nil }
             return try AppRow(app: app, latestReleased: released, rating: ratings[appID])
+        }
+
+        // **감추기만 하면 워커가 실패했을 때 찾을 방법이 없다.** 목록에서 빼되 올린
+        // 사람에게는 몇 개가 걸려 있는지와 가는 길을 남긴다. 남의 것은 보이지 않는다.
+        let userID = try user.requireID()
+        let mine = try unsettled.filter { app in
+            user.role.canAdminister || app.$owner.id == userID
+        }.map { app in
+            PendingAppRow(id: try app.requireID().uuidString, name: app.name)
         }
 
         return try await request.view.render(
@@ -63,7 +87,8 @@ struct AppPagesController: RouteCollection, Sendable {
             AppListContext(
                 page: try await request.pageContext(title: "앱"),
                 apps: rows,
-                canRegister: user.role.canPublish
+                canRegister: user.role.canPublish,
+                pendingApps: mine
             )
         ).get()
     }
@@ -672,10 +697,17 @@ struct AppFormValues: Codable {
     var category: String?
 }
 
+/// 등록이 끝나지 않은 앱 한 줄. 올린 사람에게만 보인다.
+struct PendingAppRow: Encodable {
+    var id: String
+    var name: String
+}
+
 struct AppListContext: Encodable {
     var page: PageContext
     var apps: [AppRow]
     var canRegister: Bool
+    var pendingApps: [PendingAppRow] = []
 }
 
 struct AppFormContext: Encodable {
