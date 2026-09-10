@@ -150,7 +150,7 @@ public struct VersionController: RouteCollection, Sendable {
     /// **프로필이 필요한 권한(`com.apple.developer.*`)인지는 여기서 보지 않는다.**
     /// 그 판단은 프로비저닝 프로필이 번들 안에 있는지에 달렸는데, 이 시점에는 바이너리가
     /// 아직 올라오지도 않았다. 그 검사는 번들을 손에 쥔 워커가 한다.
-    private static func checkedEntitlements(_ raw: String?) throws -> String? {
+    static func checkedEntitlements(_ raw: String?) throws -> String? {
         guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }

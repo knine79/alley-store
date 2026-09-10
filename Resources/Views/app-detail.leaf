@@ -90,6 +90,20 @@
                         <pre class="log-body">#(version.entitlementKeys)</pre>
                     </details>
                     #endif
+                    <!-- 올릴 때는 묻지 않는다. 번들을 열어보고 정말 필요할 때만
+                         여기서 받는다 (ADR-0036). -->
+                    #if(canUpload):#if(version.needsEntitlements):
+                    <form class="attach-form" method="post" enctype="multipart/form-data"
+                          action="/apps/#(app.id)/versions/#(version.id)/retry">
+                        <label class="field">
+                            <span class="field-label">entitlements</span>
+                            <input class="input" type="file" name="entitlements" required
+                                   accept=".plist,.entitlements,text/xml,application/xml">
+                            <span class="field-note">#(entitlementsWhereToFind)</span>
+                        </label>
+                        <button class="button button-primary" type="submit">붙여서 다시 시도</button>
+                    </form>
+                    #endif#endif
                     #if(version.log):
                     <details class="log">
                         <summary>서명 로그</summary>
@@ -109,11 +123,15 @@
                           action="/apps/#(app.id)/versions/#(version.id)/release">
                         <button class="button button-primary" type="submit">출시</button>
                     </form>
-                    #elseif(version.canRetry):
+                    <!-- 권한이 모자란 실패는 왼쪽 칸의 폼이 대신한다. 여기 버튼을
+                         함께 두면 같은 자리에 다시 시도가 둘이 되고, 파일 없이 누른
+                         쪽은 똑같이 실패한다. -->
+                    #elseif(version.canRetry):#if(!version.needsEntitlements):
                     <form class="row-form" method="post"
                           action="/apps/#(app.id)/versions/#(version.id)/retry">
                         <button class="button" type="submit">다시 시도</button>
                     </form>
+                    #endif
                     #endif
                 </td>
                 #endif

@@ -159,9 +159,7 @@ struct AppPagesController: RouteCollection, Sendable {
                 bundleIDPrefix: settings.bundleIDPrefix,
                 enforceBundleIDPrefix: settings.enforceBundleIDPrefix,
                 appsPath: APIPath.apps,
-                versionRootPath: "\(APIPath.apiRoot)/versions",
-                entitlementsWhenNeeded: EntitlementsGuidance.whenNeeded,
-                entitlementsWhereToFind: EntitlementsGuidance.whereToFind
+                versionRootPath: "\(APIPath.apiRoot)/versions"
             )
         ).get()
     }
@@ -307,7 +305,8 @@ struct AppPagesController: RouteCollection, Sendable {
                 feedbackError: feedbackError,
                 notificationError: notificationError,
                 canUpload: canUpload,
-                canManage: canManage
+                canManage: canManage,
+                entitlementsWhereToFind: EntitlementsGuidance.whereToFind
             )
         ).get()
     }
@@ -647,6 +646,8 @@ struct VersionRow: Encodable {
     /// 지원 문의에 적을 코드. 문장 옆에 작게 보여준다.
     var failureCode: String?
     var canRetry: Bool
+    /// 권한이 모자라 실패했나. 그때만 재시도 자리에 entitlements 칸을 낸다 (ADR-0036).
+    var needsEntitlements: Bool
     /// 이 버전을 받아간 횟수. 셀 수 없으면 nil.
     var downloadCount: Int?
     /// 무엇으로 서명했는지. 업로더가 준 entitlements 의 키를 한 줄씩 늘어놓는다.
@@ -677,6 +678,8 @@ struct VersionRow: Encodable {
         self.failureAdvice = report?.failureCode.map(SigningFailureGuidance.whatToDo)
         self.failureCode = report?.failureCode?.rawValue
         self.canRetry = version.state == .failed
+        self.needsEntitlements = version.state == .failed
+            && report?.failureCode == .entitlementsRejected
         self.downloadCount = downloadCount
 
         let keys = version.entitlements.map(EntitlementsPlist.keys(of:)) ?? []
@@ -720,8 +723,6 @@ struct AppFormContext: Encodable {
     /// 스크립트가 없으면 폼이 그대로 `POST` 되어 등록만 된다 (ADR-0031).
     var appsPath: String
     var versionRootPath: String
-    var entitlementsWhenNeeded: String
-    var entitlementsWhereToFind: String
 }
 
 struct AppDetailContext: Encodable {
@@ -746,6 +747,8 @@ struct AppDetailContext: Encodable {
     var notificationError: String?
     var canUpload: Bool
     var canManage: Bool
+    /// 권한이 모자라 실패한 버전 옆에 붙일 안내. 그 파일을 어디서 구하나 (ADR-0036).
+    var entitlementsWhereToFind: String
 }
 
 struct FeedbackFormValues: Codable {

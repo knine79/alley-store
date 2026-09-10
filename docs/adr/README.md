@@ -43,6 +43,7 @@
 | [0033](0033-drop-file-first-then-confirm.md) | 파일을 먼저 놓고 값을 확인한다 | 수락됨 | 2026-09-09 |
 | [0034](0034-worker-decides-bundle-id-for-disk-images.md) | dmg 는 번들 ID 를 묻지 않고 워커가 정한다 | 수락됨 | 2026-09-10 |
 | [0035](0035-worker-decides-signing-state.md) | 서명 여부는 사람에게 묻지 않고 워커가 판정한다 | 수락됨 | 2026-09-10 |
+| [0036](0036-ask-for-entitlements-only-when-needed.md) | entitlements 는 필요한 것이 확인된 뒤에 묻는다 | 수락됨 | 2026-09-10 |
 
 ## 언제 쓰나
 

@@ -931,6 +931,21 @@ textarea.input {
     margin: 0;
 }
 
+/* 실패한 버전 옆에서 entitlements 를 받는 폼. 표 안이라 좁게 쓴다 (ADR-0036). */
+.attach-form {
+    display: grid;
+    gap: var(--space-2);
+    justify-items: start;
+    max-width: 32rem;
+    margin: var(--space-2) 0 0;
+    padding: var(--space-2) 0 0;
+    border-top: 1px solid var(--border);
+}
+
+.attach-form .field {
+    width: 100%;
+}
+
 .select {
     width: auto;
     font-size: 14px;

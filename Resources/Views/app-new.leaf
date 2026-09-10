@@ -131,19 +131,6 @@
             </label>
         </fieldset>
 
-        <!-- 파일을 골랐을 때만 보인다. -->
-        <fieldset class="form-group" id="entitlements-group" hidden>
-            <legend class="form-group-title">서명할 때 붙일 권한</legend>
-
-            <label class="field">
-                <span class="field-label">entitlements <span class="field-optional">선택</span></span>
-                <input class="input" type="file" name="entitlements"
-                       accept=".plist,.entitlements,text/xml,application/xml">
-                <span class="field-note">#(entitlementsWhenNeeded)</span>
-                <span class="field-note">#(entitlementsWhereToFind)</span>
-            </label>
-        </fieldset>
-
         <div class="progress-row" id="app-new-progress" hidden>
             <progress class="progress" id="app-new-bar" max="100" value="0"></progress>
             <span class="progress-label" id="app-new-status">준비 중…</span>

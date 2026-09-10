@@ -112,8 +112,6 @@ struct VersionPagesController: RouteCollection, Sendable {
                 versionRootPath: "\(APIPath.apiRoot)/versions",
                 // 안내 문구는 CLI·워커와 같은 곳에서 가져온다. 화면마다 다르게 쓰면
                 // 읽는 사람이 같은 문제를 매번 처음 보게 된다.
-                entitlementsWhenNeeded: EntitlementsGuidance.whenNeeded,
-                entitlementsWhereToFind: EntitlementsGuidance.whereToFind
             )
         ).get()
     }
@@ -169,6 +167,9 @@ struct VersionPagesController: RouteCollection, Sendable {
     /// 올린 바이너리는 그대로 두고 상태만 되돌린다. 서명이 실패하는 이유는 대개 워커
     /// 쪽 환경(인증서 만료, 공증 자격증명)이라, 고친 뒤 같은 파일로 다시 시도하는 것이
     /// 자연스럽다. 파일 자체가 문제였다면 새 빌드를 올리면 된다.
+    ///
+    /// **entitlements 를 함께 받는다.** 권한이 모자라 실패한 경우에만 화면에 그 칸이
+    /// 나온다. 올릴 때는 묻지 않는다 (ADR-0036).
     @Sendable
     func retry(request: Request) async throws -> Response {
         let user = try request.requireUser()
@@ -187,6 +188,9 @@ struct VersionPagesController: RouteCollection, Sendable {
             )
         }
 
+        if let attached = try Self.attachedEntitlements(from: request) {
+            version.entitlements = attached
+        }
         try version.transition(to: .uploaded)
         try await version.save(on: request.db)
 
@@ -194,6 +198,25 @@ struct VersionPagesController: RouteCollection, Sendable {
         // 단계를 건너뛴다 (ADR-0035).
         try await SigningJob.enqueue(versionID: try version.requireID(), on: request.db)
         return request.redirect(to: "/apps/\(appID.uuidString)")
+    }
+
+    /// 재시도 폼이 함께 보낸 entitlements plist. 안 붙였으면 nil 이고 원래 값을 둔다.
+    ///
+    /// 파일 칸이 없는 재시도는 본문이 비어 있다. `multipart` 일 때만 열어본다.
+    private static func attachedEntitlements(from request: Request) throws -> String? {
+        guard request.headers.contentType?.type == "multipart" else { return nil }
+
+        let form = try request.content.decode(RetryForm.self)
+        guard let file = form.entitlements, file.data.readableBytes > 0 else { return nil }
+        guard let text = file.data.getString(
+            at: file.data.readerIndex, length: file.data.readableBytes
+        ) else {
+            throw Abort(
+                .badRequest,
+                reason: "entitlements 파일이 UTF-8 텍스트가 아닙니다. XML plist 여야 합니다."
+            )
+        }
+        return try VersionController.checkedEntitlements(text)
     }
 
     private func changeRelease(
@@ -230,16 +253,17 @@ struct VersionFormContext: Encodable {
     var createVersionPath: String
     /// 만든 버전의 완료 통지 경로를 조립할 뿌리. `<root>/<id>/complete` 가 된다.
     var versionRootPath: String
-    /// entitlements 가 언제 필요한지. `EntitlementsGuidance` 에서 온다.
-    var entitlementsWhenNeeded: String
-    /// 그 파일을 어디서 얻는지.
-    var entitlementsWhereToFind: String
 }
 
 /// 올린 뒤 확인 화면에 넘기는 값.
 ///
 /// 버전 값(버전 번호, 최소 macOS)은 여기 없다. 워커가 아직 보고하지 않았을 수 있어서
 /// 브라우저가 `versionPath` 를 폴링해 채운다.
+/// 재시도할 때 함께 올릴 수 있는 것.
+struct RetryForm: Content {
+    var entitlements: File?
+}
+
 struct VersionConfirmContext: Encodable {
     var page: PageContext
     var appID: String

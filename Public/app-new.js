@@ -43,7 +43,6 @@
     var infoLead = document.getElementById("step-info-lead");
     var dmgWarning = document.getElementById("dmg-warning");
     var firstVersion = document.getElementById("first-version");
-    var entitlementsGroup = document.getElementById("entitlements-group");
     var errorBox = document.getElementById("app-new-error");
     var submit = document.getElementById("app-new-submit");
     var backButton = document.getElementById("back-to-file");
@@ -324,8 +323,7 @@
             releaseNotes: null,
             minimumOSVersion: provisional
                 ? null
-                : emptyToNull(form.elements.minimumOSVersion.value),
-            entitlements: await readEntitlements()
+                : emptyToNull(form.elements.minimumOSVersion.value)
         });
     }
 
@@ -342,13 +340,6 @@
         });
         if (!response.ok) throw new Error(await reasonOf(response));
         return await response.json().catch(function () { return {}; });
-    }
-
-    async function readEntitlements() {
-        var field = form.elements.entitlements;
-        var file = field && field.files[0];
-        if (!file) return null;
-        return await file.text();
     }
 
     /*

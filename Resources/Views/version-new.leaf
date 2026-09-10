@@ -62,18 +62,6 @@
     </fieldset>
 
     <fieldset class="form-group">
-        <legend class="form-group-title">서명할 때 붙일 권한</legend>
-
-        <label class="field">
-            <span class="field-label">entitlements <span class="field-optional">선택</span></span>
-            <input class="input" type="file" name="entitlements"
-                   accept=".plist,.entitlements,text/xml,application/xml">
-            <span class="field-note">#(entitlementsWhenNeeded)</span>
-            <span class="field-note">#(entitlementsWhereToFind)</span>
-        </label>
-    </fieldset>
-
-    <fieldset class="form-group">
         <legend class="form-group-title">사용자에게 알릴 것</legend>
 
         <label class="field">
