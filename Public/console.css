@@ -53,6 +53,19 @@
     }
 }
 
+/* `hidden` 은 언제나 이긴다.
+ *
+ * 브라우저 기본 스타일의 `[hidden] { display: none }` 은 **클래스 선택자에 진다.**
+ * `.form-group { display: grid }` 를 단 `<fieldset hidden>` 이 화면에 그대로 남는다.
+ * 요소의 `hidden` 프로퍼티는 `true` 인데 눈에는 보이는 상태라, 스크립트로 검사해도
+ * 통과하고 사람 눈에만 드러난다. 실제로 그렇게 한참 놓쳤다.
+ *
+ * `display` 를 정하는 클래스를 새로 만들 때마다 이 함정을 다시 만나므로 여기서
+ * 한 번에 못 박는다. */
+[hidden] {
+    display: none !important;
+}
+
 *,
 *::before,
 *::after {

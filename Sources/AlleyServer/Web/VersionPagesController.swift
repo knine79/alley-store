@@ -17,9 +17,73 @@ struct VersionPagesController: RouteCollection, Sendable {
             .grouped("apps", ":appID", "versions")
 
         pages.get("new", use: newForm)
+        pages.get(":versionID", "confirm", use: confirmForm)
+        pages.post(":versionID", "confirm", use: submitConfirm)
         pages.post(":versionID", "release", use: release)
         pages.post(":versionID", "unrelease", use: unrelease)
         pages.post(":versionID", "retry", use: retry)
+    }
+
+    // MARK: - 올린 뒤 확인 화면
+
+    /// 방금 올린 것이 무엇인지 보여주고 이름·설명을 받는다.
+    ///
+    /// dmg 는 브라우저가 열 수 없어서 올리기 전에는 번들 ID 밖에 물어보지 않는다
+    /// (ADR-0033). 실제 버전과 최소 macOS 는 워커가 번들에서 읽어 보고해야 알 수 있고,
+    /// 그것을 기다렸다가 여기서 함께 보여준다.
+    ///
+    /// 화면은 서버가 한 번 그리고, 값이 도착할 때까지는 브라우저가
+    /// `GET /api/v1/versions/:id` 를 폴링한다. 워커가 몇 초에서 몇 분 걸리는데 그동안
+    /// 사람이 새로고침을 눌러야 한다면 화면이 있으나 마나다.
+    @Sendable
+    func confirmForm(request: Request) async throws -> View {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        try await app.requireUploadAccess(for: user, on: request.db)
+
+        let version = try await request.findVersion()
+        let appID = try app.requireID()
+        return try await request.view.render(
+            "version-confirm",
+            VersionConfirmContext(
+                page: try await request.pageContext(title: "올린 것 확인"),
+                appID: appID.uuidString,
+                appName: app.name,
+                bundleID: app.bundleID,
+                summary: app.summary ?? "",
+                description: app.details ?? "",
+                category: app.category ?? "",
+                versionID: try version.requireID().uuidString,
+                versionPath: APIPath.version(try version.requireID())
+            )
+        ).get()
+    }
+
+    /// 확인 화면에서 받은 이름·설명을 저장한다.
+    @Sendable
+    func submitConfirm(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        try app.requireManageAccess(for: user)
+
+        let values = try request.content.decode(AppFormValues.self)
+        if let name = values.name?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !name.isEmpty {
+            app.name = name
+        }
+        app.summary = blankToNil(values.summary)
+        app.details = blankToNil(values.description)
+        app.category = blankToNil(values.category)
+        try await app.save(on: request.db)
+
+        return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
+    }
+
+    private func blankToNil(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty
+        else { return nil }
+        return trimmed
     }
 
     // MARK: - 업로드 화면
@@ -153,4 +217,21 @@ struct VersionFormContext: Encodable {
     var entitlementsWhenNeeded: String
     /// 그 파일을 어디서 얻는지.
     var entitlementsWhereToFind: String
+}
+
+/// 올린 뒤 확인 화면에 넘기는 값.
+///
+/// 버전 값(버전 번호, 최소 macOS)은 여기 없다. 워커가 아직 보고하지 않았을 수 있어서
+/// 브라우저가 `versionPath` 를 폴링해 채운다.
+struct VersionConfirmContext: Encodable {
+    var page: PageContext
+    var appID: String
+    var appName: String
+    var bundleID: String
+    var summary: String
+    var description: String
+    var category: String
+    var versionID: String
+    /// 브라우저가 값이 올 때까지 폴링할 경로.
+    var versionPath: String
 }

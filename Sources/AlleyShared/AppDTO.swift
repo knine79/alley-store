@@ -107,6 +107,11 @@ public struct VersionDTO: Codable, Sendable, Identifiable, Equatable {
     public var sha256: String?
     public var createdAt: Date
     public var releasedAt: Date?
+    /// 서명이 실패한 이유. 실패한 버전에만 있다.
+    ///
+    /// 올린 뒤 확인 화면이 이것을 보여준다. 그 화면은 워커가 값을 채울 때까지
+    /// 기다리는 자리라, 실패했을 때 왜 실패했는지도 거기서 알려줘야 한다.
+    public var failureReason: String?
 
     public init(
         id: UUID,
@@ -119,7 +124,8 @@ public struct VersionDTO: Codable, Sendable, Identifiable, Equatable {
         fileSize: Int64? = nil,
         sha256: String? = nil,
         createdAt: Date,
-        releasedAt: Date? = nil
+        releasedAt: Date? = nil,
+        failureReason: String? = nil
     ) {
         self.id = id
         self.appID = appID
@@ -132,6 +138,7 @@ public struct VersionDTO: Codable, Sendable, Identifiable, Equatable {
         self.sha256 = sha256
         self.createdAt = createdAt
         self.releasedAt = releasedAt
+        self.failureReason = failureReason
     }
 }
 

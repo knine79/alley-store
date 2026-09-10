@@ -125,7 +125,8 @@ extension Version {
             fileSize: artifact?.fileSize,
             sha256: artifact?.sha256,
             createdAt: createdAt ?? Date(),
-            releasedAt: releasedAt
+            releasedAt: releasedAt,
+            failureReason: failureReason
         )
     }
 

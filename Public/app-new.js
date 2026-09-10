@@ -157,15 +157,24 @@
 
         signingChoice.hidden = !hasFile;
 
-        // 접어둔 칸을 언제 펼치는가.
+        // 이름·소개·설명·분류를 언제 보여주는가.
         //
-        // 이름이 비어 있으면 **반드시 펼친다.** `required` 인 칸이 닫힌 `<details>`
-        // 안에 있으면 브라우저가 "invalid form control is not focusable" 로 제출을
-        // 막고, 화면에는 아무 표시도 나지 않는다. 사람은 등록 버튼이 죽은 줄 안다.
+        // dmg 는 **통째로 감춘다.** 그때 적어야 하는 것은 번들 ID 하나뿐인데 아래
+        // 네 칸이 비어 있으면 무엇을 더 해야 하는지 찾게 된다. 이름은 파일 이름에서
+        // 채워두고, 올린 뒤 확인 화면에서 워커가 읽은 값과 함께 고친다.
         //
-        // zip 은 읽은 값을 보여주는 것이 이 단계의 목적이라 펼친다. dmg 는 이름을
-        // 파일 이름에서 채워뒀고 적어야 할 것은 번들 ID 하나뿐이라 접어둔다.
-        optionalFields.open = !form.elements.name.value.trim() || !!info;
+        // zip 은 읽은 값을 보여주는 것이 이 단계의 목적이라 드러낸다. 파일이 없으면
+        // 이름을 적을 곳이 여기뿐이라 역시 드러낸다.
+        //
+        // 감출 때 `required` 도 떼어야 한다. 안 떼면 브라우저가
+        // "invalid form control is not focusable" 로 제출을 막는데 화면에는 아무
+        // 표시도 나지 않는다. 사람은 등록 버튼이 죽은 줄 안다.
+        var hideOptional = hasFile && !info;
+        optionalFields.hidden = hideOptional;
+        form.elements.name.required = !hideOptional;
+
+        // 버튼 이름을 하는 일에 맞춘다. 파일이 있으면 올리는 것이 이 단계의 일이다.
+        submit.textContent = hasFile ? "업로드" : "등록";
 
         stepFile.hidden = true;
         stepInfo.hidden = false;
@@ -246,7 +255,10 @@
             );
         }
 
-        window.location.href = "/apps/" + app.id;
+        // 앱 화면이 아니라 확인 화면으로 간다. dmg 는 버전을 아직 모르고, 워커가
+        // 번들을 열어 보고할 때까지 기다렸다가 무엇을 올린 것인지 보여준다.
+        window.location.href =
+            "/apps/" + app.id + "/versions/" + ticket.version.id + "/confirm";
     }
 
     async function createApp() {
@@ -338,7 +350,9 @@
     function busy(isBusy) {
         submit.disabled = isBusy;
         backButton.disabled = isBusy;
-        submit.textContent = isBusy ? "등록하는 중…" : "등록";
+        submit.textContent = isBusy
+            ? (input.files[0] ? "올리는 중…" : "등록하는 중…")
+            : (input.files[0] ? "업로드" : "등록");
     }
 
     function fail(message) {

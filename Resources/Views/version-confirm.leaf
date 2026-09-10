@@ -1,0 +1,72 @@
+#extend("layout"):
+#export("content"):
+<nav class="breadcrumb"><a href="/apps">앱</a> · <a href="/apps/#(appID)">#(appName)</a></nav>
+<h1 class="page-title">올린 것 확인</h1>
+<p class="page-lead">
+    파일은 다 올라갔습니다. 서명 워커가 번들을 열어 읽은 값입니다.
+</p>
+
+<section id="analysis"
+         data-version-path="#(versionPath)"
+         data-app-id="#(appID)">
+    <p class="field-note" id="analysis-status">서명 워커가 번들을 여는 중…</p>
+
+    <div class="stat-row" id="analysis-facts" hidden>
+        <div class="stat">
+            <span class="stat-value" id="fact-version">—</span>
+            <span class="stat-label">버전</span>
+        </div>
+        <div class="stat">
+            <span class="stat-value" id="fact-build">—</span>
+            <span class="stat-label">빌드</span>
+        </div>
+        <div class="stat">
+            <span class="stat-value" id="fact-minimum">—</span>
+            <span class="stat-label">최소 macOS</span>
+        </div>
+        <div class="stat">
+            <span class="stat-value" id="fact-size">—</span>
+            <span class="stat-label">크기</span>
+        </div>
+    </div>
+
+    <p class="field-note" id="analysis-bundle-id">번들 ID <code>#(bundleID)</code></p>
+
+    <p class="notice notice-error" id="analysis-error" hidden></p>
+</section>
+
+<form class="form" method="post" action="/apps/#(appID)/versions/#(versionID)/confirm">
+    <fieldset class="form-group">
+        <legend class="form-group-title">앱 정보</legend>
+
+        <label class="field">
+            <span class="field-label">이름</span>
+            <input class="input" type="text" name="name" required value="#(appName)">
+            <span class="field-note">파일 이름에서 짐작한 값입니다. 고쳐주세요.</span>
+        </label>
+
+        <label class="field">
+            <span class="field-label">한 줄 소개 <span class="field-optional">선택</span></span>
+            <input class="input" type="text" name="summary" value="#(summary)">
+        </label>
+
+        <label class="field">
+            <span class="field-label">설명 <span class="field-optional">선택</span></span>
+            <textarea class="input" name="description" rows="4">#(description)</textarea>
+        </label>
+
+        <label class="field">
+            <span class="field-label">분류 <span class="field-optional">선택</span></span>
+            <input class="input" type="text" name="category" value="#(category)">
+        </label>
+    </fieldset>
+
+    <div class="form-actions">
+        <a class="button" href="/apps/#(appID)">나중에</a>
+        <button class="button button-primary" type="submit">확인</button>
+    </div>
+</form>
+
+<script src="/version-confirm.js?v=#(page.assetVersion)" defer></script>
+#endexport
+#endextend
