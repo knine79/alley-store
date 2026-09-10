@@ -796,6 +796,65 @@ textarea.input {
     border-color: var(--accent);
 }
 
+/* 읽어두면 좋지만 막지는 않는 안내. 오류(빨강)나 경고(노랑)와 달라야 한다. */
+.notice-hint {
+    color: var(--text-muted);
+    line-height: 1.6;
+}
+
+.notice-hint strong {
+    color: var(--text);
+}
+
+.notice-aside {
+    display: inline-block;
+    margin-top: var(--space-2);
+    font-size: 13px;
+}
+
+/* ── 접어두는 자리 ──────────────────────────────────────── */
+
+/* 지금 안 채워도 되는 칸을 접는다.
+ *
+ * 다 펼쳐두면 다 적어야 하는 것처럼 보인다. 실제로 적어야 하는 칸 하나만 남기고
+ * 나머지는 접어서, 화면이 요구하는 것과 실제로 요구되는 것을 맞춘다. */
+.disclosure {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.disclosure-summary {
+    padding: var(--space-3) var(--space-4);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+    /* 기본 삼각형을 그대로 쓴다. 직접 그리면 브라우저마다 어긋난다. */
+    list-style-position: inside;
+}
+
+.disclosure-summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    border-radius: var(--radius);
+}
+
+.disclosure-note {
+    margin-left: var(--space-2);
+    font-weight: 400;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.disclosure-body {
+    display: grid;
+    gap: var(--space-4);
+    padding: 0 var(--space-4) var(--space-4);
+    border-top: 1px solid var(--border);
+    padding-top: var(--space-4);
+}
+
 /* ── 사람 목록 ───────────────────────────────────────────── */
 
 /* 이름과 이메일 두 조각을 넣는 자리다. 한 줄마다 상자를 두르면

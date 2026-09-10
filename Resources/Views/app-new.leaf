@@ -25,6 +25,23 @@
             <span class="dropzone-note">zip 또는 dmg</span>
         </div>
 
+        <!-- 고르기 전에 알려준다. 고른 뒤에 "zip 이 나았다" 고 말하면 늦다. -->
+        <p class="notice notice-hint">
+            <strong>zip 으로 올리는 편이 낫습니다.</strong> 브라우저가 열어서 번들 ID,
+            이름, 버전, 빌드 번호, 최소 macOS 를 읽어 채웁니다. 적을 것이 없습니다.
+            <br>
+            dmg 도 그대로 올릴 수 있지만 브라우저가 열 수 없어 <strong>번들 ID 를 직접
+            적어야</strong> 하고, 그 값이 실제와 다르면 다 올린 뒤 서명 단계에서
+            막힙니다.
+            <br>
+            <span class="notice-aside">
+                빌드 도구가 zip 을 함께 뱉게 할 수 있습니다. electron-builder 는
+                <code>"mac": { "target": ["zip", "dmg"] }</code>, Xcode 는 내보낸
+                <code>.app</code> 을
+                <code>ditto -c -k --sequesterRsrc --keepParent</code> 로 압축하면 됩니다.
+            </span>
+        </p>
+
         <p class="field-note" id="dropzone-status" hidden></p>
 
         <div class="form-actions">
@@ -68,25 +85,43 @@
                 #endif
             </label>
 
-            <label class="field">
-                <span class="field-label">이름</span>
-                <input class="input" type="text" name="name" required value="#(values.name)">
-            </label>
+            <!-- 이름은 zip 이면 번들에서, dmg 면 파일 이름에서 채워둔다. 나중에
+                 고칠 수 있는 값이라 접어둔다. 나머지 셋은 원래 선택이다.
 
-            <label class="field">
-                <span class="field-label">한 줄 소개 <span class="field-optional">선택</span></span>
-                <input class="input" type="text" name="summary" value="#(values.summary)">
-            </label>
+                 **다 펼쳐두면 다 적어야 하는 것처럼 보인다.** dmg 를 올릴 때 실제로
+                 적어야 하는 것은 번들 ID 하나뿐인데, 그 아래 네 칸이 비어 있으면
+                 무엇을 더 해야 하는지 찾게 된다 (ADR-0033).
 
-            <label class="field">
-                <span class="field-label">설명 <span class="field-optional">선택</span></span>
-                <textarea class="input" name="description" rows="4">#(values.description)</textarea>
-            </label>
+                 `<details>` 는 스크립트 없이도 열린다. -->
+            <details class="disclosure" id="optional-fields">
+                <summary class="disclosure-summary">
+                    이름과 설명
+                    <span class="disclosure-note">나중에 언제든 고칠 수 있습니다</span>
+                </summary>
 
-            <label class="field">
-                <span class="field-label">분류 <span class="field-optional">선택</span></span>
-                <input class="input" type="text" name="category" value="#(values.category)">
-            </label>
+                <div class="disclosure-body">
+                    <label class="field">
+                        <span class="field-label">이름</span>
+                        <input class="input" type="text" name="name" required
+                               value="#(values.name)">
+                    </label>
+
+                    <label class="field">
+                        <span class="field-label">한 줄 소개 <span class="field-optional">선택</span></span>
+                        <input class="input" type="text" name="summary" value="#(values.summary)">
+                    </label>
+
+                    <label class="field">
+                        <span class="field-label">설명 <span class="field-optional">선택</span></span>
+                        <textarea class="input" name="description" rows="4">#(values.description)</textarea>
+                    </label>
+
+                    <label class="field">
+                        <span class="field-label">분류 <span class="field-optional">선택</span></span>
+                        <input class="input" type="text" name="category" value="#(values.category)">
+                    </label>
+                </div>
+            </details>
         </fieldset>
 
         <!-- zip 을 골랐을 때만 보인다. dmg 는 값을 읽을 수 없어 감추고, 워커가

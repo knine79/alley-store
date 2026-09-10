@@ -49,6 +49,7 @@
     var backButton = document.getElementById("back-to-file");
     var cancelInfo = document.getElementById("cancel-info");
     var skipFile = document.getElementById("skip-file");
+    var optionalFields = document.getElementById("optional-fields");
     var progressRow = document.getElementById("app-new-progress");
     var bar = document.getElementById("app-new-bar");
     var progressLabel = document.getElementById("app-new-status");
@@ -155,6 +156,17 @@
         }
 
         signingChoice.hidden = !hasFile;
+
+        // 접어둔 칸을 언제 펼치는가.
+        //
+        // 이름이 비어 있으면 **반드시 펼친다.** `required` 인 칸이 닫힌 `<details>`
+        // 안에 있으면 브라우저가 "invalid form control is not focusable" 로 제출을
+        // 막고, 화면에는 아무 표시도 나지 않는다. 사람은 등록 버튼이 죽은 줄 안다.
+        //
+        // zip 은 읽은 값을 보여주는 것이 이 단계의 목적이라 펼친다. dmg 는 이름을
+        // 파일 이름에서 채워뒀고 적어야 할 것은 번들 ID 하나뿐이라 접어둔다.
+        optionalFields.open = !form.elements.name.value.trim() || !!info;
+
         stepFile.hidden = true;
         stepInfo.hidden = false;
         (form.elements.bundleID.value.trim()
