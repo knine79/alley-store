@@ -107,7 +107,9 @@ public struct VersionController: RouteCollection, Sendable {
             buildNumber: payload.buildNumber,
             releaseNotes: payload.releaseNotes,
             minimumOSVersion: payload.minimumOSVersion,
-            uploadKind: payload.uploadKind,
+            // 올린 사람에게 서명 여부를 묻지 않는다. 워커가 번들을 열어보고
+            // 판정한다 (ADR-0035). 올라오는 파일은 늘 "올라온 그대로" 다.
+            uploadKind: .unsigned,
             entitlements: try Self.checkedEntitlements(payload.entitlements),
             createdByID: try principal.attributedUserID
         )
@@ -207,23 +209,22 @@ public struct VersionController: RouteCollection, Sendable {
         )
 
         try version.transition(to: .uploaded)
-        // 서명·공증을 마치고 올린 완성본은 서명 단계를 건너뛴다.
-        if version.uploadKind == .signed {
-            try version.transition(to: .ready)
-        }
         try await version.save(on: request.db)
 
-        // 미서명 업로드는 여기서 멈추고 서명 워커가 이어받는다. 잡을 만드는 시점이
-        // 곧 큐에 들어가는 시점이라, 이 저장이 끝나기 전에는 워커가 가져갈 수 없다.
-        if version.uploadKind == .unsigned {
-            let job = try await SigningJob.enqueue(
-                versionID: try version.requireID(),
-                on: request.db
-            )
-            request.logger.notice(
-                "서명 잡 대기 [버전: \(version.shortVersion) (\(version.buildNumber)), 시도: \(job.attempt)]"
-            )
-        }
+        // **모든 업로드가 워커를 거친다.** 예전에는 올린 사람이 "서명·공증 완료" 를
+        // 고르면 검사 없이 배포 준비됨으로 넘어갔다. 그 값을 아무도 확인하지 않아서,
+        // 서명 안 된 파일을 완료로 올리면 그대로 나갔다 (ADR-0035).
+        //
+        // 이제 워커가 번들을 열어보고 이미 서명·공증돼 있으면 그 단계만 건너뛴다.
+        // 잡을 만드는 시점이 곧 큐에 들어가는 시점이라, 이 저장이 끝나기 전에는
+        // 워커가 가져갈 수 없다.
+        let job = try await SigningJob.enqueue(
+            versionID: try version.requireID(),
+            on: request.db
+        )
+        request.logger.notice(
+            "서명 잡 대기 [버전: \(version.shortVersion) (\(version.buildNumber)), 시도: \(job.attempt)]"
+        )
 
         try await version.$artifacts.load(on: request.db)
         return try version.toDTO()

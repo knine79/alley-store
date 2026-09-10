@@ -12,9 +12,11 @@ struct VersionStateTests {
         }
     }
 
-    @Test("완성본 업로드는 서명 단계를 건너뛴다")
-    func skipsSigningForPreSignedUpload() {
-        #expect(VersionState.uploaded.canTransition(to: .ready))
+    /// 서명을 건너뛸지는 워커가 번들을 열어보고 정한다. 건너뛰더라도 상태는
+    /// `signing → notarizing → ready` 를 그대로 지난다 (ADR-0035).
+    @Test("워커를 거치지 않고 배포 준비됨이 될 수 없다")
+    func cannotReachReadyWithoutWorker() {
+        #expect(!VersionState.uploaded.canTransition(to: .ready))
     }
 
     @Test("업로드 전에는 서명으로 갈 수 없다")

@@ -15,7 +15,8 @@ public struct UploadCommand: Sendable {
         public var buildNumber: Int?
         public var releaseNotes: String?
         public var minimumOSVersion: String?
-        public var uploadKind: UploadKind
+        /// **더 이상 쓰이지 않는다.** 서버가 무시하고 워커가 판정한다 (ADR-0035).
+        public var uploadKind: UploadKind?
         /// 서명할 때 붙일 entitlements plist 의 XML 원문 (ADR-0020).
         ///
         /// 파일을 읽는 것은 인자 파싱 쪽이 한다. 파일이 없거나 plist 가 아닌 것은
@@ -33,7 +34,7 @@ public struct UploadCommand: Sendable {
             buildNumber: Int? = nil,
             releaseNotes: String? = nil,
             minimumOSVersion: String? = nil,
-            uploadKind: UploadKind = .unsigned,
+            uploadKind: UploadKind? = nil,
             entitlements: String? = nil,
             releaseAfterUpload: Bool = false,
             expectedBundleID: String? = nil
@@ -66,8 +67,9 @@ public struct UploadCommand: Sendable {
                     """
             case .cannotReleaseUnsigned:
                 return """
-                    미서명으로 올린 버전은 바로 출시할 수 없습니다. 서명 워커가 끝낸 뒤 \
-                    웹 콘솔에서 출시하거나, 이미 서명·공증을 마쳤다면 --signed 로 올리세요.
+                    올린 직후에는 출시할 수 없습니다. 모든 업로드는 서명 워커를 거칩니다. \
+                    이미 서명·공증된 번들이면 워커가 그 단계를 건너뛰니 금방 끝납니다. \
+                    상태가 `배포 준비됨` 이 되면 웹 콘솔에서 출시하세요.
                     """
             }
         }
@@ -86,7 +88,10 @@ public struct UploadCommand: Sendable {
         guard FileManager.default.fileExists(atPath: options.file.path) else {
             throw UploadError.fileMissing(options.file)
         }
-        if options.releaseAfterUpload, options.uploadKind == .unsigned {
+        // 올린 직후에는 출시할 수 없다. 모든 업로드가 워커를 거치고(ADR-0035),
+        // 워커가 끝내야 배포 준비됨이 된다. 예전에는 "서명 완료" 로 올리면 곧장
+        // 출시할 수 있었는데, 그 값을 아무도 검사하지 않는 것이 문제였다.
+        if options.releaseAfterUpload {
             throw UploadError.cannotReleaseUnsigned
         }
 

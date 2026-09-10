@@ -135,23 +135,6 @@
         <fieldset class="form-group" id="signing-choice" hidden>
             <legend class="form-group-title">어떻게 서명할까</legend>
 
-            <fieldset class="field choice-group">
-                <legend class="field-label">서명 상태</legend>
-                <label class="choice">
-                    <input type="radio" name="uploadKind" value="unsigned" checked>
-                    <span>
-                        <span class="choice-name">미서명</span>
-                        <span class="choice-note">서명 워커가 서명·공증까지 대신합니다.</span>
-                    </span>
-                </label>
-                <label class="choice">
-                    <input type="radio" name="uploadKind" value="signed">
-                    <span>
-                        <span class="choice-name">서명·공증 완료</span>
-                        <span class="choice-note">이미 마친 완성본입니다. 서명 단계를 건너뜁니다.</span>
-                    </span>
-                </label>
-            </fieldset>
 
             <label class="field field-attached">
                 <span class="field-label">entitlements <span class="field-optional">선택</span></span>

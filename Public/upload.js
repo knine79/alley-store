@@ -140,7 +140,6 @@
         var body = {
             shortVersion: form.elements.shortVersion.value,
             buildNumber: Number(form.elements.buildNumber.value),
-            uploadKind: form.querySelector("input[name=uploadKind]:checked").value,
             releaseNotes: emptyToNull(form.elements.releaseNotes.value),
             minimumOSVersion: emptyToNull(form.elements.minimumOSVersion.value),
             // entitlements 는 보통 1KB 도 되지 않아 요청 본문에 그대로 싣는다.

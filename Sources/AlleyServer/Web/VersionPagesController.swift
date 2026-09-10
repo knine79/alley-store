@@ -185,15 +185,11 @@ struct VersionPagesController: RouteCollection, Sendable {
         }
 
         try version.transition(to: .uploaded)
-        // 완성본을 올린 경로에는 워커가 할 일이 없다. 상태만 제자리로 돌린다.
-        if version.uploadKind == .signed {
-            try version.transition(to: .ready)
-        }
         try await version.save(on: request.db)
 
-        if version.uploadKind == .unsigned {
-            try await SigningJob.enqueue(versionID: try version.requireID(), on: request.db)
-        }
+        // 다시 시도하는 것도 워커를 거친다. 이미 서명·공증된 번들이면 워커가 그
+        // 단계를 건너뛴다 (ADR-0035).
+        try await SigningJob.enqueue(versionID: try version.requireID(), on: request.db)
         return request.redirect(to: "/apps/\(appID.uuidString)")
     }
 

@@ -31,8 +31,11 @@ public enum VersionState: String, Codable, Sendable, CaseIterable {
         case .draft:
             return [.uploaded, .failed]
         case .uploaded:
-            // 완성본 업로드 경로는 서명을 건너뛰고 바로 ready로 간다.
-            return [.signing, .ready, .failed]
+            // 워커를 거치지 않고는 배포 준비됨이 될 수 없다. 예전에는 올린 사람이
+            // "이미 서명했다" 고 고르면 바로 ready 로 갔는데, 그 말을 아무도
+            // 확인하지 않았다 (ADR-0035). 이미 서명된 번들이어도 워커가 열어보고
+            // 판정한 뒤에야 넘어간다.
+            return [.signing, .failed]
         case .signing:
             return [.notarizing, .failed]
         case .notarizing:

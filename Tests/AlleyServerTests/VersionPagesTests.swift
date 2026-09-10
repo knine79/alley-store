@@ -275,7 +275,7 @@ struct RetryActionTests {
         }
     }
 
-    @Test("완성본은 다시 시도해도 워커를 거치지 않는다")
+    @Test("완성본도 다시 시도하면 워커를 거친다")
     func signedRetrySkipsQueue() async throws {
         try await withMigratedApp { app in
             let (owner, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
@@ -294,9 +294,12 @@ struct RetryActionTests {
                 headers: .form(cookie: token)
             ) { #expect($0.status == .seeOther) }
 
+            // 다시 시도하는 것도 워커를 거친다. 이미 서명·공증된 번들이면 워커가
+            // 그 단계를 건너뛴다 (ADR-0035). 예전에는 올린 사람이 "완료" 라고 하면
+            // 검사 없이 배포 준비됨으로 넘어갔다.
             let stored = try #require(try await Version.find(versionID, on: app.db))
-            #expect(stored.state == .ready)
-            #expect(try await SigningJob.query(on: app.db).count() == 0)
+            #expect(stored.state == .uploaded)
+            #expect(try await SigningJob.query(on: app.db).count() == 1)
         }
     }
 

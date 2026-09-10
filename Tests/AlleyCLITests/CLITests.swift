@@ -59,7 +59,9 @@ struct UploadParsingTests {
         #expect(options.shortVersion == "1.2.0")
         // 빌드 번호를 안 주면 서버의 마지막 번호에 1을 더한다.
         #expect(options.buildNumber == nil)
-        #expect(options.uploadKind == .unsigned)
+        // CLI 는 더 이상 서명 여부를 정하지 않는다. 워커가 번들을 열어보고
+        // 판정한다 (ADR-0035).
+        #expect(options.uploadKind == nil)
         #expect(!options.releaseAfterUpload)
     }
 
@@ -80,7 +82,9 @@ struct UploadParsingTests {
         #expect(options.expectedBundleID == "com.example.tool")
         #expect(options.releaseNotes == "검색이 빨라졌습니다.")
         #expect(options.minimumOSVersion == "14.0")
-        #expect(options.uploadKind == .signed)
+        // `--signed` 는 받아만 두고 쓰지 않는다. 옛 스크립트가 계속 넘겨도 깨지지
+        // 않게 하려는 것이고, 값은 서버가 무시한다 (ADR-0035).
+        #expect(options.uploadKind == nil)
         #expect(options.releaseAfterUpload)
     }
 

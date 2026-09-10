@@ -297,7 +297,6 @@ stateDiagram-v2
     uploaded --> signing: 워커가 서명 대행
     signing --> notarizing
     notarizing --> ready
-    uploaded --> ready: 완성본 업로드 · 서명 생략
     ready --> released: 출시
     released --> ready: 출시 취소
 
@@ -309,8 +308,10 @@ stateDiagram-v2
     failed --> uploaded: 재시도
 ```
 
-로컬에서 이미 서명·공증을 마친 완성본을 올리는 경로는 `uploaded → ready`로 서명
-단계를 건너뜁니다. 실패하면 업로드된 바이너리부터 다시 시작합니다.
+**모든 업로드가 워커를 지납니다.** 이미 서명·공증을 마친 번들이어도 그렇습니다.
+워커가 번들을 열어보고 서명이 다 됐다고 판정하면 서명·공증만 건너뛰고, 상태는
+같은 길을 지납니다 ([ADR-0035](adr/0035-worker-decides-signing-state.md)).
+실패하면 업로드된 바이너리부터 다시 시작합니다.
 
 전이 규칙은 `VersionState.allowedNextStates`에 박아두어 단계를 건너뛰는 경로를
 타입 수준에서 막습니다. 위 그림과 코드가 어긋나면 코드가 기준입니다.

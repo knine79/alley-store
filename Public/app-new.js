@@ -323,7 +323,6 @@
                 ? PROVISIONAL_VERSION
                 : form.elements.shortVersion.value.trim(),
             buildNumber: provisional ? 1 : Number(form.elements.buildNumber.value),
-            uploadKind: form.querySelector("input[name=uploadKind]:checked").value,
             releaseNotes: null,
             minimumOSVersion: provisional
                 ? null

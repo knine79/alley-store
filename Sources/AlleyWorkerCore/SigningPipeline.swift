@@ -87,31 +87,44 @@ public struct SigningPipeline: Sendable {
 
         await progress(.validating, "번들: \(bundle.url.lastPathComponent)")
         try requireAcceptableBundleIdentifier(of: bundle, for: job)
-        let targets = try bundle.codeToSign()
-        // 업로더가 준 plist 가 있으면 그것이 진실이다 (ADR-0020).
-        let provided = job.entitlements.map { Data($0.utf8) }
-        let declaredKeys = try await validate(bundle: bundle, provided: provided)
 
-        var codesigningDetail = "서명 대상 \(targets.count)개"
-        if declaredKeys.isEmpty {
-            // 실패시키지 않는다. 네이티브 맥 앱은 대부분 정말로 권한이 필요 없다.
-            // 다만 나중에 "왜 안 붙었나"를 물을 사람을 위해 잡 로그에 남긴다.
-            codesigningDetail += "\n\n\(EntitlementsGuidance.noneProvided)"
+        // **사람에게 "서명하셨나요" 를 묻지 않는다.** 번들을 열어보면 알 수 있고,
+        // 물어보면 틀리게 답할 수 있다 (ADR-0035).
+        let inspection = await SignatureInspection.inspect(
+            bundle: bundle.url,
+            expectedTeamID: SignatureInspection.teamID(
+                fromSigningIdentity: config.signingIdentity
+            )
+        )
+        await progress(.validating, inspection.reason)
+
+        if !inspection.isAlreadyDone {
+            let targets = try bundle.codeToSign()
+            // 업로더가 준 plist 가 있으면 그것이 진실이다 (ADR-0020).
+            let provided = job.entitlements.map { Data($0.utf8) }
+            let declaredKeys = try await validate(bundle: bundle, provided: provided)
+
+            var codesigningDetail = "서명 대상 \(targets.count)개"
+            if declaredKeys.isEmpty {
+                // 실패시키지 않는다. 네이티브 맥 앱은 대부분 정말로 권한이 필요 없다.
+                // 다만 나중에 "왜 안 붙었나"를 물을 사람을 위해 잡 로그에 남긴다.
+                codesigningDetail += "\n\n\(EntitlementsGuidance.noneProvided)"
+            }
+            await progress(.codesigning, codesigningDetail)
+            for target in targets {
+                try await sign(target, workspace: workspace, provided: provided)
+            }
+            try await verifySignature(of: bundle)
+
+            let notarizationInput = workspace.appendingPathComponent("notarize.zip")
+            try await zip(bundle.url, into: notarizationInput)
+
+            await progress(.notarizing, nil)
+            try await notarize(notarizationInput)
+
+            await progress(.stapling, nil)
+            try await staple(bundle.url)
         }
-        await progress(.codesigning, codesigningDetail)
-        for target in targets {
-            try await sign(target, workspace: workspace, provided: provided)
-        }
-        try await verifySignature(of: bundle)
-
-        let notarizationInput = workspace.appendingPathComponent("notarize.zip")
-        try await zip(bundle.url, into: notarizationInput)
-
-        await progress(.notarizing, nil)
-        try await notarize(notarizationInput)
-
-        await progress(.stapling, nil)
-        try await staple(bundle.url)
 
         await progress(.uploading, nil)
         let result = workspace.appendingPathComponent("signed.zip")

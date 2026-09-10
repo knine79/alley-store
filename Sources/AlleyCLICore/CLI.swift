@@ -25,8 +25,8 @@ public enum CLI {
           --entitlements <경로>
                                서명할 때 붙일 entitlements plist.
                                \(EntitlementsGuidance.whenNeeded)
-          --signed             이미 서명·공증을 마친 완성본이다. 서명 단계를 건너뛴다
-          --release            올린 뒤 곧바로 출시한다 (--signed 일 때만)
+          --signed             (더 이상 쓰이지 않음) 워커가 번들을 열어보고 판정한다
+          --release            (더 이상 쓰이지 않음) 워커가 끝낸 뒤 콘솔에서 출시한다
 
         환경변수:
           ALLEY_SERVER_URL    스토어 서버 주소
@@ -35,7 +35,6 @@ public enum CLI {
         예시:
           alley upload build/MyApp.zip --version 1.2.0
           alley upload build/MyApp.zip --version 1.2.0 --entitlements build/app.entitlements
-          alley upload build/MyApp.zip --version 1.2.0 --signed --release
         """
 
     /// 종료 코드. CI 가 이걸로 판단한다.
@@ -148,7 +147,9 @@ public enum CLI {
             buildNumber: try arguments.integer("build"),
             releaseNotes: arguments.string("notes"),
             minimumOSVersion: arguments.string("min-os"),
-            uploadKind: arguments.flag("signed") ? .signed : .unsigned,
+            // 서버가 무시한다. 워커가 번들을 열어보고 판정한다 (ADR-0035).
+            // 옛 스크립트가 `--signed` 를 계속 넘겨도 깨지지 않게 받아만 둔다.
+            uploadKind: nil,
             entitlements: try readEntitlements(at: arguments.string("entitlements")),
             releaseAfterUpload: arguments.flag("release"),
             expectedBundleID: arguments.string("app")

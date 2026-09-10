@@ -212,8 +212,8 @@ struct SigningJobQueueTests {
         }
     }
 
-    @Test("완성본을 올리면 서명 잡을 만들지 않는다")
-    func signedUploadSkipsQueue() async throws {
+    @Test("완성본이라고 주장해도 워커를 거친다")
+    func signedClaimStillGoesThroughWorker() async throws {
         try await withMigratedApp { app in
             let storage = app.useFakeStorage()
             let (owner, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
@@ -227,6 +227,7 @@ struct SigningJobQueueTests {
                 .POST, APIPath.versions(ofApp: appID), headers: .bearer(token),
                 beforeRequest: { request in
                     try request.content.encode(
+                        // 예전 클라이언트가 "완료" 라고 보내도 서버는 무시한다.
                         CreateVersionRequest(
                             shortVersion: "1.0.0", buildNumber: 1, uploadKind: .signed
                         )
@@ -235,8 +236,10 @@ struct SigningJobQueueTests {
             ) { ticket = try $0.content.decode(UploadTicket.self) }
             let versionID = try #require(ticket?.version.id)
 
+            // 올라오는 자리는 늘 "올라온 그대로" 다. 서버가 uploadKind 를 무시하므로
+            // 서명 슬롯이 아니라 미서명 슬롯에 놓인다.
             storage.place(
-                key: ArtifactStorage.objectKey(appID: appID, versionID: versionID, kind: .signed),
+                key: ArtifactStorage.objectKey(appID: appID, versionID: versionID, kind: .unsigned),
                 size: 2048
             )
             try await app.testing().test(
@@ -246,12 +249,13 @@ struct SigningJobQueueTests {
                 }
             ) { response in
                 let version = try response.content.decode(VersionDTO.self)
-                // 이미 서명·공증을 마쳤으니 워커가 할 일이 없다.
-                #expect(version.state == .ready)
+                // 사람이 뭐라고 하든 워커가 확인한다. 그 말을 그대로 믿고 배포 준비됨으로
+                // 넘기면, 서명 안 된 파일을 "완료" 로 올렸을 때 그대로 나간다 (ADR-0035).
+                #expect(version.state == .uploaded)
             }
 
             let count = try await SigningJob.query(on: app.db).count()
-            #expect(count == 0)
+            #expect(count == 1)
         }
     }
 

@@ -206,7 +206,12 @@ public struct CreateVersionRequest: Codable, Sendable {
     public var buildNumber: Int
     public var releaseNotes: String?
     public var minimumOSVersion: String?
-    public var uploadKind: UploadKind
+    /// **더 이상 쓰이지 않는다.** 워커가 번들을 열어보고 판정한다 (ADR-0035).
+    ///
+    /// 서버가 이 값을 무시한다. 옵셔널이라 안 보내도 되고, 예전 CLI 가 보내도
+    /// 요청이 깨지지 않는다. 합성 디코더는 프로퍼티 기본값을 쓰지 않으므로
+    /// 옵셔널이어야 빠뜨린 요청이 통한다.
+    public var uploadKind: UploadKind?
     /// 서명할 때 붙일 entitlements plist 의 XML 원문. 안 보내도 된다 (ADR-0020).
     ///
     /// 미서명 업로드에는 읽어낼 기존 서명이 없어서 워커가 이것을 짐작할 수 없다.
@@ -219,7 +224,7 @@ public struct CreateVersionRequest: Codable, Sendable {
         buildNumber: Int,
         releaseNotes: String? = nil,
         minimumOSVersion: String? = nil,
-        uploadKind: UploadKind = .unsigned,
+        uploadKind: UploadKind? = nil,
         entitlements: String? = nil
     ) {
         self.shortVersion = shortVersion
