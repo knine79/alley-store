@@ -45,6 +45,7 @@
 | [0035](0035-worker-decides-signing-state.md) | 서명 여부는 사람에게 묻지 않고 워커가 판정한다 | 수락됨 | 2026-09-10 |
 | [0036](0036-ask-for-entitlements-only-when-needed.md) | entitlements 는 필요한 것이 확인된 뒤에 묻는다 | 수락됨 | 2026-09-10 |
 | [0037](0037-confirm-disk-image-upload-in-a-dialog.md) | dmg 업로드 확인을 `<dialog>` 로 받는다 | 수락됨 | 2026-09-10 |
+| [0038](0038-container-credentials-provider.md) | 컨테이너 자격증명 공급자를 직접 붙인다 | 수락됨 | 2026-09-10 |
 
 ## 언제 쓰나
 

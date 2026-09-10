@@ -192,6 +192,9 @@ entitlements 세 개를 그대로 유지한 채 통과했습니다.
 - [x] 번들 ID 접두어 규칙을 안내 문구에 실제 값으로 넣는다. 화면에서 "서명 워커" 를 걷어냈다
 - [x] dmg 업로드 확인을 `<dialog>` 팝업(취소/업로드)으로
       ([ADR-0037](adr/0037-confirm-disk-image-upload-in-a-dialog.md))
+- [x] 앱 번들이 아닌 zip 과 zip·dmg 가 아닌 파일을 올리기 전에 거절한다
+- [x] EKS Pod Identity 자격증명을 직접 받아온다. Soto 가 그 방식을 모른다
+      ([ADR-0038](adr/0038-container-credentials-provider.md))
 
 콘솔은 빌드 스텝 없는 중립 CSS 한 장으로 만듭니다. 강조색과 로고는 스토어 설정에서
 와서, 다른 조직이 띄우면 그 조직 것으로 보입니다. 사내용 고급 화면이 필요해지면

@@ -184,8 +184,11 @@ private func credentialProvider(
     logger: Logger
 ) -> CredentialProviderFactory {
     guard let accessKeyID = config.accessKeyID, let secretAccessKey = config.secretAccessKey else {
-        logger.notice("스토리지 자격증명: 액세스 키가 없어 SDK 기본 체인을 씁니다.")
-        return .default
+        // 컨테이너 자격증명 엔드포인트를 먼저 본다. Soto 의 기본 체인이 그것을 모른다
+        // (ADR-0038). 주입돼 있지 않으면 `podIdentity` 는 조용히 비켜서고 기본 체인이
+        // 이어받는다.
+        logger.notice("스토리지 자격증명: 액세스 키가 없어 컨테이너 엔드포인트와 SDK 기본 체인을 씁니다.")
+        return .selector(.podIdentity, .default)
     }
     return .static(accessKeyId: accessKeyID, secretAccessKey: secretAccessKey)
 }
