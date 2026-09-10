@@ -155,7 +155,16 @@ private func configureMiddleware(_ app: Application, config: AppConfig) {
 /// `AWSClient` 는 커넥션 풀을 들고 있어서 요청마다 만들면 안 되고, 종료할 때
 /// 반드시 닫아야 한다. 그래서 애플리케이션 수명에 묶는다.
 private func configureStorage(_ app: Application, config: AppConfig.StorageConfig) throws {
-    let client = AWSClient(credentialProvider: credentialProvider(for: config, logger: app.logger))
+    // **로거를 넘겨야 한다.** 안 넘기면 Soto 는 `loggingDisabled` 를 쓰고, 자격증명을
+    // 고르다 실패한 것까지 전부 조용히 삼킨다. 배포된 서버가 왜 스토리지를 못 쓰는지
+    // 알아내는 데 그 침묵이 가장 오래 걸렸다 (ADR-0038).
+    let client = AWSClient(
+        credentialProvider: credentialProvider(for: config, logger: app.logger),
+        // 오류만 올린다. 요청 로그(`requestLogLevel`)는 그대로 debug 다. 그쪽까지
+        // 올리면 S3 요청마다 줄이 하나씩 쌓인다. 우리가 못 봐서 헤맨 것은 오류 쪽이다.
+        options: .init(requestLogLevel: .debug, errorLogLevel: .notice),
+        logger: app.logger
+    )
 
     let storage: ArtifactStorage
     do {
