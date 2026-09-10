@@ -4,9 +4,9 @@
  *   1단계  파일을 끌어다 놓는다. 다른 입력은 없다
  *   2단계  값을 확인하고 모자란 것을 채운다
  *
- * zip 이면 1단계에서 번들을 열어 다섯 칸을 채운 뒤 2단계로 넘긴다. dmg 는 브라우저가
- * 열 수 없어서 번들 ID 만 받고, 버전과 최소 macOS 는 올린 뒤 서명 워커가 번들에서
- * 읽어 서버가 채운다.
+ * zip 이면 1단계에서 번들을 열어 칸을 채운 뒤 2단계로 넘긴다. dmg 는 브라우저가
+ * 열 수 없어서 아무것도 묻지 않는다. 번들 ID·버전·최소 macOS 를 올린 뒤 서명 워커가
+ * 번들에서 읽어 서버가 채운다 (ADR-0034).
  *
  * **스크립트가 없으면 1단계가 아예 없다.** 2단계 폼이 드러나 있고 그것을 `POST` 하면
  * 앱만 등록된다. 그래서 1단계는 HTML 에서 `hidden` 이고 여기서 벗긴다.
@@ -43,7 +43,7 @@
     var infoLead = document.getElementById("step-info-lead");
     var dmgWarning = document.getElementById("dmg-warning");
     var firstVersion = document.getElementById("first-version");
-    var signingChoice = document.getElementById("signing-choice");
+    var entitlementsGroup = document.getElementById("entitlements-group");
     var errorBox = document.getElementById("app-new-error");
     var submit = document.getElementById("app-new-submit");
     var backButton = document.getElementById("back-to-file");
@@ -158,7 +158,7 @@
             firstVersion.hidden = true;
         }
 
-        signingChoice.hidden = !hasFile;
+        entitlementsGroup.hidden = !hasFile;
 
         // 이름·소개·설명·분류를 언제 보여주는가.
         //

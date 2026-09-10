@@ -1001,12 +1001,6 @@ textarea.input {
  *
  * 쓰는 자리: 버전 업로드 화면의 entitlements. 서명 상태가 "미서명" 일 때만 의미가
  * 있는데, 예전에는 그 라디오에서 세 칸 아래 떨어져 있어서 관계가 안 보였다. */
-.field-attached {
-    margin-top: calc(var(--space-2) - var(--space-4));
-    padding: var(--space-2) 0 var(--space-2) var(--space-3);
-    border-left: 2px solid var(--border);
-}
-
 /* ── 업로드 진행률 ───────────────────────────────────────── */
 
 .progress-row {
