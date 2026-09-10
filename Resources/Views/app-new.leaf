@@ -29,8 +29,8 @@
         <!-- 고르기 전에 알려준다. 고른 뒤에 말하면 늦다. -->
         <p class="notice notice-hint">
             <strong>zip 이 편합니다.</strong> dmg 는 업로드가 완료되기 전에는 앱 정보를
-            읽을 수 없어서 번들 ID 를 직접 적어야 하고, 실제와 다르면 업로드가 완료된
-            후 실패할 수 있습니다.
+            읽을 수 없어서, 올린 뒤 서명 워커가 열어보고 정합니다. 그때 번들 ID 가
+            이 스토어의 규칙에 맞지 않으면 실패합니다.
         </p>
 
         <p class="field-note" id="dropzone-status" hidden></p>
@@ -50,8 +50,9 @@
         </p>
 
         <p class="notice notice-warn" id="dmg-warning" hidden>
-            dmg 는 열어볼 수 없어서 번들 ID 만 받습니다. <strong>실제 앱과 다르면 다
-            올린 뒤 막힙니다.</strong> 나머지는 올리고 나서 확인 화면에서 봅니다.
+            이 파일은 열어볼 수 없어서 <strong>적을 것이 없습니다.</strong> 올리고 나면
+            서명 워커가 번들을 열어 번들 ID 와 버전을 읽습니다. 그 값이 이 스토어의
+            규칙에 맞지 않으면 그때 실패합니다.
         </p>
 
         <fieldset class="form-group">
