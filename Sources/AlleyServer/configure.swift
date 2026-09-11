@@ -124,6 +124,7 @@ private func configureMigrations(_ app: Application) {
     app.migrations.add(AddAppBundleIDPending())
     app.migrations.add(AddWorkerVersion())
     app.migrations.add(CreateWorkerRelease())
+    app.migrations.add(CreateOperatorToken())
 }
 
 /// 미들웨어 스택.

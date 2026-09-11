@@ -27,6 +27,8 @@ struct AdminPagesController: RouteCollection, Sendable {
         pages.post("workers", "releases", use: uploadWorkerRelease)
         pages.post("workers", "releases", ":releaseID", "deploy", use: deployWorkerRelease)
         pages.post("workers", "releases", ":releaseID", "delete", use: deleteWorkerRelease)
+        pages.post("operator-tokens", use: issueOperatorToken)
+        pages.post("operator-tokens", ":tokenID", "revoke", use: revokeOperatorToken)
         pages.get("stats", use: stats)
         pages.get("portal", use: portal)
         pages.post("portal", "bundle-ids", use: registerBundleID)
@@ -208,6 +210,7 @@ struct AdminPagesController: RouteCollection, Sendable {
     private func renderWorkers(
         issued: CreatedWorker?,
         error: String?,
+        issuedOperatorToken: String? = nil,
         on request: Request
     ) async throws -> View {
         let workers = try await Worker.query(on: request.db).sort(\.$name).all()
@@ -231,9 +234,60 @@ struct AdminPagesController: RouteCollection, Sendable {
                 releases: try await WorkerRelease.query(on: request.db)
                     .sort(\.$createdAt, .descending)
                     .all()
-                    .map { try WorkerReleaseRow(release: $0) }
+                    .map { try WorkerReleaseRow(release: $0) },
+                operatorTokens: try await OperatorToken.query(on: request.db)
+                    .sort(\.$createdAt, .descending)
+                    .all()
+                    .map { try OperatorTokenRow(token: $0) },
+                issuedOperatorToken: issuedOperatorToken.map { IssuedOperatorToken(value: $0) }
             )
         ).get()
+    }
+
+    // MARK: - 운영 토큰
+
+    /// 운영 파이프라인이 쓸 토큰을 발급한다 (ADR-0043).
+    ///
+    /// 발급 직후 한 번만 보여준다. 서버는 해시만 들고 있다.
+    @Sendable
+    func issueOperatorToken(request: Request) async throws -> Response {
+        let admin = try request.requireAdmin()
+        let form = try request.content.decode(OperatorTokenForm.self)
+        let name = (form.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            return try await redirectWithError("토큰 이름을 적으세요.", on: request)
+        }
+
+        let value = OperatorToken.generateToken()
+        let token = OperatorToken(
+            name: name,
+            tokenHash: OperatorToken.hash(token: value),
+            createdByID: try admin.requireID()
+        )
+        try await token.save(on: request.db)
+        request.logger.notice("운영 토큰 발급 [이름: \(name), 관리자: \(admin.email)]")
+
+        let view = try await renderWorkers(
+            issued: nil, error: nil, issuedOperatorToken: value, on: request
+        )
+        let response = Response(status: .ok)
+        response.headers.contentType = .html
+        response.body = .init(buffer: view.data)
+        return response
+    }
+
+    @Sendable
+    func revokeOperatorToken(request: Request) async throws -> Response {
+        let admin = try request.requireAdmin()
+        guard let id = request.parameters.get("tokenID", as: UUID.self),
+              let token = try await OperatorToken.find(id, on: request.db)
+        else {
+            throw Abort(.notFound, reason: "토큰을 찾을 수 없습니다.")
+        }
+        token.revokedAt = Date()
+        try await token.save(on: request.db)
+        request.logger.notice("운영 토큰 폐기 [이름: \(token.name), 관리자: \(admin.email)]")
+        return request.redirect(to: "/admin/workers")
     }
 
     // MARK: - 워커 릴리스
@@ -530,6 +584,30 @@ struct WorkerFormValues: Codable {
 extension WorkerFormValues: Content {}
 
 /// 워커 번들을 올리는 폼.
+struct OperatorTokenForm: Content {
+    var name: String?
+}
+
+/// 발급 직후 한 번만 보여주는 운영 토큰.
+struct IssuedOperatorToken: Encodable {
+    var value: String
+}
+
+/// 화면에 뿌리는 운영 토큰 한 줄.
+struct OperatorTokenRow: Encodable {
+    var id: String
+    var name: String
+    var lastUsed: String?
+    var isActive: Bool
+
+    init(token: OperatorToken) throws {
+        self.id = try token.requireID().uuidString
+        self.name = token.name
+        self.lastUsed = token.lastUsedAt.map { DateStyle.minute.string(from: $0) }
+        self.isActive = token.isActive
+    }
+}
+
 struct WorkerReleaseForm: Content {
     var version: String?
     var bundle: File?
@@ -710,4 +788,8 @@ struct WorkerListPageContext: Encodable {
     /// 이 서버가 아는 워커 버전. 낡은 워커를 가릴 기준이다 (ADR-0042).
     var serverWorkerVersion: String
     var releases: [WorkerReleaseRow]
+    /// 운영 파이프라인이 쓰는 토큰들 (ADR-0043).
+    var operatorTokens: [OperatorTokenRow]
+    /// 방금 발급한 토큰. 한 번만 보여준다.
+    var issuedOperatorToken: IssuedOperatorToken?
 }

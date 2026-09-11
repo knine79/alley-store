@@ -131,4 +131,9 @@ public enum APIPath {
     public static let adminWorkers = "\(adminRoot)/workers"
     public static let adminUsers = "\(adminRoot)/users"
     public static let adminSettings = "\(adminRoot)/settings"
+
+    /// 운영 파이프라인이 쓰는 경로. 운영 토큰으로 인증한다 (ADR-0043).
+    public static let operatorRoot = "\(apiRoot)/ops"
+    /// 워커 릴리스를 올리는 자리.
+    public static let operatorWorkerReleases = "\(operatorRoot)/worker-releases"
 }

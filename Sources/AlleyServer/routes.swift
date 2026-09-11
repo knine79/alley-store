@@ -21,6 +21,7 @@ func routes(_ app: Application) throws {
     try app.register(collection: VersionController())
     try app.register(collection: AdminController())
     try app.register(collection: WorkerController())
+    try app.register(collection: OperatorController())
     try app.register(collection: DeployTokenController())
     try app.register(collection: PortalController())
     try app.register(collection: FeedbackController())

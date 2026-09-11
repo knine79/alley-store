@@ -219,6 +219,32 @@ public struct WorkerReleaseDTO: Codable, Sendable, Equatable {
     }
 }
 
+/// 올려둔 워커 릴리스 한 줄.
+public struct WorkerReleaseSummaryDTO: Codable, Sendable, Identifiable, Equatable {
+    public var id: UUID
+    public var version: String
+    public var fileSize: Int64
+    public var sha256: String
+    public var isCurrent: Bool
+    public var createdAt: Date
+
+    public init(
+        id: UUID,
+        version: String,
+        fileSize: Int64,
+        sha256: String,
+        isCurrent: Bool,
+        createdAt: Date
+    ) {
+        self.id = id
+        self.version = version
+        self.fileSize = fileSize
+        self.sha256 = sha256
+        self.isCurrent = isCurrent
+        self.createdAt = createdAt
+    }
+}
+
 // MARK: - 워커 등록
 
 /// 등록된 워커 한 대. 토큰은 여기 없다.
