@@ -3,6 +3,10 @@ import AlleyShared
 import Crypto
 import Foundation
 
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
 /// 워커가 스스로를 갈아끼운다 (ADR-0042).
 ///
 /// 워커를 고쳐도 사람이 각 맥에 가서 다시 설치해야 했다. 그래서 dmg 를 모르는 워커가
