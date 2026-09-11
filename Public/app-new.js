@@ -58,11 +58,23 @@
     /** 올리는 중인가. 1단계에 머문 채로 올라가므로 그 화면의 조작을 잠가야 한다. */
     var locked = false;
 
-    // 스크립트가 도니 1단계부터 시작한다.
-    stepFile.hidden = false;
-    stepInfo.hidden = true;
     backButton.hidden = false;
     cancelInfo.hidden = true;
+
+    /*
+     * 스크립트가 도니 1단계부터 시작한다. **서버가 오류로 다시 그린 경우만 빼고.**
+     *
+     * 파일 없이 앱만 등록하는 경로는 폼을 그대로 `POST` 한다. 번들 ID 가 규칙에 안
+     * 맞으면 서버가 오류와 함께 같은 화면을 다시 그리는데, 여기서 무조건 1단계로
+     * 되돌리면 **적어둔 값이 감춰진 2단계에 남은 채로 파일 고르는 화면이 뜬다.**
+     * 무엇을 고쳐야 하는지 보이지 않고, 처음부터 다시 하는 것처럼 읽힌다.
+     */
+    if (form.dataset.restore === "1") {
+        go(null);
+    } else {
+        stepFile.hidden = false;
+        stepInfo.hidden = true;
+    }
 
     // MARK: - 1단계
 
