@@ -1,5 +1,11 @@
 import Foundation
 
+#if canImport(Glibc)
+import Glibc
+#elseif canImport(Darwin)
+import Darwin
+#endif
+
 /// 외부 명령 실행 도우미.
 ///
 /// 워커는 codesign, notarytool, stapler 를 호출해야 하므로 프로세스 실행이 핵심 경로다.
@@ -82,9 +88,23 @@ public enum Shell {
         let deadline = timeout.map { DispatchTime.now() + $0 } ?? .distantFuture
         if exited.wait(timeout: deadline) == .timedOut {
             timedOut = true
+            // 먼저 SIGTERM 으로 정리할 기회를 준다. notarytool 처럼 임시 파일을 쓰는
+            // 명령이 있다.
             process.terminate()
-            // 죽이라고 했는데도 안 죽는 경우가 있다. 그때까지 붙잡혀 있지 않는다.
-            _ = exited.wait(timeout: .now() + 10)
+
+            // **SIGTERM 이 아무 일도 하지 않는 경우가 있다.** 자식은 자기를 띄운
+            // 스레드의 시그널 마스크를 물려받는데, libdispatch 작업 스레드는 SIGTERM
+            // 을 막아둔다. 막힌 시그널은 pending 으로 남아 있기만 하고 기본 동작
+            // (종료)을 하지 않는다. `runDetached` 가 글로벌 큐로 넘기므로 워커의
+            // 모든 호출이 이 경로를 지난다.
+            //
+            // 리눅스에서 `sleep 60` 이 SIGTERM 을 받고도 60초를 다 살아 있는 것으로
+            // 드러났다. SIGKILL 은 막을 수 없어서 이쪽은 항상 듣는다.
+            if exited.wait(timeout: .now() + 2) == .timedOut {
+                kill(process.processIdentifier, SIGKILL)
+                // 죽이라고 했는데도 안 죽는 경우가 있다. 그때까지 붙잡혀 있지 않는다.
+                _ = exited.wait(timeout: .now() + 5)
+            }
         }
 
         // 파이프가 닫혀야 읽기가 끝난다. 자식이 죽으면 닫힌다.
