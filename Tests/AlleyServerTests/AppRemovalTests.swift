@@ -5,12 +5,12 @@ import VaporTesting
 
 @testable import AlleyServer
 
-/// 확정되지 못한 등록을 치운다 (ADR-0039).
+/// 앱을 지운다 (ADR-0041).
 ///
-/// dmg 를 올리면 번들 ID 가 임시값인 채로 앱이 만들어진다. 워커가 실패하면 그
-/// 상태로 남는데, 지금까지는 치울 방법이 없었다 (ADR-0034 의 대가).
-@Suite("확정 전 앱 지우기")
-struct PendingAppRemovalTests {
+/// **잃을 것이 있는 앱은 이름을 적어야 지워진다.** 그 검사는 서버가 한다. 브라우저
+/// 팝업만으로는 스크립트가 안 돌 때 아무것도 막지 못한다.
+@Suite("앱 지우기")
+struct AppRemovalTests {
     private func seedPending(
         on app: Application,
         owner: User,
@@ -77,21 +77,89 @@ struct PendingAppRemovalTests {
         }
     }
 
-    /// **번들 ID 가 정해졌다는 것은 누군가 설치했을 수 있다는 뜻이다.** 지우면
-    /// 다운로드 이력과 피드백까지 함께 사라진다. 그건 다른 결정이다.
-    @Test("확정된 앱은 지울 수 없다")
-    func confirmedAppIsSafe() async throws {
+    /// 확정됐어도 한 번도 안 나갔으면 잃을 것이 없다. 오타로 만든 앱이 그렇다.
+    @Test("나간 적 없는 앱은 이름 없이 지운다")
+    func confirmedButUnreleasedNeedsNoName() async throws {
         try await withMigratedApp { app in
             let (owner, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
             let record = try await app.seedApp(
-                bundleID: "com.example.done", name: "확정된앱", owner: owner
+                bundleID: "com.example.typo", name: "오타앱", owner: owner
             )
             let appID = try record.requireID()
 
             try await app.testing().test(
                 .POST, "/apps/\(appID.uuidString)/delete", headers: .form(cookie: token)
-            ) { #expect($0.status == .conflict) }
+            ) { #expect($0.status == .seeOther) }
 
+            #expect(try await App.find(appID, on: app.db) == nil)
+        }
+    }
+
+    /// **한 번이라도 나간 앱은 받아간 사람이 있다.** 지우면 그 사람들의 업데이트가
+    /// 끊긴다. 실수로 누를 수 없게 이름을 적게 한다.
+    @Test("나간 적 있는 앱은 이름을 적어야 지워진다")
+    func releasedAppNeedsTypedName() async throws {
+        try await withMigratedApp { app in
+            let (owner, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let record = try await app.seedApp(
+                bundleID: "com.example.live", name: "나간앱", owner: owner
+            )
+            let appID = try record.requireID()
+            _ = try await app.seedVersion(
+                appID: appID, short: "1.0.0", build: 1, state: .released, by: owner
+            )
+
+            // 이름 없이
+            try await app.testing().test(
+                .POST, "/apps/\(appID.uuidString)/delete", headers: .form(cookie: token)
+            ) { #expect($0.status == .badRequest) }
+            #expect(try await App.find(appID, on: app.db) != nil)
+
+            // 틀린 이름
+            try await app.testing().test(
+                .POST, "/apps/\(appID.uuidString)/delete",
+                headers: .form(cookie: token),
+                body: ByteBuffer(string: "confirmName=딴이름")
+            ) { #expect($0.status == .badRequest) }
+            #expect(try await App.find(appID, on: app.db) != nil)
+
+            // 맞는 이름
+            try await app.testing().test(
+                .POST, "/apps/\(appID.uuidString)/delete",
+                headers: .form(cookie: token),
+                body: ByteBuffer(string: "confirmName=%EB%82%98%EA%B0%84%EC%95%B1")
+            ) { #expect($0.status == .seeOther) }
+            #expect(try await App.find(appID, on: app.db) == nil)
+        }
+    }
+
+    /// **스크립트가 없어도 막혀야 한다.** 팝업은 실수를 막는 자리고, 진짜 문턱은
+    /// 서버에 있다.
+    @Test("이름 검사는 브라우저가 아니라 서버가 한다")
+    func guardLivesOnTheServer() async throws {
+        try await withMigratedApp { app in
+            let (owner, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let record = try await app.seedApp(
+                bundleID: "com.example.live2", name: "나간앱2", owner: owner
+            )
+            let appID = try record.requireID()
+            _ = try await app.seedVersion(
+                appID: appID, short: "1.0.0", build: 1, state: .released, by: owner
+            )
+
+            let cost = try await AppRemoval.cost(of: record, on: app.db)
+            #expect(cost.needsTypedName)
+
+            await #expect(throws: Abort.self) {
+                try await AppRemoval.remove(
+                    record,
+                    typedName: nil,
+                    by: owner,
+                    storage: app.artifactStorage,
+                    on: app.db,
+                    logger: app.logger
+                )
+            }
             #expect(try await App.find(appID, on: app.db) != nil)
         }
     }
@@ -164,7 +232,7 @@ struct PendingAppRemovalTests {
             ) { response in
                 let body = response.body.string
                 #expect(body.contains("/apps/\(appID)/delete"))
-                #expect(body.contains("이 등록 지우기"))
+                #expect(body.contains("이 앱 지우기"))
                 // 되돌릴 수 없다는 것을 누르기 전에 말한다.
                 #expect(body.contains("되돌릴 수 없습니다"))
             }
@@ -249,20 +317,47 @@ struct PendingAppRemovalTests {
         }
     }
 
-    @Test("확정된 앱 화면에는 없다")
-    func confirmedDetailHasNoRemoval() async throws {
+    /// 무엇을 잃는지 숫자로 안 보여주면 모르고 누른다.
+    @Test("무엇이 사라지는지 화면이 말한다")
+    func detailShowsWhatIsLost() async throws {
         try await withMigratedApp { app in
             let (owner, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
             let record = try await app.seedApp(
-                bundleID: "com.example.done", name: "확정된앱", owner: owner
+                bundleID: "com.example.live3", name: "나간앱3", owner: owner
             )
-            let appID = try record.requireID().uuidString
+            let appID = try record.requireID()
+            _ = try await app.seedVersion(
+                appID: appID, short: "1.0.0", build: 1, state: .released, by: owner
+            )
 
             try await app.testing().test(
-                .GET, "/apps/\(appID)", headers: .sessionCookie(token)
+                .GET, "/apps/\(appID.uuidString)", headers: .sessionCookie(token)
             ) { response in
-                #expect(!response.body.string.contains("이 등록 지우기"))
+                let body = response.body.string
+                #expect(body.contains("이미 나간 앱입니다"))
+                #expect(body.contains("버전 1개"))
+                // 이름을 적어야 지워진다는 것을 폼이 들고 있다.
+                #expect(body.contains(#"data-confirm-match="나간앱3""#))
             }
+        }
+    }
+
+    @Test("올릴 권한만 있는 사람 화면에는 지우기가 없다")
+    func uploaderSeesNoRemoval() async throws {
+        try await withMigratedApp { app in
+            let (owner, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let (member, memberToken) = try await app.makeUser(
+                email: "member@example.com", role: .developer
+            )
+            let record = try await app.seedApp(
+                bundleID: "com.example.shared", name: "같이쓰는앱", owner: owner
+            )
+            let appID = try record.requireID()
+            try await AppMember(appID: appID, userID: try member.requireID()).save(on: app.db)
+
+            try await app.testing().test(
+                .GET, "/apps/\(appID.uuidString)", headers: .sessionCookie(memberToken)
+            ) { #expect(!$0.body.string.contains("이 앱 지우기")) }
         }
     }
 }

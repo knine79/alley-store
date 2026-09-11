@@ -24,7 +24,7 @@ struct AppPagesController: RouteCollection, Sendable {
         pages.post("new", use: submitNew)
         pages.get(":appID", use: detail)
         pages.post(":appID", "edit", use: submitEdit)
-        pages.post(":appID", "delete", use: deletePendingApp)
+        pages.post(":appID", "delete", use: deleteApp)
         pages.post(":appID", "deploy-tokens", use: issueDeployToken)
         pages.post(":appID", "deploy-tokens", ":tokenID", "revoke", use: revokeDeployToken)
         pages.post(":appID", "feedback", use: submitFeedback)
@@ -319,7 +319,8 @@ struct AppPagesController: RouteCollection, Sendable {
                 notificationError: notificationError,
                 canUpload: canUpload,
                 canManage: canManage,
-                entitlementsWhereToFind: EntitlementsGuidance.whereToFind
+                entitlementsWhereToFind: EntitlementsGuidance.whereToFind,
+                removal: RemovalCostRow(try await AppRemoval.cost(of: app, on: request.db))
             )
         ).get()
     }
@@ -391,16 +392,18 @@ struct AppPagesController: RouteCollection, Sendable {
         return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
     }
 
-    // MARK: - 확정 전 앱 치우기
+    // MARK: - 앱 치우기
 
-    /// 번들 ID 가 확정되지 않은 등록을 지운다 (ADR-0039).
+    /// 앱을 지운다 (ADR-0041).
     @Sendable
-    func deletePendingApp(request: Request) async throws -> Response {
+    func deleteApp(request: Request) async throws -> Response {
         let user = try request.requireUser()
         let app = try await request.findApp()
+        let form = try? request.content.decode(DeleteAppForm.self)
 
-        try await PendingAppRemoval.remove(
+        try await AppRemoval.remove(
             app,
+            typedName: form?.confirmName,
             by: user,
             storage: request.application.artifactStorage,
             on: request.db,
@@ -785,6 +788,27 @@ struct AppDetailContext: Encodable {
     var canManage: Bool
     /// 권한이 모자라 실패한 버전 옆에 붙일 안내. 그 파일을 어디서 구하나 (ADR-0036).
     var entitlementsWhereToFind: String
+    /// 지우면 무엇이 사라지는지 (ADR-0041).
+    var removal: RemovalCostRow
+}
+
+/// 지우기 전에 보여줄 것. 숫자를 안 보여주면 무엇을 잃는지 모르고 누른다.
+struct RemovalCostRow: Encodable {
+    var versions: Int
+    var downloads: Int
+    /// 이름을 적어야 지워지는가. 한 번이라도 나갔거나 받아간 기록이 있으면 그렇다.
+    var needsTypedName: Bool
+
+    init(_ cost: AppRemoval.Cost) {
+        self.versions = cost.versions
+        self.downloads = cost.downloads
+        self.needsTypedName = cost.needsTypedName
+    }
+}
+
+/// 지우기 폼이 보내는 것. 잃을 것이 있는 앱에서만 이름을 받는다 (ADR-0041).
+struct DeleteAppForm: Content {
+    var confirmName: String?
 }
 
 struct FeedbackFormValues: Codable {

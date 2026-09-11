@@ -199,6 +199,8 @@ entitlements 세 개를 그대로 유지한 채 통과했습니다.
       ([ADR-0039](adr/0039-remove-unconfirmed-registrations.md))
 - [x] 새 버전도 드래그앤드롭 두 단계로. 버전·빌드·최소 macOS 를 묻지 않는다
       ([ADR-0040](adr/0040-version-upload-for-non-mac-developers.md))
+- [x] 어떤 앱이든 지운다. 나간 적 있는 앱은 이름을 적어야 하고 그 검사는 서버가 한다
+      ([ADR-0041](adr/0041-remove-any-app-with-a-real-guard.md))
 
 콘솔은 빌드 스텝 없는 중립 CSS 한 장으로 만듭니다. 강조색과 로고는 스토어 설정에서
 와서, 다른 조직이 띄우면 그 조직 것으로 보입니다. 사내용 고급 화면이 필요해지면

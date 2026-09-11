@@ -318,6 +318,17 @@ a.tab:hover {
     font-size: 15px;
 }
 
+/* 되돌릴 수 없는 동작만 모아두는 구역. 다른 것과 섞이면 실수로 누른다. */
+.section-danger {
+    border: 1px solid var(--danger);
+    border-radius: var(--radius);
+    padding: var(--space-4);
+}
+
+.section-danger .section-title {
+    color: var(--danger);
+}
+
 /* 되돌릴 수 없는 동작. 눌러도 되는 버튼처럼 보이면 안 된다. */
 .button-danger {
     border-color: var(--danger);

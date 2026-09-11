@@ -46,8 +46,9 @@
 | [0036](0036-ask-for-entitlements-only-when-needed.md) | entitlements 는 필요한 것이 확인된 뒤에 묻는다 | 수락됨 | 2026-09-10 |
 | [0037](0037-confirm-disk-image-upload-in-a-dialog.md) | dmg 업로드 확인을 `<dialog>` 로 받는다 | 수락됨 | 2026-09-10 |
 | [0038](0038-container-credentials-provider.md) | 컨테이너 자격증명 공급자를 직접 붙인다 | 수락됨 | 2026-09-10 |
-| [0039](0039-remove-unconfirmed-registrations.md) | 확정 전 등록만 지울 수 있다 | 수락됨 | 2026-09-11 |
+| [0039](0039-remove-unconfirmed-registrations.md) | 확정 전 등록만 지울 수 있다 | 대체됨 | 2026-09-11 |
 | [0040](0040-version-upload-for-non-mac-developers.md) | 새 버전도 파일만 놓게 한다 | 수락됨 | 2026-09-11 |
+| [0041](0041-remove-any-app-with-a-real-guard.md) | 어떤 앱이든 지울 수 있게 하되, 문턱을 서버에 둔다 | 수락됨 | 2026-09-11 |
 
 ## 언제 쓰나
 

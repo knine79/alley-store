@@ -10,19 +10,12 @@
     #endif
 </div>
 
-<!-- 확정 전 앱. 어떤 앱인지 아직 정해지지 않아서 지울 수 있다 (ADR-0039). -->
-#if(app.isPending):#if(canManage):
-<div class="notice notice-warn">
-    <p>
-        <strong>아직 확인 중입니다.</strong> 올린 파일을 열어 번들 ID 를 읽으면 이 앱이
-        무엇인지 정해집니다. 그 전에는 출시할 수 없고 목록에도 나오지 않습니다.
-    </p>
-    <form class="row-form" method="post" action="/apps/#(app.id)/delete"
-          data-confirm="이 등록을 지웁니다. 올린 파일도 함께 지워집니다. 되돌릴 수 없습니다.">
-        <button class="button button-danger" type="submit">이 등록 지우기</button>
-    </form>
-</div>
-#endif#endif
+#if(app.isPending):
+<p class="notice notice-warn">
+    <strong>아직 확인 중입니다.</strong> 올린 파일을 열어 번들 ID 를 읽으면 이 앱이
+    무엇인지 정해집니다. 그 전에는 출시할 수 없고 목록에도 나오지 않습니다.
+</p>
+#endif
 
 #if(app.summary):
 <p class="lead-text">#(app.summary)</p>
@@ -496,6 +489,29 @@
 </section>
 #endif
 
+<!-- 지우기는 맨 아래 따로 둔다. 다른 버튼들 사이에 끼면 실수로 누른다 (ADR-0041). -->
+#if(canManage):
+<section class="section section-danger">
+    <h2 class="section-title">이 앱 지우기</h2>
+    <p class="body-text">
+        #if(removal.needsTypedName):
+        <strong>이미 나간 앱입니다.</strong> 지우면 받아간 사람의 업데이트가 끊깁니다.
+        #else:
+        지우면 되돌릴 수 없습니다.
+        #endif
+        버전 #(removal.versions)개와 올린 파일#if(removal.downloads > 0):, 받아간 기록 #(removal.downloads)건#endif
+        이 함께 사라집니다.
+    </p>
+
+    <form class="row-form" method="post" action="/apps/#(app.id)/delete"
+          data-confirm="#(app.name) 을(를) 지웁니다. 버전 #(removal.versions)개와 올린 파일이 함께 사라집니다. 되돌릴 수 없습니다."
+          #if(removal.needsTypedName):data-confirm-match="#(app.name)"#endif>
+        <input type="hidden" name="confirmName" value="">
+        <button class="button button-danger" type="submit">이 앱 지우기</button>
+    </form>
+</section>
+#endif
+
 <!-- 되돌릴 수 없는 폼 앞에 세우는 팝업. `data-confirm` 이 붙은 폼이 쓴다. -->
 #if(canManage):
 <dialog class="modal" id="confirm-dialog" aria-labelledby="confirm-title">
@@ -503,6 +519,11 @@
         <h2 class="modal-title" id="confirm-title">정말 할까요?</h2>
         <div class="modal-body">
             <p id="confirm-message"></p>
+            <label class="field" id="confirm-match-field" hidden>
+                <span class="field-label" id="confirm-match-label"></span>
+                <input class="input" type="text" id="confirm-match-input"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+            </label>
         </div>
         <!-- 취소가 먼저라 Enter 로 닫으면 아무 일도 없다. Esc 도 마찬가지다. -->
         <div class="modal-actions">
