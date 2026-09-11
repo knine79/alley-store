@@ -93,12 +93,22 @@ public struct VersionController: RouteCollection, Sendable {
 
         let appID = try app.requireID()
         // 빌드 번호가 겹치면 macOS 가 어느 쪽이 최신인지 판단할 수 없다.
-        if try await Version.query(on: request.db)
+        //
+        // **올리는 사람이 빌드 번호를 아는 사람이라고 가정하지 않는다.** 번호만
+        // 알려주면 어디를 고쳐야 하는지 모른다. 무엇을 해야 하는지까지 말한다.
+        if let taken = try await Version.query(on: request.db)
             .filter(\.$app.$id == appID)
             .filter(\.$buildNumber == payload.buildNumber)
-            .first() != nil
+            .first()
         {
-            throw Abort(.conflict, reason: "빌드 번호 \(payload.buildNumber) 는 이미 쓰였습니다.")
+            let next = try await Self.nextBuildNumber(ofApp: appID, on: request.db)
+            throw Abort(
+                .conflict,
+                reason: """
+                    이미 올린 버전입니다 (\(taken.shortVersion), 빌드 \(taken.buildNumber)). \
+                    앱을 고쳤다면 빌드 번호를 \(next) 이상으로 올려 다시 만든 뒤 올려주세요.
+                    """
+            )
         }
 
         let version = Version(
@@ -140,6 +150,15 @@ public struct VersionController: RouteCollection, Sendable {
             )
         )
         return response
+    }
+
+    /// 다음에 쓸 수 있는 빌드 번호.
+    static func nextBuildNumber(ofApp appID: UUID, on database: any Database) async throws -> Int {
+        let highest = try await Version.query(on: database)
+            .filter(\.$app.$id == appID)
+            .sort(\.$buildNumber, .descending)
+            .first()
+        return (highest?.buildNumber ?? 0) + 1
     }
 
     /// 함께 올라온 entitlements 를 **받는 자리에서** 검사한다.

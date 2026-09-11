@@ -1,140 +1,207 @@
 /*
- * 버전 업로드 화면의 세 단계.
+ * 새 버전 올리기. 새 앱 등록과 같은 두 단계다 (ADR-0033, ADR-0040).
  *
- *   1. 서버에 버전을 만들고 올릴 자리(presigned URL)를 받는다
- *   2. 그 URL 로 파일을 스토리지에 직접 PUT 한다
- *   3. 다 올렸다고 서버에 알린다
+ *   1단계  파일을 끌어다 놓는다. 다른 입력은 없다
+ *   2단계  읽은 값을 확인하고 바뀐 것을 적는다. 둘 다 선택이다
  *
- * 바이너리가 서버를 거치지 않는 이유는 ADR-0009 에, 이 화면만 스크립트를 쓰는
- * 이유는 ADR-0012 에 있습니다.
+ * **올리는 사람이 macOS 개발자라고 가정하지 않는다.** 버전·빌드 번호·필요한 macOS
+ * 는 전부 파일 안에 있다. 읽을 수 있으면 읽어서 보여주기만 하고, 못 읽었을 때만 묻는다.
+ *
+ * 올리는 것은 세 요청이다.
+ *
+ *   1. POST /api/v1/apps/:id/versions       버전을 만들고 올릴 자리를 받는다
+ *   2. PUT  <presigned URL>                 스토리지에 직접 올린다 (ADR-0009)
+ *   3. POST /api/v1/versions/:id/complete   다 올렸다고 알린다
  *
  * 빌드 스텝 없이 브라우저가 그대로 읽습니다. 번들러도 프레임워크도 쓰지 않습니다.
  */
 (function () {
     "use strict";
 
-    var form = document.getElementById("upload-form");
-    if (!form) return;
+    /* dmg 는 버전을 미리 알 수 없어서 임시값으로 시작한다. 워커가 읽은 값으로
+       서버가 고친다 (ADR-0034). */
+    var PROVISIONAL_VERSION = "0.0.0";
 
-    var submit = document.getElementById("upload-submit");
+    var form = document.getElementById("upload-form");
+    var stepFile = document.getElementById("step-file");
+    var stepInfo = document.getElementById("step-info");
+    var dropzone = document.getElementById("dropzone");
+    var input = document.getElementById("bundle-file");
+    if (!form || !stepFile || !stepInfo || !dropzone || !input) return;
+
+    var dropStatus = document.getElementById("dropzone-status");
+    var infoLead = document.getElementById("step-info-lead");
+    var facts = document.getElementById("read-facts");
+    var manualFields = document.getElementById("manual-fields");
     var errorBox = document.getElementById("upload-error");
+    var submit = document.getElementById("upload-submit");
+    var backButton = document.getElementById("back-to-file");
     var progressRow = document.getElementById("upload-progress");
     var bar = document.getElementById("upload-bar");
-    var status = document.getElementById("upload-status");
+    var progressLabel = document.getElementById("upload-status");
+
+    /** 올리는 중인가. 그동안 파일을 바꾸지 못하게 한다. */
+    var locked = false;
+
+    backButton.hidden = false;
+    stepFile.hidden = false;
+    stepInfo.hidden = true;
+
+    // MARK: - 1단계
+
+    // 브라우저 기본 동작은 놓은 파일을 그 창에서 열어버린다. 그러면 우리 화면이
+    // 사라지고 사용자는 앱 파일을 브라우저가 다운로드하는 것을 본다.
+    ["dragenter", "dragover", "dragleave", "drop"].forEach(function (name) {
+        dropzone.addEventListener(name, function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        });
+    });
+    ["dragenter", "dragover"].forEach(function (name) {
+        dropzone.addEventListener(name, function () {
+            dropzone.classList.add("dropzone-armed");
+        });
+    });
+    ["dragleave", "drop"].forEach(function (name) {
+        dropzone.addEventListener(name, function () {
+            dropzone.classList.remove("dropzone-armed");
+        });
+    });
+
+    dropzone.addEventListener("drop", function (event) {
+        if (locked) return;
+        var files = event.dataTransfer && event.dataTransfer.files;
+        if (!files || !files.length) return;
+        input.files = files;
+        accept(files[0]);
+    });
+
+    input.addEventListener("change", function () {
+        if (locked) return;
+        if (input.files[0]) accept(input.files[0]);
+    });
+
+    backButton.addEventListener("click", function () {
+        input.value = "";
+        dropzone.classList.remove("dropzone-filled");
+        say(null);
+        showError(null);
+        stepInfo.hidden = true;
+        stepFile.hidden = false;
+    });
+
+    function accept(file) {
+        dropzone.classList.add("dropzone-filled");
+        showError(null);
+        say(file.name + " 를 읽는 중…");
+
+        window.AlleyBundleInfo.read(file).then(function (info) {
+            // **이 앱이 맞는지 먼저 본다.** 다른 앱 파일을 올리면 몇백 MB 를 보낸 뒤
+            // 서명 직전에 막힌다 (ADR-0029). 브라우저가 이미 아는 것을 스토리지까지
+            // 다녀와서 알려줄 이유가 없다.
+            var expected = form.dataset.appBundleId;
+            if (expected && info.bundleID && info.bundleID !== expected) {
+                refuse("이 파일은 다른 앱입니다. " + info.bundleID + " 의 파일이네요.");
+                return;
+            }
+            go(info);
+        }).catch(function (error) {
+            switch (error.kind) {
+            case "diskImage":
+                // 열어볼 수 없는 것이 정상이다. 올린 뒤에 읽는다.
+                go(null, null, true);
+                break;
+            case "notAnArchive":
+            case "notAnAppBundle":
+                refuse(error.message);
+                break;
+            default:
+                // zip 이긴 한데 우리가 못 읽었다(zip64 등). 그때만 손으로 받는다.
+                go(null, error.message, false);
+            }
+        });
+    }
+
+    /** 받을 수 없는 파일. 고른 것을 지우고 왜인지 말한다. */
+    function refuse(message) {
+        input.value = "";
+        dropzone.classList.remove("dropzone-filled");
+        say(null);
+        showError(message);
+    }
+
+    // MARK: - 2단계
+
+    /**
+     * `info` 가 있으면 zip 을 읽어낸 것이다. `isDiskImage` 면 dmg 라 읽을 수 없다.
+     * 둘 다 아니면 zip 인데 우리가 못 읽은 것이고, 그때만 사람에게 묻는다.
+     */
+    function go(info, whyNotRead, isDiskImage) {
+        if (info) {
+            fill(info);
+            infoLead.textContent = "파일에서 읽은 값입니다. 맞으면 그대로 올리세요.";
+            facts.hidden = false;
+            manualFields.hidden = true;
+        } else if (isDiskImage) {
+            infoLead.textContent =
+                "이 파일은 다 올린 뒤에야 열어볼 수 있습니다. 버전은 그때 읽어서 채웁니다.";
+            facts.hidden = true;
+            manualFields.hidden = true;
+        } else {
+            infoLead.textContent = "파일에서 버전을 읽지 못했습니다. 직접 적어주세요.";
+            facts.hidden = true;
+            manualFields.hidden = false;
+            if (whyNotRead) say(whyNotRead);
+        }
+
+        // 감출 때 `required` 도 떼어야 한다. 안 떼면 브라우저가 "invalid form control
+        // is not focusable" 로 제출을 막는데 화면에는 아무 표시도 나지 않는다.
+        form.elements.shortVersion.required = !manualFields.hidden;
+        form.elements.buildNumber.required = !manualFields.hidden;
+
+        stepFile.hidden = true;
+        stepInfo.hidden = false;
+        if (!manualFields.hidden) form.elements.shortVersion.focus();
+    }
+
+    function fill(info) {
+        form.elements.shortVersion.value = info.shortVersion || "";
+        form.elements.minimumOSVersion.value = info.minimumOSVersion || "";
+        // 빌드 번호는 서버가 정수로 받는다. 번들이 "0.7.10" 처럼 적어두는 일이 흔해서,
+        // 숫자로 읽히지 않으면 서버가 제안한 다음 번호를 그대로 쓴다.
+        if (/^\d+$/.test(info.buildNumber || "")) {
+            form.elements.buildNumber.value = info.buildNumber;
+        }
+
+        text("fact-version", info.shortVersion);
+        text("fact-build", form.elements.buildNumber.value);
+        text("fact-minimum", info.minimumOSVersion ? info.minimumOSVersion + " 이상" : null);
+    }
+
+    function text(id, value) {
+        var node = document.getElementById(id);
+        if (node) node.textContent = value == null || value === "" ? "—" : String(value);
+    }
+
+    function say(message) {
+        if (!dropStatus) return;
+        dropStatus.hidden = message === null;
+        dropStatus.textContent = message || "";
+    }
+
+    // MARK: - 올리기
 
     form.addEventListener("submit", function (event) {
         event.preventDefault();
-        start().catch(function (error) {
+        run().catch(function (error) {
             fail(error.message || "업로드에 실패했습니다.");
         });
     });
 
-    var readStatus = document.getElementById("bundle-read-status");
-
-    /** 받을 수 없는 파일이면 그 이유. 없으면 null. */
-    var refusal = null;
-
-    form.elements.file.addEventListener("change", function () {
-        refusal = null;
-        showError(null);
-        fillFromBundle().catch(function (error) {
-            if (error.kind === "notAnArchive" || error.kind === "notAnAppBundle") {
-                // **올려봐야 서명할 것이 없다.** 여기서 막지 않으면 다 올린 뒤에
-                // 워커가 실패시킨다.
-                refusal = error.message;
-                say(null);
-                showError(error.message);
-                return;
-            }
-            // 자동 채우기가 실패해도 업로드는 그대로 할 수 있다. 오류 상자가 아니라
-            // 그 칸 아래 설명으로 알린다. 빨간 배너를 띄우면 올리지 말라는 뜻으로 읽힌다.
-            say("번들에서 값을 읽지 못했습니다. 직접 입력하세요. (" + error.message + ")");
-        });
-    });
-
-    /*
-     * 고른 zip 의 Info.plist 로 버전·빌드·최소 macOS 를 채운다.
-     *
-     * **사람이 이미 적은 값은 건드리지 않는다.** 되돌릴 수 없는 것에 손대지 않는
-     * 편이 낫다. 번들의 값이 그 칸과 다르면 덮어쓰는 대신 무엇이 다른지 알린다.
-     * 일부러 다르게 적는 경우가 있는데(핫픽스 빌드 번호), 그걸 조용히 되돌리면
-     * 올린 사람은 자기가 적은 값이 사라진 것을 모른다.
-     */
-    async function fillFromBundle() {
-        var file = form.elements.file.files[0];
-        if (!file) {
-            say(null);
-            return;
-        }
-        say("번들을 읽는 중…");
-
-        var info = await window.AlleyBundleInfo.read(file);
-        var filled = [];
-        var differs = [];
-
-        [
-            ["shortVersion", info.shortVersion, "버전"],
-            ["buildNumber", info.buildNumber, "빌드 번호"],
-            ["minimumOSVersion", info.minimumOSVersion, "최소 macOS"]
-        ].forEach(function (row) {
-            var field = form.elements[row[0]];
-            var value = row[1];
-            if (!field || !value) return;
-
-            // 빌드 번호는 서버가 정수로 받는다. 번들이 "0.7.10" 처럼 적어두는 일이
-            // 흔해서, 숫자로 읽히지 않으면 채우지 않고 사람에게 맡긴다.
-            if (row[0] === "buildNumber" && !/^\d+$/.test(value)) {
-                differs.push(row[2] + ' 은 번들이 "' + value + '" 라고 적어 숫자로 쓸 수 없습니다');
-                return;
-            }
-
-            if (isOursToFill(field)) {
-                field.value = value;
-                field.dataset.filledFromBundle = "1";
-                filled.push(row[2] + " " + value);
-            } else if (field.value.trim() !== value) {
-                differs.push(row[2] + ' 은 번들이 "' + value + '" 라고 적었습니다');
-            }
-        });
-
-        var lines = [];
-        if (info.bundleID) lines.push("번들 ID: " + info.bundleID);
-        if (filled.length) lines.push("채웠습니다 - " + filled.join(", "));
-        if (differs.length) lines.push("적어둔 값을 그대로 뒀습니다 - " + differs.join("; "));
-        say(lines.length ? lines.join(" / ") : "번들에서 채울 값이 없었습니다.");
-    }
-
-    /*
-     * 이 칸을 우리가 채워도 되는가.
-     *
-     * 셋 중 하나면 된다. 비어 있거나, 앞서 우리가 채운 것이거나, **서버가 제안한
-     * 값 그대로** 인 경우다.
-     *
-     * 마지막 조건이 없으면 빌드 번호가 영영 안 채워진다. 그 칸은 서버가 다음 번호를
-     * 미리 넣어두는데(`suggestedBuildNumber`), 그것을 사람이 적은 값으로 착각해서
-     * 지켜버렸다. 실제로 브라우저로 돌려보고서야 나왔다.
-     */
-    function isOursToFill(field) {
-        if (field.value.trim() === "") return true;
-        if (field.dataset.filledFromBundle === "1") return true;
-        var suggested = field.dataset.suggested;
-        return suggested !== undefined && field.value.trim() === suggested.trim();
-    }
-
-    function say(message) {
-        if (!readStatus) return;
-        readStatus.hidden = message === null;
-        readStatus.textContent = message || "";
-    }
-
-    async function start() {
-        var file = form.elements.file.files[0];
+    async function run() {
+        var file = input.files[0];
         if (!file) {
             fail("올릴 파일을 고르세요.");
-            return;
-        }
-        if (refusal) {
-            fail(refusal);
             return;
         }
 
@@ -143,7 +210,7 @@
         progressRow.hidden = false;
         setProgress(0, "버전을 만드는 중…");
 
-        var ticket = await createVersion(file);
+        var ticket = await createVersion();
         setProgress(0, "올리는 중…");
         await putFile(ticket.uploadURL, file);
 
@@ -154,12 +221,18 @@
         window.location.href = form.dataset.appUrl;
     }
 
-    async function createVersion(file) {
+    async function createVersion() {
+        // dmg 는 버전을 아직 모른다. 임시값으로 만들고 올린 뒤 서버가 고친다.
+        var unknown = facts.hidden && manualFields.hidden;
         var body = {
-            shortVersion: form.elements.shortVersion.value,
+            shortVersion: unknown
+                ? PROVISIONAL_VERSION
+                : form.elements.shortVersion.value.trim(),
             buildNumber: Number(form.elements.buildNumber.value),
             releaseNotes: emptyToNull(form.elements.releaseNotes.value),
-            minimumOSVersion: emptyToNull(form.elements.minimumOSVersion.value)
+            minimumOSVersion: unknown
+                ? null
+                : emptyToNull(form.elements.minimumOSVersion.value)
         };
 
         var response = await fetch(form.dataset.createUrl, {
@@ -220,13 +293,17 @@
 
     // MARK: - 화면
 
-    function setProgress(percent, text) {
+    function setProgress(percent, label) {
         bar.value = percent;
-        status.textContent = text;
+        progressLabel.textContent = label;
     }
 
     function busy(isBusy) {
+        locked = isBusy;
         submit.disabled = isBusy;
+        backButton.disabled = isBusy;
+        input.disabled = isBusy;
+        dropzone.classList.toggle("dropzone-locked", isBusy);
         submit.textContent = isBusy ? "올리는 중…" : "올리기";
     }
 

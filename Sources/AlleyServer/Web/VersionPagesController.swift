@@ -105,13 +105,12 @@ struct VersionPagesController: RouteCollection, Sendable {
                 page: try await request.pageContext(title: "새 버전"),
                 appID: appID.uuidString,
                 appName: app.name,
+                appBundleID: app.bundleIDPending ? "" : app.bundleID,
                 // 다음 빌드 번호를 미리 채워준다. 같은 번호를 쓰면 서버가 거절하는데,
                 // 마지막 번호가 몇이었는지 확인하러 목록으로 돌아가게 할 이유가 없다.
                 suggestedBuildNumber: try await nextBuildNumber(ofApp: appID, on: request.db),
                 createVersionPath: APIPath.versions(ofApp: appID),
-                versionRootPath: "\(APIPath.apiRoot)/versions",
-                // 안내 문구는 CLI·워커와 같은 곳에서 가져온다. 화면마다 다르게 쓰면
-                // 읽는 사람이 같은 문제를 매번 처음 보게 된다.
+                versionRootPath: "\(APIPath.apiRoot)/versions"
             )
         ).get()
     }
@@ -248,6 +247,9 @@ struct VersionFormContext: Encodable {
     var page: PageContext
     var appID: String
     var appName: String
+    /// 이 앱의 번들 ID. 브라우저가 **올린 파일이 이 앱이 맞는지** 먼저 본다.
+    /// 확정 전이면 빈 문자열이고, 그때는 대조할 것이 없다.
+    var appBundleID: String
     var suggestedBuildNumber: Int
     /// 스크립트가 버전을 만들 때 부를 경로.
     var createVersionPath: String

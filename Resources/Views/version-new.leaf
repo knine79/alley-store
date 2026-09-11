@@ -2,14 +2,11 @@
 #export("content"):
 <nav class="breadcrumb"><a href="/apps">앱</a> · <a href="/apps/#(appID)">#(appName)</a></nav>
 <h1 class="page-title">새 버전</h1>
-<p class="page-lead">
-    파일은 이 서버를 거치지 않고 스토리지로 바로 올라갑니다. 창을 닫으면 업로드가 끊깁니다.
-</p>
 
 <noscript>
     <p class="notice notice-error">
-        이 화면은 브라우저에서 스토리지로 직접 업로드합니다. 자바스크립트를 켜거나
-        <code>alley</code> CLI 로 올려주세요.
+        이 화면은 자바스크립트가 있어야 합니다. 켜거나 <code>alley</code> 명령으로
+        올려주세요.
     </p>
 </noscript>
 
@@ -18,66 +15,102 @@
 <form class="form" id="upload-form"
       data-create-url="#(createVersionPath)"
       data-version-root="#(versionRootPath)"
-      data-app-url="/apps/#(appID)">
-    <fieldset class="form-group">
-        <legend class="form-group-title">올릴 파일</legend>
+      data-app-url="/apps/#(appID)"
+      data-app-bundle-id="#(appBundleID)">
 
-        <label class="field">
-            <span class="field-label">앱 파일</span>
-            <input class="input" type="file" name="file" required accept=".zip,.dmg,application/zip,application/x-apple-diskimage">
-            <span class="field-note">
-                zip 또는 dmg. <code>.app</code> 번들은 디렉터리라 그대로 올릴 수 없습니다.
-                <strong>zip 으로 올리면</strong> 아래 세 칸을 번들에서 읽어 채웁니다.
-                dmg 는 브라우저가 열 수 없어 직접 적으셔야 합니다.
-            </span>
-            <span class="field-note" id="bundle-read-status" hidden></span>
-        </label>
-    </fieldset>
+    <!-- ── 1단계: 파일 ──────────────────────────────────────
+         스크립트가 없으면 2단계가 그대로 드러나 있다. 그래도 업로드는 스크립트가
+         있어야 되므로 위 noscript 가 그것을 말한다 (ADR-0012). -->
+    <div id="step-file" hidden>
+        <p class="page-lead">새 버전 파일을 여기에 끌어다 놓으세요.</p>
 
-    <fieldset class="form-group">
-        <legend class="form-group-title">번들이 밝히는 값</legend>
+        <div class="dropzone" id="dropzone">
+            <input class="dropzone-input" type="file" id="bundle-file" name="file"
+                   accept=".zip,.dmg,application/zip,application/x-apple-diskimage">
+            <span class="dropzone-title">파일을 끌어다 놓거나 눌러서 고르세요</span>
+            <span class="dropzone-note">zip 또는 dmg. 버전 번호는 파일에서 읽습니다.</span>
+        </div>
 
-        <label class="field">
-            <span class="field-label">버전</span>
-            <input class="input" type="text" name="shortVersion" required placeholder="1.0.0"
-                   autocapitalize="off" autocorrect="off" spellcheck="false">
-            <span class="field-note">사람이 보는 번호입니다. <code>CFBundleShortVersionString</code> 과 맞추세요.</span>
-        </label>
+        <p class="field-note" id="dropzone-status" hidden></p>
 
-        <label class="field">
-            <span class="field-label">빌드 번호</span>
-            <!-- `data-suggested` 는 이 값이 서버의 제안이라는 표시다. 사람이 적은
-                 값과 구별해야 번들에서 읽은 값으로 덮을 수 있다 (ADR-0030). -->
-            <input class="input" type="number" name="buildNumber" required min="1"
-                   value="#(suggestedBuildNumber)"
-                   data-suggested="#(suggestedBuildNumber)">
-            <span class="field-note">같은 앱 안에서 겹칠 수 없습니다. macOS 가 이 값으로 최신을 판단합니다.</span>
-        </label>
+        <div class="form-actions">
+            <a class="button" href="/apps/#(appID)">취소</a>
+        </div>
+    </div>
 
-        <label class="field">
-            <span class="field-label">최소 macOS 버전 <span class="field-optional">선택</span></span>
-            <input class="input" type="text" name="minimumOSVersion" placeholder="14.0"
-                   autocapitalize="off" autocorrect="off" spellcheck="false">
-        </label>
-    </fieldset>
+    <!-- ── 2단계: 확인하고 올린다 ───────────────────────── -->
+    <div id="step-info">
+        <p class="page-lead" id="step-info-lead">
+            파일에서 읽은 값입니다.
+        </p>
 
-    <fieldset class="form-group">
-        <legend class="form-group-title">사용자에게 알릴 것</legend>
+        <!-- zip 을 읽어냈을 때. 고칠 것이 없으니 보여주기만 한다. -->
+        <div class="stat-row" id="read-facts" hidden>
+            <div class="stat">
+                <span class="stat-value" id="fact-version">—</span>
+                <span class="stat-label">버전</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value" id="fact-build">—</span>
+                <span class="stat-label">빌드</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value" id="fact-minimum">—</span>
+                <span class="stat-label">필요한 macOS</span>
+            </div>
+        </div>
 
-        <label class="field">
-            <span class="field-label">릴리즈 노트 <span class="field-optional">선택</span></span>
-            <textarea class="input" name="releaseNotes" rows="4"></textarea>
-        </label>
-    </fieldset>
+        <!-- 파일에서 못 읽었을 때만 나온다. 대부분은 볼 일이 없다. -->
+        <fieldset class="form-group" id="manual-fields" hidden>
+            <legend class="form-group-title">버전 번호</legend>
 
+            <label class="field">
+                <span class="field-label">버전</span>
+                <input class="input" type="text" name="shortVersion" placeholder="1.0.0"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+                <span class="field-note">사람이 보는 번호입니다. 예: 1.2.0</span>
+            </label>
+
+            <label class="field">
+                <span class="field-label">빌드 번호</span>
+                <!-- `data-suggested` 는 이 값이 서버의 제안이라는 표시다. 사람이 적은
+                     값과 구별해야 파일에서 읽은 값으로 덮을 수 있다 (ADR-0030). -->
+                <input class="input" type="number" name="buildNumber" min="1"
+                       value="#(suggestedBuildNumber)"
+                       data-suggested="#(suggestedBuildNumber)">
+                <span class="field-note">
+                    올릴 때마다 커져야 하는 숫자입니다. 다음 번호를 넣어뒀으니 그대로 두셔도 됩니다.
+                </span>
+            </label>
+
+            <label class="field">
+                <span class="field-label">필요한 macOS 버전 <span class="field-optional">선택</span></span>
+                <input class="input" type="text" name="minimumOSVersion" placeholder="14.0"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+            </label>
+        </fieldset>
+
+        <fieldset class="form-group">
+            <legend class="form-group-title">무엇이 바뀌었나요? <span class="field-optional">선택</span></legend>
+
+            <label class="field">
+                <span class="field-label visually-hidden">바뀐 것</span>
+                <textarea class="input" name="releaseNotes" rows="4"
+                          placeholder="받는 사람에게 보여줄 내용입니다. 비워두셔도 됩니다."></textarea>
+            </label>
+        </fieldset>
+
+        <div class="form-actions">
+            <a class="button" href="/apps/#(appID)" id="cancel-info">취소</a>
+            <button class="button" type="button" id="back-to-file" hidden>뒤로</button>
+            <button class="button button-primary" type="submit" id="upload-submit">올리기</button>
+        </div>
+    </div>
+
+    <!-- 두 단계 밖에 둔다. 어디서 눌러도 진행률은 같은 자리에 나온다. -->
     <div class="progress-row" id="upload-progress" hidden>
         <progress class="progress" id="upload-bar" max="100" value="0"></progress>
         <span class="progress-label" id="upload-status">준비 중…</span>
-    </div>
-
-    <div class="form-actions">
-        <a class="button" href="/apps/#(appID)">취소</a>
-        <button class="button button-primary" type="submit" id="upload-submit">올리기</button>
     </div>
 </form>
 
