@@ -40,7 +40,10 @@ public enum CLI {
         """
 
     /// 종료 코드. CI 가 이걸로 판단한다.
-    public enum ExitCode: Int32 {
+    ///
+    /// `Sendable` 을 직접 적는다. 모듈 밖에서는 public 타입에 이 적합성이 자동으로
+    /// 붙지 않아서, `main.swift` 가 `run` 의 결과를 받는 자리에서 막힌다.
+    public enum ExitCode: Int32, Sendable {
         case success = 0
         case failure = 1
         /// 명령을 잘못 썼다. 서버 문제와 구분해서 재시도할 가치가 없음을 알린다.
