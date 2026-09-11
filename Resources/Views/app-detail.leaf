@@ -493,22 +493,19 @@
 #if(canManage):
 <section class="section section-danger">
     <h2 class="section-title">이 앱 지우기</h2>
-    <p class="body-text">
-        #if(removal.needsTypedName):
-        <strong>이미 나간 앱입니다.</strong> 지우면 받아간 사람의 업데이트가 끊깁니다.
-        #else:
-        지우면 되돌릴 수 없습니다.
-        #endif
-        버전 #(removal.versions)개와 올린 파일#if(removal.downloads > 0):, 받아간 기록 #(removal.downloads)건#endif
-        이 함께 사라집니다.
-    </p>
+    <p class="danger-note">버전 #(removal.versions)개와 올린 파일#if(removal.downloads > 0):, 받아간 기록 #(removal.downloads)건#endif이 함께 사라집니다. 되돌릴 수 없습니다.</p>
+    #if(removal.needsTypedName):
+    <p class="danger-note"><strong>이미 나간 앱입니다.</strong> 받아간 사람의 맥에는 앱이 그대로 남고 새 버전만 오지 않습니다. 지우려면 앱 이름을 적어야 합니다.</p>
+    #endif
 
-    <form class="row-form" method="post" action="/apps/#(app.id)/delete"
-          data-confirm="#(app.name) 을(를) 지웁니다. 버전 #(removal.versions)개와 올린 파일이 함께 사라집니다. 되돌릴 수 없습니다."
-          #if(removal.needsTypedName):data-confirm-match="#(app.name)"#endif>
-        <input type="hidden" name="confirmName" value="">
-        <button class="button button-danger" type="submit">이 앱 지우기</button>
-    </form>
+    <div class="danger-actions">
+        <form method="post" action="/apps/#(app.id)/delete"
+              data-confirm="#(app.name) 을(를) 지웁니다. 버전 #(removal.versions)개와 올린 파일이 함께 사라집니다. 되돌릴 수 없습니다."
+              #if(removal.needsTypedName):data-confirm-match="#(app.name)"#endif>
+            <input type="hidden" name="confirmName" value="">
+            <button class="button button-danger" type="submit">이 앱 지우기</button>
+        </form>
+    </div>
 </section>
 #endif
 

@@ -25,6 +25,16 @@
     /* 되돌릴 수 없는 동작의 색. 흰 글자를 얹는 자리라 충분히 어두워야 한다. */
     --danger: #c0392b;
 
+    /* 글자 크기. 한 군데서 키우고 줄인다. */
+    --font-xs: 13px;
+    --font-sm: 14px;
+    --font-md: 15px;
+    --font-base: 16px;
+    --font-lg: 18px;
+    --font-xl: 20px;
+    --font-title: 30px;
+    --font-hero: 34px;
+
     --space-1: 4px;
     --space-2: 8px;
     --space-3: 12px;
@@ -81,7 +91,7 @@ body {
     color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR",
         system-ui, sans-serif;
-    font-size: 15px;
+    font-size: var(--font-base);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
 }
@@ -136,7 +146,7 @@ code {
 
 .chrome-link {
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: var(--font-md);
     text-decoration: none;
 }
 
@@ -147,7 +157,7 @@ code {
 
 .chrome-user {
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: var(--font-md);
     /* 이름이 길어도 껍데기가 무너지지 않게 한다. */
     max-width: 14em;
     overflow: hidden;
@@ -169,7 +179,7 @@ code {
 
 .page-title {
     margin: 0 0 var(--space-2);
-    font-size: 26px;
+    font-size: var(--font-title);
     line-height: 1.3;
     letter-spacing: -0.01em;
 }
@@ -208,7 +218,7 @@ code {
     /* 현재가 아닌 칸도 같은 두께를 자리로 잡아둔다. 없으면 현재 칸만 2px 밀려 내려간다. */
     border-bottom: 2px solid transparent;
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: var(--font-md);
     text-decoration: none;
     white-space: nowrap;
 }
@@ -246,7 +256,7 @@ a.tab:hover {
 
 .hero-title {
     margin: 0 0 var(--space-3);
-    font-size: 28px;
+    font-size: var(--font-hero);
     line-height: 1.3;
     letter-spacing: -0.02em;
 }
@@ -258,7 +268,7 @@ a.tab:hover {
 
 .hero-note {
     margin: var(--space-5) 0 0;
-    font-size: 14px;
+    font-size: var(--font-md);
     color: var(--text-muted);
 }
 
@@ -273,7 +283,7 @@ a.tab:hover {
 
 .status-code {
     margin: 0 0 var(--space-2);
-    font-size: 13px;
+    font-size: var(--font-sm);
     font-weight: 600;
     letter-spacing: 0.08em;
     color: var(--text-muted);
@@ -284,13 +294,15 @@ a.tab:hover {
 .button {
     display: inline-block;
     padding: var(--space-2) var(--space-4);
+    min-height: 36px;
     border: 1px solid var(--border);
     border-radius: var(--radius-small);
     background: var(--surface);
     color: var(--text);
     font: inherit;
-    font-size: 14px;
+    font-size: var(--font-md);
     line-height: 1.4;
+    font-weight: 500;
     text-decoration: none;
     cursor: pointer;
 }
@@ -315,18 +327,41 @@ a.tab:hover {
 
 .button-large {
     padding: var(--space-3) var(--space-5);
-    font-size: 15px;
+    font-size: var(--font-base);
 }
 
-/* 되돌릴 수 없는 동작만 모아두는 구역. 다른 것과 섞이면 실수로 누른다. */
+/* 되돌릴 수 없는 동작만 모아두는 구역. 다른 것과 섞이면 실수로 누른다.
+ *
+ * **빨갛게 칠하지 않는다.** 테두리와 제목까지 빨가면 화면이 소리를 지르고, 정작
+ * 중요한 빨강(버튼)이 묻힌다. 여기서 빨강은 버튼 하나에만 쓴다. */
 .section-danger {
-    border: 1px solid var(--danger);
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-5);
+    border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
     border-radius: var(--radius);
-    padding: var(--space-4);
+    background: color-mix(in srgb, var(--danger) 4%, var(--surface));
 }
 
 .section-danger .section-title {
-    color: var(--danger);
+    margin: 0;
+}
+
+/* 무엇을 잃는지. 줄바꿈을 보존하지 않는다 - 템플릿의 줄바꿈이 그대로 나오면
+   "올린 파일 / 이 함께 사라집니다" 처럼 엉뚱한 데서 끊긴다. */
+.danger-note {
+    margin: 0;
+    color: var(--text-muted);
+    max-width: 52ch;
+}
+
+.danger-note strong {
+    color: var(--text);
+}
+
+.danger-actions {
+    display: flex;
+    justify-content: flex-end;
 }
 
 /* 되돌릴 수 없는 동작. 눌러도 되는 버튼처럼 보이면 안 된다. */
@@ -360,11 +395,12 @@ a.tab:hover {
 
 .empty {
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: 1px dashed var(--border);
     border-radius: var(--radius);
-    padding: var(--space-6);
+    padding: var(--space-4);
     text-align: center;
     color: var(--text-muted);
+    font-size: var(--font-md);
 }
 
 .empty p {
@@ -373,7 +409,7 @@ a.tab:hover {
 
 .empty-note {
     margin-top: var(--space-2) !important;
-    font-size: 14px;
+    font-size: var(--font-md);
 }
 
 /* 허용 도메인처럼 짧은 항목을 나열하는 자리. */
@@ -399,7 +435,7 @@ a.tab:hover {
 
 .breadcrumb {
     margin-bottom: var(--space-2);
-    font-size: 13px;
+    font-size: var(--font-sm);
 }
 
 /* 제목과 번들 ID 를 한 줄에 둔다. ID 를 아래 줄에 따로 두면
@@ -418,7 +454,7 @@ a.tab:hover {
 
 .title-id {
     color: var(--text-muted);
-    font-size: 13px;
+    font-size: var(--font-sm);
 }
 
 .breadcrumb a {
@@ -433,7 +469,7 @@ a.tab:hover {
 
 .lead-text {
     margin: 0 0 var(--space-3);
-    font-size: 16px;
+    font-size: var(--font-lg);
 }
 
 .body-text {
@@ -448,7 +484,19 @@ a.tab:hover {
 
 .section-title {
     margin: 0 0 var(--space-4);
-    font-size: 17px;
+    font-size: var(--font-xl);
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+}
+
+/* 섹션 사이에 실선 하나. 배경이 같은 화면에서 제목만으로는 경계가 안 보인다. */
+.section + .section {
+    padding-top: var(--space-7);
+    border-top: 1px solid var(--border);
+}
+
+.section + .section-danger {
+    border-top: 0;
 }
 
 /* ── 카드 목록 ───────────────────────────────────────────── */
@@ -490,13 +538,13 @@ a.tab:hover {
 }
 
 .card-title {
-    font-size: 16px;
+    font-size: var(--font-lg);
     font-weight: 600;
 }
 
 .card-id {
     color: var(--text-muted);
-    font-size: 13px;
+    font-size: var(--font-sm);
 }
 
 .card-summary {
@@ -511,7 +559,7 @@ a.tab:hover {
     align-items: center;
     gap: var(--space-3);
     flex-wrap: wrap;
-    font-size: 13px;
+    font-size: var(--font-sm);
 }
 
 /* 출시본이 있다는 것은 눈에 들어와야 하고, 없다는 것은 조용해야 한다.
@@ -538,7 +586,7 @@ a.tab:hover {
     border-radius: 999px;
     background: var(--bg);
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: var(--font-xs);
     line-height: 1.6;
     white-space: nowrap;
 }
@@ -564,7 +612,7 @@ a.tab:hover {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     overflow: hidden;
-    font-size: 14px;
+    font-size: var(--font-md);
 }
 
 .table th,
@@ -580,7 +628,7 @@ a.tab:hover {
 
 .table th {
     background: var(--bg);
-    font-size: 13px;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-muted);
     white-space: nowrap;
@@ -612,7 +660,7 @@ a.tab:hover {
 .table-note {
     display: block;
     margin-top: var(--space-1);
-    font-size: 13px;
+    font-size: var(--font-sm);
     color: var(--text-muted);
 }
 
@@ -636,7 +684,7 @@ a.tab:hover {
 }
 
 .field-label {
-    font-size: 14px;
+    font-size: var(--font-md);
     font-weight: 500;
 }
 
@@ -646,19 +694,20 @@ a.tab:hover {
 }
 
 .field-note {
-    font-size: 13px;
+    font-size: var(--font-sm);
     color: var(--text-muted);
 }
 
 .input {
     width: 100%;
+    min-height: 36px;
     padding: var(--space-2) var(--space-3);
     border: 1px solid var(--border);
     border-radius: var(--radius-small);
     background: var(--surface);
     color: var(--text);
     font: inherit;
-    font-size: 15px;
+    font-size: var(--font-base);
 }
 
 .input:focus-visible {
@@ -733,7 +782,7 @@ textarea.input {
 .form-group-title {
     padding: 0;
     margin: 0 0 var(--space-3);
-    font-size: 15px;
+    font-size: var(--font-base);
     font-weight: 600;
     color: var(--text);
 }
@@ -746,7 +795,7 @@ textarea.input {
     border-radius: var(--radius);
     border: 1px solid var(--border);
     background: var(--surface);
-    font-size: 14px;
+    font-size: var(--font-md);
 }
 
 .notice-error {
@@ -818,13 +867,13 @@ textarea.input {
 }
 
 .dropzone-title {
-    font-size: 15px;
+    font-size: var(--font-base);
     font-weight: 600;
     color: var(--text);
 }
 
 .dropzone-note {
-    font-size: 13px;
+    font-size: var(--font-sm);
     color: var(--text-muted);
 }
 
@@ -853,7 +902,7 @@ textarea.input {
 .notice-aside {
     display: inline-block;
     margin-top: var(--space-2);
-    font-size: 13px;
+    font-size: var(--font-sm);
 }
 
 /* ── 접어두는 자리 ──────────────────────────────────────── */
@@ -871,7 +920,7 @@ textarea.input {
 .disclosure-summary {
     padding: var(--space-3) var(--space-4);
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--font-md);
     font-weight: 500;
     color: var(--text);
     /* 기본 삼각형을 그대로 쓴다. 직접 그리면 브라우저마다 어긋난다. */
@@ -887,7 +936,7 @@ textarea.input {
 .disclosure-note {
     margin-left: var(--space-2);
     font-weight: 400;
-    font-size: 13px;
+    font-size: var(--font-sm);
     color: var(--text-muted);
 }
 
@@ -922,7 +971,7 @@ textarea.input {
     flex-wrap: wrap;
     padding: var(--space-3) var(--space-4);
     border-bottom: 1px solid var(--border);
-    font-size: 14px;
+    font-size: var(--font-md);
 }
 
 .person:last-child {
@@ -982,7 +1031,7 @@ textarea.input {
     margin: 0;
     padding: var(--space-3) var(--space-4);
     border-bottom: 1px solid var(--border);
-    font-size: 16px;
+    font-size: var(--font-lg);
 }
 
 .modal-body {
@@ -1023,7 +1072,7 @@ textarea.input {
 
 .select {
     width: auto;
-    font-size: 14px;
+    font-size: var(--font-md);
     padding: var(--space-1) var(--space-2);
 }
 
@@ -1054,14 +1103,14 @@ textarea.input {
 .choice-name,
 .check-name {
     display: block;
-    font-size: 14px;
+    font-size: var(--font-md);
     font-weight: 500;
 }
 
 .choice-note,
 .check-note {
     display: block;
-    font-size: 13px;
+    font-size: var(--font-sm);
     color: var(--text-muted);
 }
 
@@ -1125,7 +1174,7 @@ textarea.input {
 }
 
 .progress-label {
-    font-size: 13px;
+    font-size: var(--font-sm);
     color: var(--text-muted);
     /* 퍼센트가 바뀔 때마다 막대가 좌우로 흔들리지 않게 자리를 잡아둔다. */
     min-width: 9em;
@@ -1157,14 +1206,14 @@ textarea.input {
 
 .token-title {
     margin: 0 0 var(--space-2);
-    font-size: 14px;
+    font-size: var(--font-md);
     font-weight: 600;
 }
 
 .token-value {
     display: block;
     padding: var(--space-3);
-    font-size: 13px;
+    font-size: var(--font-sm);
     line-height: 1.5;
     /* 토큰은 길고 띄어쓰기가 없다. 넘치게 두면 상자가 가로로 삐져나간다. */
     word-break: break-all;
@@ -1173,7 +1222,7 @@ textarea.input {
 
 .token-note {
     margin: var(--space-3) 0 0;
-    font-size: 13px;
+    font-size: var(--font-sm);
     color: var(--text-muted);
 }
 
@@ -1186,7 +1235,7 @@ textarea.input {
     border-radius: var(--radius-small);
     background: var(--bg);
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-    font-size: 11px;
+    font-size: var(--font-xs);
     color: var(--text-muted);
 }
 
@@ -1195,7 +1244,7 @@ textarea.input {
 /* 평소에는 접어둔다. 잘 되고 있을 때 읽을 것이 아니다. */
 .log {
     margin-top: var(--space-2);
-    font-size: 13px;
+    font-size: var(--font-sm);
 }
 
 .log summary {
@@ -1213,7 +1262,7 @@ textarea.input {
     border-radius: var(--radius-small);
     background: var(--bg);
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-    font-size: 12px;
+    font-size: var(--font-xs);
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
@@ -1230,7 +1279,7 @@ textarea.input {
 .rating-count {
     color: var(--text-muted);
     font-weight: 400;
-    font-size: 13px;
+    font-size: var(--font-sm);
 }
 
 /* 별 다섯 개를 가로로 늘어놓는다. 세로로 쌓이면 폼이 길어진다. */
@@ -1248,7 +1297,7 @@ textarea.input {
     border: 1px solid var(--border);
     border-radius: var(--radius-small);
     background: var(--surface);
-    font-size: 14px;
+    font-size: var(--font-md);
     cursor: pointer;
 }
 
@@ -1283,18 +1332,18 @@ textarea.input {
     align-items: baseline;
     gap: var(--space-3);
     flex-wrap: wrap;
-    font-size: 13px;
+    font-size: var(--font-sm);
 }
 
 .feedback-stars {
     color: var(--accent);
-    font-size: 14px;
+    font-size: var(--font-md);
     letter-spacing: 0.05em;
 }
 
 .feedback-who {
     font-weight: 500;
-    font-size: 14px;
+    font-size: var(--font-md);
 }
 
 /* 지우기 버튼은 오른쪽 끝으로 민다. 글보다 눈에 띌 이유가 없다. */
@@ -1338,7 +1387,7 @@ textarea.input {
 
 .stat-value {
     display: block;
-    font-size: 28px;
+    font-size: var(--font-hero);
     font-weight: 600;
     line-height: 1.2;
     /* 숫자가 바뀔 때 폭이 흔들리지 않게 고정폭 숫자를 쓴다. */
@@ -1348,6 +1397,6 @@ textarea.input {
 .stat-label {
     display: block;
     margin-top: var(--space-1);
-    font-size: 13px;
+    font-size: var(--font-sm);
     color: var(--text-muted);
 }
