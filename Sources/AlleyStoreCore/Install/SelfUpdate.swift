@@ -83,6 +83,10 @@ enum SelfUpdate {
     /// 교체 스크립트를 띄우고 앱을 종료한다.
     ///
     /// 이 함수가 돌아오면 앱은 곧 사라진다. 부르는 쪽에서 뒤에 할 일을 두면 안 된다.
+    ///
+    /// 마지막에 `NSApplication` 을 건드리므로 메인 액터에 묶는다. 부르는 쪽
+    /// (`StoreModel`)도 메인 액터라 경계를 넘지 않는다.
+    @MainActor
     static func replaceAndRelaunch(with replacement: URL) throws {
         guard let destination = currentBundle() else {
             throw SelfUpdateError.notInBundle
