@@ -233,7 +233,19 @@ Incoming Webhook 주소를 넣습니다. 메일은 지원하지 않습니다.
 ### 권하는 방법: 비공개 레포 하나
 
 **운영 설정만 담는 별도의 비공개 저장소를 하나 만드세요.** 제품 코드는 여기 있고,
-조직에 묶이는 것은 거기 둡니다.
+조직에 묶이는 것은 거기 둡니다 ([ADR-0043](adr/0043-product-and-operations-repositories.md)).
+
+**`templates/ops/` 를 복사해 시작하세요.** 디렉터리 구조와 CI 워크플로가 들어 있어서,
+값 몇 개만 채우면 제품 릴리스를 빌드·서명·배포하는 파이프라인이 바로 돕니다.
+
+```bash
+gh repo create <조직>/alley-ops --private
+git clone https://github.com/<조직>/alley-ops && cd alley-ops
+cp -R <제품레포>/templates/ops/. .
+git submodule add <제품레포 주소> product
+```
+
+자세한 절차는 `templates/ops/README.md` 에 있습니다.
 
 이렇게 하면 세 가지가 생깁니다.
 

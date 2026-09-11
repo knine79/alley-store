@@ -1,0 +1,194 @@
+name: 제품 반영
+
+# 고정한 제품 버전을 빌드·서명해 스토어에 올린다 (ADR-0043).
+#
+# **서명 맥에서 돈다.** Developer ID 개인키가 그 맥의 로그인 키체인에 있고, 그것을
+# 밖으로 내보내지 않으려고 self-hosted 러너를 쓴다.
+#
+# 올리고 나면 나머지는 저절로 퍼진다.
+#   - 워커는 일이 없을 때 스스로 갈아끼운다 (제품 ADR-0042)
+#   - 스토어 앱은 Sparkle 로 스스로 업데이트한다
+#
+# 각 맥에 갈 일이 없다.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'alley.lock'
+      - 'product'
+      - 'config/**'
+      - '.github/workflows/adopt.yml'
+  workflow_dispatch:
+    inputs:
+      skip_worker:
+        description: '워커 릴리스 올리기를 건너뛴다'
+        type: boolean
+        default: false
+      skip_store_app:
+        description: '스토어 앱 올리기를 건너뛴다'
+        type: boolean
+        default: false
+
+# 두 번이 겹치면 같은 버전을 두 번 올려 409 가 난다. 앞의 것을 끝까지 두고 기다린다.
+concurrency:
+  group: alley-adopt
+  cancel-in-progress: false
+
+jobs:
+  adopt:
+    name: 빌드·서명·업로드
+    # 이 라벨이 붙은 러너에서만 돈다. 서명 맥 하나다.
+    runs-on: [self-hosted, macos, alley-signing]
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # alley.lock 과 서브모듈이 같은 곳을 가리키는지 본다.
+      #
+      # 서브모듈 포인터만 옮기고 lock 을 안 고치는 실수가 흔하다. 그러면 "v0.3.0 을
+      # 깔았다" 고 기록에 남는데 실제로는 다른 커밋이 깔린다. 조용한 어긋남이다.
+      - name: 고정 버전 대조
+        id: lock
+        run: |
+          set -euo pipefail
+          TAG=$(sed -n 's/^alley=//p' alley.lock | head -1)
+          [ -n "$TAG" ] || { echo "alley.lock 에서 버전을 읽지 못했습니다." >&2; exit 1; }
+
+          SUB=$(git -C product describe --tags --exact-match 2>/dev/null || echo "")
+          if [ "$SUB" != "$TAG" ]; then
+            echo "alley.lock 은 $TAG 인데 서브모듈은 ${SUB:-태그 없는 커밋} 입니다." >&2
+            echo "  git -C product fetch --tags && git -C product checkout $TAG" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          # `v` 를 뗀 값도 함께 내놓는다. 표현식 안에서는 bash 확장을 쓸 수 없다.
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "$TAG"
+
+      - name: 설정 읽기
+        run: |
+          set -euo pipefail
+          # 값에 공백이 있어 `export $(cat …)` 은 쓸 수 없다. 한 줄씩 넣는다.
+          for file in config/signing.env config/store.env; do
+            while IFS= read -r line; do
+              case "$line" in ''|'#'*) continue ;; esac
+              printf '%s\n' "${line%$'\r'}" >> "$GITHUB_ENV"
+            done < "$file"
+          done
+
+      # 키체인이 잠겨 있으면 서명이 조용히 실패한다. 여기서 먼저 막는다.
+      #
+      # 그 맥은 사람이 잘 가지 않는 머신이라, 재부팅 뒤 아무도 로그인하지 않으면
+      # 이 상태가 된다. 자동 로그인을 켜두는 것이 전제다.
+      - name: 서명 환경 점검
+        run: |
+          set -euo pipefail
+          security find-identity -v -p codesigning | grep -q "Developer ID Application" \
+            || { echo "키체인에 Developer ID 가 없거나 잠겨 있습니다." >&2; exit 1; }
+          xcrun notarytool history --keychain-profile "$ALLEY_NOTARY_PROFILE" \
+            --output-format json >/dev/null \
+            || { echo "공증 자격증명을 쓸 수 없습니다. 키체인이 잠겼을 수 있습니다." >&2; exit 1; }
+
+      # ── 워커 ────────────────────────────────────────────
+      #
+      # 워커 버전이 이미 올라가 있으면 건너뛴다. 파이프라인이 재실행될 때마다
+      # 409 로 죽으면 "이미 됐다" 와 "실패" 를 구분할 수 없다.
+      - name: 워커 버전 확인
+        if: ${{ !inputs.skip_worker }}
+        id: worker
+        run: |
+          set -euo pipefail
+          VERSION=$(sed -n 's/.*static let current = "\([^"]*\)".*/\1/p' \
+              product/Sources/AlleyShared/WorkerVersion.swift | head -1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          EXISTING=$(curl -fsS \
+              -H "Authorization: Bearer ${{ secrets.ALLEY_OPERATOR_TOKEN }}" \
+              "${{ secrets.ALLEY_SERVER_URL }}/api/v1/ops/worker-releases" \
+            | python3 -c 'import json,sys; print(" ".join(r["version"] for r in json.load(sys.stdin)))')
+
+          if printf '%s\n' $EXISTING | grep -qx "$VERSION"; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "워커 $VERSION 은 이미 올라가 있습니다."
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "워커 $VERSION 을 올립니다."
+          fi
+
+      - name: 워커 빌드·서명
+        if: ${{ !inputs.skip_worker && steps.worker.outputs.needed == 'true' }}
+        working-directory: product
+        run: ./scripts/build-worker-app.sh --sign
+
+      - name: 워커 릴리스 업로드
+        if: ${{ !inputs.skip_worker && steps.worker.outputs.needed == 'true' }}
+        run: |
+          set -euo pipefail
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${{ secrets.ALLEY_OPERATOR_TOKEN }}" \
+            -F "version=${{ steps.worker.outputs.version }}" \
+            -F "bundle=@product/.build/worker-app/alley-worker.zip" \
+            "${{ secrets.ALLEY_SERVER_URL }}/api/v1/ops/worker-releases"
+          echo
+          echo "워커들이 일이 없을 때 스스로 갈아끼웁니다."
+
+      # ── 스토어 앱 ───────────────────────────────────────
+      #
+      # 스토어 앱은 앱이라 기존 배포 토큰과 CLI 로 올린다. 자기 자신도 스토어에서
+      # 배포되는 구조라 새 경로가 필요 없다.
+      - name: 스토어 앱 빌드·서명
+        if: ${{ !inputs.skip_store_app }}
+        working-directory: product
+        run: ./scripts/build-store-app.sh --sign
+
+      - name: CLI 빌드·서명
+        working-directory: product
+        run: ./scripts/build-cli.sh --sign
+
+      - name: 스토어 앱 올리기
+        if: ${{ !inputs.skip_store_app }}
+        env:
+          ALLEY_SERVER_URL: ${{ secrets.ALLEY_SERVER_URL }}
+          ALLEY_TOKEN: ${{ secrets.ALLEY_STORE_APP_TOKEN }}
+        run: |
+          set -euo pipefail
+          # 앱 이름에 공백이 들어간다("Alley Store.zip"). glob 을 그대로 넘기면
+          # 인자가 둘로 쪼개진다.
+          ZIP=$(find product/.build/store-app -maxdepth 1 -name '*.zip' | head -1)
+          [ -n "$ZIP" ] || { echo "스토어 앱 zip 을 찾지 못했습니다." >&2; exit 1; }
+
+          # 같은 빌드 번호를 두 번 올리면 서버가 409 로 거절한다. 재실행에서는
+          # 그것이 실패가 아니라 "이미 됐다" 다.
+          if product/.build/cli/alley upload "$ZIP" \
+              --version "${{ steps.lock.outputs.version }}"; then
+            echo "올렸습니다."
+          else
+            echo "::warning::스토어 앱 업로드가 실패했습니다. 이미 올라간 버전일 수 있습니다."
+          fi
+
+      # ── 서버 ────────────────────────────────────────────
+      #
+      # 서버는 서명이 필요 없어 제품 레포 CI 가 이미 이미지를 올려뒀다. 여기서는
+      # 그것을 실제 환경에 굴리기만 한다. 배포 플랫폼마다 달라서 스크립트로 뺀다.
+      - name: 서버 롤아웃
+        if: ${{ hashFiles('scripts/rollout-server.sh') != '' }}
+        env:
+          ALLEY_RELEASE_TAG: ${{ steps.lock.outputs.tag }}
+        run: ./scripts/rollout-server.sh
+
+      - name: 요약
+        run: |
+          {
+            echo "## 반영했습니다"
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| 제품 | \`${{ steps.lock.outputs.tag }}\` |"
+            echo "| 워커 | \`${{ steps.worker.outputs.version }}\`" \
+                 "${{ steps.worker.outputs.needed == 'true' && '(올림)' || '(이미 최신)' }} |"
+            echo
+            echo "워커와 스토어 앱은 스스로 갱신합니다. 각 맥에 가지 않아도 됩니다."
+          } >> "$GITHUB_STEP_SUMMARY"

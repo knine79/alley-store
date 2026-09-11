@@ -1,0 +1,98 @@
+name: 새 릴리스 감시
+
+# 제품 레포에 새 릴리스가 뜨면 `alley.lock` 을 올리는 PR 을 만든다 (ADR-0043).
+#
+# **자동으로 머지하지 않는다.** 그 PR 을 사람이 머지하는 것이 승인이고, 머지되면
+# `adopt.yml` 이 빌드·서명해 올린다. 워커가 자기 다음 버전을 서명하는 순환이 있어서
+# 사람이 한 번 끼어드는 자리가 필요하다 (제품 ADR-0042).
+on:
+  schedule:
+    # 하루 한 번. 릴리스는 몇 주에 한 번 있는 일이라 자주 볼 이유가 없다.
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  PRODUCT_REPO: knine79/alley-store
+
+jobs:
+  watch:
+    name: 새 릴리스가 있나
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: 최신 릴리스 확인
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          CURRENT=$(sed -n 's/^alley=//p' alley.lock | head -1)
+          LATEST=$(gh release view --repo "$PRODUCT_REPO" --json tagName -q .tagName)
+
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+
+          if [ "$CURRENT" = "$LATEST" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "이미 $CURRENT 입니다."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "$CURRENT → $LATEST"
+          fi
+
+      - name: 서브모듈과 lock 옮기기
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          git -C product fetch --tags --quiet
+          git -C product checkout --quiet "${{ steps.check.outputs.latest }}"
+          sed -i "s|^alley=.*|alley=${{ steps.check.outputs.latest }}|" alley.lock
+
+      - name: 무엇이 바뀌었나
+        if: steps.check.outputs.changed == 'true'
+        id: notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          {
+            echo 'body<<NOTES'
+            echo "제품 레포에 새 릴리스가 있습니다."
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| 지금 | \`${{ steps.check.outputs.current }}\` |"
+            echo "| 새것 | \`${{ steps.check.outputs.latest }}\` |"
+            echo
+            echo "**이 PR 을 머지하면 빌드·서명해 올립니다.** 워커와 스토어 앱은"
+            echo "그 뒤에 스스로 갱신합니다."
+            echo
+            echo "---"
+            echo
+            gh release view "${{ steps.check.outputs.latest }}" \
+              --repo "$PRODUCT_REPO" --json body -q .body
+            echo 'NOTES'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: PR 만들기
+        if: steps.check.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: bump/${{ steps.check.outputs.latest }}
+          title: '제품을 ${{ steps.check.outputs.latest }} 로 올린다'
+          body: ${{ steps.notes.outputs.body }}
+          commit-message: |
+            chore: 제품을 ${{ steps.check.outputs.latest }} 로 올린다
+
+            ${{ steps.check.outputs.current }} 에서 올립니다. 머지하면 adopt.yml 이
+            빌드·서명해 스토어에 올리고, 워커와 스토어 앱이 스스로 갱신합니다.
+          add-paths: |
+            alley.lock
+            product

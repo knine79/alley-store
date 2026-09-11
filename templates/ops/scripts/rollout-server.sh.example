@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+#
+# 서버 이미지를 실제 환경에 굴린다.
+#
+# **배포 플랫폼마다 다릅니다.** 이 파일을 `rollout-server.sh` 로 복사해 고쳐 쓰세요.
+# 그 이름의 파일이 있을 때만 `adopt.yml` 이 이 단계를 돕니다.
+#
+# 서버는 서명이 필요 없어서 제품 레포 CI 가 이미 이미지를 올려뒀습니다. 여기서
+# 하는 일은 "그 태그로 굴려라" 하나입니다.
+#
+# 받는 값:
+#   ALLEY_RELEASE_TAG   예: v0.3.0
+
+set -euo pipefail
+
+TAG="${ALLEY_RELEASE_TAG:?ALLEY_RELEASE_TAG 가 필요합니다}"
+IMAGE="ghcr.io/knine79/alley-store:${TAG#v}"
+
+echo "굴릴 이미지: $IMAGE"
+
+# ── 예시 1. docker compose 로 띄운 경우 ──
+#
+# docker compose pull server
+# docker compose run --rm server migrate --yes
+# docker compose up -d server
+
+# ── 예시 2. Kubernetes ──
+#
+# kubectl set image deployment/alley-server server="$IMAGE"
+# kubectl rollout status deployment/alley-server
+
+# ── 예시 3. 플랫폼 API ──
+#
+# curl -fsS -X POST -H "Authorization: Bearer $PLATFORM_TOKEN" \
+#   -d "{\"image\":\"$IMAGE\"}" https://platform.example.com/deploy
+
+echo "이 스크립트를 조직 환경에 맞게 채우세요." >&2
+exit 1

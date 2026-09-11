@@ -5,7 +5,9 @@ import Foundation
 ///
 /// 실행 타깃은 이것을 부르기만 한다. 로직이 라이브러리에 있어야 테스트가 닿는다.
 public enum CLI {
-    public static let version = "0.1.0"
+    /// 제품 릴리스 버전을 그대로 쓴다. CLI 만의 버전을 따로 두면 어긋나고,
+    /// 어긋나면 "어느 릴리스의 CLI 인가" 를 알 수 없다 (ADR-0043).
+    public static let version = AlleyVersion.current
 
     public static let usage = """
         사용법: alley <command> [options]

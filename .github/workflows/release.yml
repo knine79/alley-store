@@ -1,0 +1,88 @@
+name: 릴리스
+
+# 버전 태그를 밀면 GitHub Release 를 만든다 (ADR-0043).
+#
+# **여기서 서명하지 않는다.** Developer ID 개인키는 조직 것이고, 공개 전제인 이
+# 레포의 CI 에 둘 수 없다(ADR-0022). 운영 레포가 이 태그를 고정해 받아, 자기 손으로
+# 빌드하고 서명한다.
+#
+# 그래서 이 워크플로가 내놓는 것은 둘뿐이다.
+#
+#   - 서버 컨테이너 이미지 (서명이 필요 없다. ci.yml 의 docker 잡이 올린다)
+#   - 릴리스 노트와 manifest.json (운영 레포가 무엇을 빌드해야 하는지 읽는다)
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: GitHub Release 만들기
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 릴리스 노트를 직전 태그부터 쓰려면 이력이 필요하다.
+          fetch-depth: 0
+
+      # 태그와 코드의 버전이 어긋나면 만들지 않는다.
+      #
+      # 운영 레포는 태그로 고정하고, 그 태그가 가리키는 코드가 스스로를 무엇이라
+      # 부르는지 신뢰한다. 둘이 다르면 "v0.3.0 을 깔았는데 0.2.9 가 돌고 있다" 가
+      # 된다. 조용한 종류의 어긋남이라 여기서 막는다.
+      - name: 태그와 코드 버전 대조
+        id: version
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME#v}"
+          CODE=$(sed -n 's/.*static let current = "\([^"]*\)".*/\1/p' \
+              Sources/AlleyShared/AlleyVersion.swift | head -1)
+          WORKER=$(sed -n 's/.*static let current = "\([^"]*\)".*/\1/p' \
+              Sources/AlleyShared/WorkerVersion.swift | head -1)
+
+          if [ "$TAG" != "$CODE" ]; then
+            echo "태그 v$TAG 와 AlleyVersion.current ($CODE) 가 다릅니다." >&2
+            echo "Sources/AlleyShared/AlleyVersion.swift 를 고치고 다시 태그하세요." >&2
+            exit 1
+          fi
+          echo "product=$TAG" >> "$GITHUB_OUTPUT"
+          echo "worker=$WORKER" >> "$GITHUB_OUTPUT"
+          echo "제품 $TAG, 워커 $WORKER"
+
+      # 운영 레포가 읽는 파일. "이 릴리스에 무엇이 들었나" 한 장.
+      - name: manifest 만들기
+        run: |
+          set -euo pipefail
+          cat > manifest.json <<JSON
+          {
+            "product": "${{ steps.version.outputs.product }}",
+            "worker": "${{ steps.version.outputs.worker }}",
+            "serverImage": "ghcr.io/${{ github.repository }}:${{ steps.version.outputs.product }}",
+            "commit": "${GITHUB_SHA}",
+            "apiVersion": 1
+          }
+          JSON
+          cat manifest.json
+
+      - name: 릴리스 만들기
+        uses: softprops/action-gh-release@v2
+        with:
+          files: manifest.json
+          generate_release_notes: true
+          body: |
+            ## 무엇이 들었나
+
+            | | |
+            | --- | --- |
+            | 제품 | `${{ steps.version.outputs.product }}` |
+            | 워커 | `${{ steps.version.outputs.worker }}` |
+            | 서버 이미지 | `ghcr.io/${{ github.repository }}:${{ steps.version.outputs.product }}` |
+
+            ## 서명된 산출물은 여기 없습니다
+
+            워커와 스토어 앱, CLI 는 **조직이 자기 Developer ID 로 서명해야** 합니다
+            (ADR-0043). 운영 레포가 이 태그를 고정해 받아 빌드·서명합니다.
+
+            처음 세우신다면 `templates/ops/` 를 복사해 시작하세요.
