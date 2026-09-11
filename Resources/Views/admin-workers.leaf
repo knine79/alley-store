@@ -32,6 +32,7 @@
     <thead>
         <tr>
             <th class="table-fill">이름</th>
+            <th class="table-tight">워커 버전</th>
             <th class="table-tight">macOS</th>
             <th class="table-tight">마지막 접속</th>
             <th class="table-tight">상태</th>
@@ -42,6 +43,15 @@
         #for(worker in workers):
         <tr>
             <td class="table-fill table-strong">#(worker.name)</td>
+            <!-- 낡은 워커는 조용히 엉뚱한 실패를 냅니다. dmg 를 모르는 워커가 dmg 를
+                 zip 으로 풀다 "번들 구조 문제" 라고 한 적이 있습니다 (ADR-0042). -->
+            <td class="table-tight">
+                #if(worker.isStale):
+                <span class="badge badge-failed">#(worker.workerVersion)</span>
+                #else:
+                <span class="table-muted">#(worker.workerVersion)</span>
+                #endif
+            </td>
             <td class="table-tight table-muted">#if(worker.osVersion):#(worker.osVersion)#else:—#endif</td>
             <td class="table-tight table-muted">#if(worker.lastSeen):#(worker.lastSeen)#else:접속한 적 없음#endif</td>
             <td class="table-tight">
@@ -130,6 +140,91 @@
     </table>
 </section>
 #endif
+
+<!-- 워커 자기 갱신 (ADR-0042).
+     워커가 자기 다음 버전을 서명하므로, 무엇을 배포할지는 사람이 정한다. -->
+<section class="section">
+    <h2 class="section-title">워커 릴리스</h2>
+    <p class="body-text">
+        워커는 여기 <strong>배포 중</strong>으로 표시된 번들과 자기 버전을 견줘, 낮으면
+        일이 없을 때 스스로 갈아끼웁니다. 이 서버가 아는 버전은
+        <code>#(serverWorkerVersion)</code> 입니다.
+    </p>
+
+    #if(count(releases) == 0):
+    <p class="empty">아직 올린 릴리스가 없습니다. 워커는 계속 지금 깔린 채로 돕니다.</p>
+    #else:
+    <table class="table">
+        <thead>
+            <tr>
+                <th class="table-fill">버전</th>
+                <th class="table-tight">크기</th>
+                <th class="table-tight">올린 때</th>
+                <th class="table-tight">상태</th>
+                <th class="table-tight"><span class="visually-hidden">동작</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            #for(release in releases):
+            <tr>
+                <td class="table-fill table-strong">#(release.version)</td>
+                <td class="table-tight table-muted">#(release.size)</td>
+                <td class="table-tight table-muted">#(release.uploadedAt)</td>
+                <td class="table-tight">
+                    #if(release.isCurrent):
+                    <span class="badge badge-released">배포 중</span>
+                    #else:
+                    <span class="badge">보관</span>
+                    #endif
+                </td>
+                <td class="table-tight">
+                    #if(release.isCurrent):
+                    <span class="table-muted">—</span>
+                    #else:
+                    <form class="row-form" method="post"
+                          action="/admin/workers/releases/#(release.id)/deploy">
+                        <button class="button" type="submit">배포</button>
+                    </form>
+                    #endif
+                </td>
+            </tr>
+            #endfor
+        </tbody>
+    </table>
+    #endif
+
+    <form class="form" method="post" action="/admin/workers/releases"
+          enctype="multipart/form-data">
+        <label class="field">
+            <span class="field-label">버전</span>
+            <input class="input" type="text" name="version" required placeholder="0.2.0"
+                   autocapitalize="off" autocorrect="off" spellcheck="false">
+            <span class="field-note">
+                워커 코드의 <code>WorkerVersion.current</code> 와 같아야 합니다. 점으로 나눈
+                숫자만 받습니다.
+            </span>
+        </label>
+
+        <label class="field">
+            <span class="field-label">워커 번들 zip</span>
+            <input class="input" type="file" name="bundle" required accept=".zip,application/zip">
+            <span class="field-note">
+                <code>./scripts/build-worker-app.sh --sign</code> 이 만든 zip 입니다.
+                <strong>서명·공증된 것을 올리세요.</strong> 워커가 받아서 서명을 확인하고,
+                우리 팀 것이 아니면 갈아끼우지 않습니다.
+            </span>
+        </label>
+
+        <label class="check">
+            <input type="checkbox" name="makeCurrent" value="on" checked>
+            <span>올리자마자 배포</span>
+        </label>
+
+        <div class="form-actions">
+            <button class="button button-primary" type="submit">릴리스 올리기</button>
+        </div>
+    </form>
+</section>
 
 <section class="section">
     <h2 class="section-title">워커 등록</h2>

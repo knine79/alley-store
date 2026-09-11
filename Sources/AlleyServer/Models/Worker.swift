@@ -34,6 +34,10 @@ public final class Worker: Model, @unchecked Sendable {
     public var osVersion: String?
 
     /// 지금 잡고 있는 잡. 워커가 죽었는지 판단할 때 쓴다.
+    /// 워커가 마지막으로 알린 자기 버전 (ADR-0042). 이 필드를 모르는 옛 워커는 nil.
+    @OptionalField(key: "worker_version")
+    public var workerVersion: String?
+
     @OptionalField(key: "current_job_id")
     public var currentJobID: UUID?
 
@@ -71,6 +75,7 @@ public final class Worker: Model, @unchecked Sendable {
             name: name,
             lastSeenAt: lastSeenAt,
             osVersion: osVersion,
+            workerVersion: workerVersion,
             currentJobID: currentJobID,
             revokedAt: revokedAt,
             createdAt: createdAt ?? Date()
@@ -143,6 +148,24 @@ public struct AddWorkerAlertedAt: AsyncMigration {
     public func revert(on database: any Database) async throws {
         try await database.schema(Worker.schema)
             .deleteField("alerted_at")
+            .update()
+    }
+}
+
+/// 워커가 알린 자기 버전을 담을 열 (ADR-0042).
+///
+/// 이 값이 없어서, dmg 를 모르는 워커가 dmg 를 zip 으로 풀다 "번들 구조 문제" 라는
+/// 엉뚱한 진단을 내놓는 것을 한참 못 알아봤다.
+struct AddWorkerVersion: AsyncMigration {
+    func prepare(on database: any Database) async throws {
+        try await database.schema(Worker.schema)
+            .field("worker_version", .string)
+            .update()
+    }
+
+    func revert(on database: any Database) async throws {
+        try await database.schema(Worker.schema)
+            .deleteField("worker_version")
             .update()
     }
 }

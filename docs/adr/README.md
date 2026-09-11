@@ -49,6 +49,7 @@
 | [0039](0039-remove-unconfirmed-registrations.md) | 확정 전 등록만 지울 수 있다 | 대체됨 | 2026-09-11 |
 | [0040](0040-version-upload-for-non-mac-developers.md) | 새 버전도 파일만 놓게 한다 | 수락됨 | 2026-09-11 |
 | [0041](0041-remove-any-app-with-a-real-guard.md) | 어떤 앱이든 지울 수 있게 하되, 문턱을 서버에 둔다 | 수락됨 | 2026-09-11 |
+| [0042](0042-worker-self-update.md) | 워커가 스스로를 갈아끼운다 | 수락됨 | 2026-09-11 |
 
 ## 언제 쓰나
 

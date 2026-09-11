@@ -15,7 +15,7 @@
 #
 # 조직마다 다른 값은 환경변수로 넘긴다:
 #   ALLEY_WORKER_BUNDLE_ID   번들 ID   (기본값: com.example.alley.worker)
-#   ALLEY_WORKER_VERSION     버전 문자열 (기본값: 0.1.0)
+#   ALLEY_WORKER_VERSION     버전 문자열 (기본값: 코드의 WorkerVersion.current)
 #   ALLEY_WORKER_BUILD       빌드 번호  (기본값: 1)
 #
 # --sign 을 쓸 때 추가로 필요한 값:
@@ -25,7 +25,24 @@
 set -euo pipefail
 
 BUNDLE_ID="${ALLEY_WORKER_BUNDLE_ID:-com.example.alley.worker}"
-VERSION="${ALLEY_WORKER_VERSION:-0.1.0}"
+
+# **번들 버전은 코드에서 읽는다** (ADR-0042).
+#
+# 두 곳에서 관리하면 반드시 어긋난다. 어긋나면 서버가 "이 워커는 몇 번인가" 를 잘못
+# 알고, 낡은 워커가 최신으로 보인다. 실제로 dmg 를 모르는 워커가 한참 돌았다.
+read_worker_version() {
+    local source
+    source="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/Sources/AlleyShared/WorkerVersion.swift"
+    local found
+    found=$(sed -n 's/.*static let current = "\([^"]*\)".*/\1/p' "$source" | head -1)
+    if [ -z "$found" ]; then
+        echo "WorkerVersion.swift 에서 버전을 읽지 못했습니다: $source" >&2
+        exit 1
+    fi
+    printf '%s' "$found"
+}
+
+VERSION="${ALLEY_WORKER_VERSION:-$(read_worker_version)}"
 BUILD="${ALLEY_WORKER_BUILD:-1}"
 
 # 번들 이름과 실행 파일 이름을 사람이 보는 이름과 분리한다. 이 번들은 Finder 에도

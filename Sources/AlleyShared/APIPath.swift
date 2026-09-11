@@ -122,6 +122,8 @@ public enum APIPath {
     }
 
     public static let workerHeartbeat = "\(workerRoot)/heartbeat"
+    /// 지금 배포 중인 워커 번들. 워커가 자기를 갈아끼울 때 본다 (ADR-0042).
+    public static let workerRelease = "\(workerRoot)/release"
 
     // MARK: - 관리자
 

@@ -31,8 +31,6 @@ enum Command: String {
         """
 }
 
-let workerVersion = "0.1.0"
-
 /// 로그를 한 줄씩 즉시 내보낸다.
 ///
 /// `launchd` 가 표준 출력을 파일로 받는다. 버퍼에 남아 있으면 무슨 일이 일어나는지
@@ -65,7 +63,7 @@ guard let command = Command(rawValue: rawCommand) else {
 
 switch command {
 case .version:
-    print("alley-worker \(workerVersion) (API v\(APIPath.currentAPIVersion))")
+    print("alley-worker \(WorkerVersion.current) (API v\(APIPath.currentAPIVersion))")
 
 case .preflight:
     let config = loadConfig()

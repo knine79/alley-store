@@ -122,6 +122,8 @@ private func configureMigrations(_ app: Application) {
     // 서명 실패의 갈래 (ADR-0023).
     app.migrations.add(AddSigningJobFailureCode())
     app.migrations.add(AddAppBundleIDPending())
+    app.migrations.add(AddWorkerVersion())
+    app.migrations.add(CreateWorkerRelease())
 }
 
 /// 미들웨어 스택.

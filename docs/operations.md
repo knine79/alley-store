@@ -151,9 +151,18 @@ docker compose logs server | grep MIGRATE_ON_BOOT
 이미지로 배포되는 것은 서버뿐입니다. 워커와 스토어 앱은 macOS 바이너리라 컨테이너에
 담기지 않습니다.
 
-- **워커**: 설치 키트를 새로 만들어(`./scripts/build-worker-app.sh --sign`) 워커
-  맥에서 `./install-worker.sh --config <설정 파일>` 을 다시 돌립니다. 설정 파일은
-  처음 설치할 때 쓰던 것을 그대로 씁니다.
+- **워커**: 워커는 스스로 갈아끼웁니다 ([ADR-0042](adr/0042-worker-self-update.md)).
+  `Sources/AlleyShared/WorkerVersion.swift` 의 버전을 올리고
+  `./scripts/build-worker-app.sh --sign` 으로 zip 을 만든 뒤, **관리 > 서명 워커**
+  화면에서 올리면 됩니다. 워커들이 일이 없을 때 받아서 바꿉니다.
+
+  각 맥에 가는 것은 **처음 설치할 때와 자동 갱신이 막혔을 때**뿐입니다. 그때는
+  `./install-worker.sh --config <설정 파일>` 을 다시 돌립니다. 설정 파일은 처음
+  설치할 때 쓰던 것을 그대로 씁니다.
+
+  **관리 > 서명 워커 화면의 버전을 보세요.** 빨갛게 뜬 워커는 서버가 아는 것보다
+  낡았다는 뜻입니다. 낡은 워커는 조용히 엉뚱한 실패를 냅니다 - dmg 를 모르는 워커가
+  dmg 를 zip 으로 풀다 "번들 구조 문제" 라고 한 적이 있습니다.
 
   **빌드할 때 `ALLEY_SIGNING_IDENTITY` 와 `ALLEY_NOTARY_PROFILE` 을 빼먹지 마세요.**
   빼면 서명이 ad-hoc 이 되거나 공증을 건너뛰는데, 스크립트는 경고만 하고 넘어갑니다.

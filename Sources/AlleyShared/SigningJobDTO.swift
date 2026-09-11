@@ -179,11 +179,43 @@ public struct WorkerHeartbeat: Codable, Sendable {
     public var osVersion: String
     /// 지금 처리 중인 잡. 놀고 있으면 nil.
     public var currentJobID: UUID?
+    /// 이 워커가 어느 버전인지 (ADR-0042).
+    ///
+    /// 옵셔널인 이유는 이 필드를 모르는 옛 워커가 계속 붙어 있기 때문이다. 그런
+    /// 워커는 nil 로 남고, 화면은 "모름" 으로 그린다. 모름이 곧 낡았다는 뜻이라
+    /// 그 자체로 쓸모가 있다.
+    public var workerVersion: String?
 
-    public init(workerName: String, osVersion: String, currentJobID: UUID? = nil) {
+    public init(
+        workerName: String,
+        osVersion: String,
+        currentJobID: UUID? = nil,
+        workerVersion: String? = WorkerVersion.current
+    ) {
         self.workerName = workerName
         self.osVersion = osVersion
+        self.workerVersion = workerVersion
         self.currentJobID = currentJobID
+        self.workerVersion = workerVersion
+    }
+}
+
+/// 지금 배포 중인 워커 번들 (ADR-0042).
+///
+/// 워커가 자기 버전과 견줘 낮으면 `downloadURL` 로 받아 자기를 갈아끼운다.
+public struct WorkerReleaseDTO: Codable, Sendable, Equatable {
+    public var version: String
+    /// 만료 있는 내려받기 주소. 다른 아티팩트와 같은 방식이다 (ADR-0009).
+    public var downloadURL: String
+    public var fileSize: Int64
+    /// 받은 파일이 올린 그 파일인지 대조한다.
+    public var sha256: String
+
+    public init(version: String, downloadURL: String, fileSize: Int64, sha256: String) {
+        self.version = version
+        self.downloadURL = downloadURL
+        self.fileSize = fileSize
+        self.sha256 = sha256
     }
 }
 
@@ -196,6 +228,8 @@ public struct WorkerDTO: Codable, Sendable, Identifiable, Equatable {
     /// 마지막으로 서버에 말을 건 시각. 하트비트와 잡 폴링 양쪽이 갱신한다.
     public var lastSeenAt: Date?
     public var osVersion: String?
+    /// 이 워커가 마지막으로 알린 자기 버전. 이 필드를 모르는 옛 워커는 nil (ADR-0042).
+    public var workerVersion: String?
     public var currentJobID: UUID?
     /// 폐기된 워커는 토큰이 더 이상 통하지 않는다. 기록은 남긴다.
     public var revokedAt: Date?
@@ -206,6 +240,7 @@ public struct WorkerDTO: Codable, Sendable, Identifiable, Equatable {
         name: String,
         lastSeenAt: Date? = nil,
         osVersion: String? = nil,
+        workerVersion: String? = nil,
         currentJobID: UUID? = nil,
         revokedAt: Date? = nil,
         createdAt: Date

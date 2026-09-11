@@ -88,6 +88,23 @@ public struct WorkerClient: Sendable {
         }
     }
 
+    /// 지금 배포 중인 워커 번들. 없으면 nil (ADR-0042).
+    public func currentRelease() async throws -> WorkerReleaseDTO? {
+        var request = URLRequest(url: config.serverURL.appendingPathComponent(APIPath.workerRelease))
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(config.token)", forHTTPHeaderField: "Authorization")
+
+        let (data, raw) = try await URLSession.shared.data(for: request)
+        guard let response = raw as? HTTPURLResponse else {
+            throw ClientError.badResponse(status: 0, reason: nil)
+        }
+        if response.statusCode == 204 { return nil }
+        guard response.statusCode == 200 else {
+            throw ClientError.badResponse(status: response.statusCode, reason: reason(from: data))
+        }
+        return try JSONDecoder().decode(WorkerReleaseDTO.self, from: data)
+    }
+
     public func sendHeartbeat(_ heartbeat: WorkerHeartbeat) async throws {
         var request = URLRequest(
             url: config.serverURL.appendingPathComponent(APIPath.workerHeartbeat)

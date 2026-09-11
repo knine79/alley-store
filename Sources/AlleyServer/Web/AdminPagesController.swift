@@ -24,6 +24,9 @@ struct AdminPagesController: RouteCollection, Sendable {
         pages.get("workers", use: workerList)
         pages.post("workers", use: registerWorker)
         pages.post("workers", ":workerID", "revoke", use: revokeWorker)
+        pages.post("workers", "releases", use: uploadWorkerRelease)
+        pages.post("workers", "releases", ":releaseID", "deploy", use: deployWorkerRelease)
+        pages.post("workers", "releases", ":releaseID", "delete", use: deleteWorkerRelease)
         pages.get("stats", use: stats)
         pages.get("portal", use: portal)
         pages.post("portal", "bundle-ids", use: registerBundleID)
@@ -223,9 +226,86 @@ struct AdminPagesController: RouteCollection, Sendable {
                 workers: try workers.map { try WorkerRow(worker: $0) },
                 jobs: jobs.map { SigningJobRow(job: $0) },
                 issued: issued.map { IssuedWorkerToken(name: $0.worker.name, token: $0.token) },
-                error: error
+                error: error,
+                serverWorkerVersion: WorkerVersion.current,
+                releases: try await WorkerRelease.query(on: request.db)
+                    .sort(\.$createdAt, .descending)
+                    .all()
+                    .map { try WorkerReleaseRow(release: $0) }
             )
         ).get()
+    }
+
+    // MARK: - 워커 릴리스
+
+    /// 관리자가 워커 번들을 올린다 (ADR-0042).
+    @Sendable
+    func uploadWorkerRelease(request: Request) async throws -> Response {
+        let admin = try request.requireAdmin()
+        let form = try request.content.decode(WorkerReleaseForm.self)
+
+        guard let file = form.bundle, file.data.readableBytes > 0 else {
+            return try await redirectWithError("올릴 zip 을 고르세요.", on: request)
+        }
+        do {
+            try await WorkerReleaseService.accept(
+                version: form.version ?? "",
+                data: Data(buffer: file.data),
+                makeCurrent: form.makeCurrent != nil,
+                by: admin,
+                storage: request.application.artifactStorage,
+                on: request.db,
+                logger: request.logger
+            )
+        } catch let abort as any AbortError {
+            return try await redirectWithError(abort.reason, on: request)
+        }
+        return request.redirect(to: "/admin/workers")
+    }
+
+    /// 이 릴리스를 지금 배포할 것으로 만든다. 되돌릴 때도 같은 길이다.
+    @Sendable
+    func deployWorkerRelease(request: Request) async throws -> Response {
+        _ = try request.requireAdmin()
+        let release = try await findWorkerRelease(on: request)
+        try await WorkerReleaseService.makeCurrent(release, on: request.db)
+        request.logger.notice("워커 릴리스를 배포로 바꿨습니다 [버전: \(release.version)]")
+        return request.redirect(to: "/admin/workers")
+    }
+
+    @Sendable
+    func deleteWorkerRelease(request: Request) async throws -> Response {
+        _ = try request.requireAdmin()
+        let release = try await findWorkerRelease(on: request)
+        do {
+            try await WorkerReleaseService.remove(
+                release,
+                storage: request.application.artifactStorage,
+                on: request.db,
+                logger: request.logger
+            )
+        } catch let abort as any AbortError {
+            return try await redirectWithError(abort.reason, on: request)
+        }
+        return request.redirect(to: "/admin/workers")
+    }
+
+    private func findWorkerRelease(on request: Request) async throws -> WorkerRelease {
+        guard let id = request.parameters.get("releaseID", as: UUID.self),
+              let release = try await WorkerRelease.find(id, on: request.db)
+        else {
+            throw Abort(.notFound, reason: "릴리스를 찾을 수 없습니다.")
+        }
+        return release
+    }
+
+    /// 오류를 화면 위에 띄운 채로 워커 화면을 다시 그린다.
+    private func redirectWithError(_ message: String, on request: Request) async throws -> Response {
+        let view = try await renderWorkers(issued: nil, error: message, on: request)
+        let response = Response(status: .badRequest)
+        response.headers.contentType = .html
+        response.body = .init(buffer: view.data)
+        return response
     }
 
     // MARK: - 통계
@@ -449,6 +529,31 @@ struct WorkerFormValues: Codable {
 
 extension WorkerFormValues: Content {}
 
+/// 워커 번들을 올리는 폼.
+struct WorkerReleaseForm: Content {
+    var version: String?
+    var bundle: File?
+    /// 체크하면 올리자마자 배포한다. 안 하면 보관만 한다.
+    var makeCurrent: String?
+}
+
+/// 화면에 뿌리는 릴리스 한 줄.
+struct WorkerReleaseRow: Encodable {
+    var id: String
+    var version: String
+    var size: String
+    var uploadedAt: String
+    var isCurrent: Bool
+
+    init(release: WorkerRelease) throws {
+        self.id = try release.requireID().uuidString
+        self.version = release.version
+        self.size = ByteCount.humanReadable(release.fileSize)
+        self.uploadedAt = DateStyle.minute.string(from: release.createdAt ?? Date())
+        self.isCurrent = release.isCurrent
+    }
+}
+
 struct WorkerRow: Encodable {
     var id: String
     var name: String
@@ -456,6 +561,13 @@ struct WorkerRow: Encodable {
     var lastSeen: String?
     var isBusy: Bool
     var isActive: Bool
+    /// 이 워커가 알린 버전. 모르면 "모름" 으로 그린다 (ADR-0042).
+    var workerVersion: String
+    /// 서버가 아는 것보다 낡았나. **모름도 낡음으로 친다.**
+    ///
+    /// 버전을 안 알리는 워커는 그 필드가 생기기 전 것이고, 그건 이미 한참 낡았다는
+    /// 뜻이다. 이번에 dmg 를 zip 으로 풀던 워커가 정확히 그랬다.
+    var isStale: Bool
 
     init(worker: Worker) throws {
         self.id = worker.id?.uuidString ?? ""
@@ -464,6 +576,12 @@ struct WorkerRow: Encodable {
         self.lastSeen = worker.lastSeenAt.map { DateStyle.minute.string(from: $0) }
         self.isBusy = worker.currentJobID != nil
         self.isActive = worker.isActive
+        self.workerVersion = worker.workerVersion ?? "모름"
+        if let reported = worker.workerVersion {
+            self.isStale = WorkerVersion.isOlder(reported, than: WorkerVersion.current)
+        } else {
+            self.isStale = true
+        }
     }
 }
 
@@ -589,4 +707,7 @@ struct WorkerListPageContext: Encodable {
     var jobs: [SigningJobRow]
     var issued: IssuedWorkerToken?
     var error: String?
+    /// 이 서버가 아는 워커 버전. 낡은 워커를 가릴 기준이다 (ADR-0042).
+    var serverWorkerVersion: String
+    var releases: [WorkerReleaseRow]
 }

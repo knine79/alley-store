@@ -26,6 +26,35 @@ public struct WorkerController: RouteCollection, Sendable {
         worker.get("jobs", "next", use: nextJob)
         worker.patch("jobs", ":jobID", use: updateJob)
         worker.post("heartbeat", use: heartbeat)
+        worker.get("release", use: currentRelease)
+    }
+
+    // MARK: - 자기 갱신
+
+    /// 지금 배포 중인 워커 번들. 없으면 204 (ADR-0042).
+    ///
+    /// 워커가 자기 버전과 견줘 판단한다. **서버가 "갈아끼워라" 라고 시키지 않는다.**
+    /// 잡을 물고 있는지는 워커만 알고, 그 도중에 바꾸면 잡이 끊긴다.
+    @Sendable
+    func currentRelease(request: Request) async throws -> Response {
+        _ = try request.requireWorker()
+
+        guard let release = try await WorkerRelease.current(on: request.db) else {
+            return Response(status: .noContent)
+        }
+
+        let url = try await request.application.artifactStorage
+            .downloadURL(key: release.storageKey)
+        let response = Response(status: .ok)
+        try response.content.encode(
+            WorkerReleaseDTO(
+                version: release.version,
+                downloadURL: url.url,
+                fileSize: release.fileSize,
+                sha256: release.sha256
+            )
+        )
+        return response
     }
 
     // MARK: - 잡 가져가기
@@ -445,6 +474,9 @@ public struct WorkerController: RouteCollection, Sendable {
         // 콘솔에서 옛 이름을 계속 보는 것보다 낫다.
         worker.name = payload.workerName
         worker.osVersion = payload.osVersion
+        // 옛 워커는 이 값을 안 보낸다. 그때 nil 로 덮어써야 "모름" 이 유지된다.
+        // 한 번 받은 값을 붙들고 있으면 워커를 옛 것으로 되돌려도 새 것으로 보인다.
+        worker.workerVersion = payload.workerVersion
         worker.currentJobID = payload.currentJobID
         worker.lastSeenAt = Date()
         try await worker.save(on: request.db)
@@ -494,5 +526,6 @@ public struct WorkerController: RouteCollection, Sendable {
 }
 
 extension SigningJobDTO: Content {}
+extension WorkerReleaseDTO: Content {}
 extension SigningJobUpdate: Content {}
 extension WorkerHeartbeat: Content {}

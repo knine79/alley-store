@@ -12,6 +12,11 @@ public struct WorkerLoop: Sendable {
     ///
     /// 서버가 재시작 중일 수 있다. 곧장 다시 두드리면 로그만 채운다.
     static let retryDelay: Duration = .seconds(10)
+    /// 새 워커가 나왔는지 확인하는 간격 (ADR-0042).
+    ///
+    /// 잡을 기다리는 long-poll 이 끝날 때마다 보면 25초마다 묻게 된다. 워커 릴리스는
+    /// 몇 주에 한 번 있는 일이라 그만큼 자주 볼 이유가 없다.
+    static let updateCheckInterval: Duration = .seconds(600)
 
     private let config: WorkerConfig
     private let client: WorkerClient
@@ -28,11 +33,22 @@ public struct WorkerLoop: Sendable {
     /// 예외로 빠져나오지 않는다. 서버가 죽었든 잡 하나가 실패했든 다음 잡을 계속
     /// 기다려야 한다. 워커가 조용히 종료되면 아무도 모르는 사이에 큐가 쌓인다.
     public func run() async {
-        log("워커 '\(config.name)' 시작. 서버: \(config.serverURL.absoluteString)")
+        log("워커 '\(config.name)' \(WorkerVersion.current) 시작. 서버: \(config.serverURL.absoluteString)")
         await beat(currentJobID: nil)
+
+        let updater = SelfUpdate(config: config, client: client, log: log)
+        var nextUpdateCheck = ContinuousClock.now
 
         while !Task.isCancelled {
             do {
+                // **잡을 받기 전에 본다.** 여기가 확실히 노는 순간이다. 잡을 처리한
+                // 직후에 보면 다음 잡이 이미 큐에 있을 수 있고, 그 사이에 프로세스를
+                // 끝내면 그 잡은 워커가 죽은 것으로 보인다.
+                if ContinuousClock.now >= nextUpdateCheck {
+                    nextUpdateCheck = ContinuousClock.now.advanced(by: Self.updateCheckInterval)
+                    if await checkForUpdate(updater) { return }
+                }
+
                 guard let job = try await client.nextJob() else { continue }
                 log("잡 \(job.id) 를 받았습니다. 버전: \(job.versionID)")
                 await process(job)
@@ -40,6 +56,23 @@ public struct WorkerLoop: Sendable {
                 log("서버와 통신하지 못했습니다: \(error). \(Self.retryDelay) 뒤에 다시 시도합니다.")
                 try? await Task.sleep(for: Self.retryDelay)
             }
+        }
+    }
+
+    /// 새 워커로 갈아끼웠으면 true. 그때 루프를 끝내야 한다.
+    ///
+    /// 끝내면 `launchd` 가 새 번들로 다시 띄운다. 여기서 `exit` 을 부르지 않는 이유는
+    /// 테스트에서 프로세스를 죽이지 않고 이 판단만 확인할 수 있어야 하기 때문이다.
+    private func checkForUpdate(_ updater: SelfUpdate) async -> Bool {
+        switch await updater.runIfNeeded() {
+        case .replaced(let version):
+            log("워커 \(version) 로 갈아끼웠습니다. 프로세스를 끝냅니다. launchd 가 다시 띄웁니다.")
+            return true
+        case .upToDate:
+            return false
+        case .skipped(let reason):
+            log("갈아끼우지 않았습니다: \(reason)")
+            return false
         }
     }
 
@@ -105,7 +138,8 @@ public struct WorkerLoop: Sendable {
                 WorkerHeartbeat(
                     workerName: config.name,
                     osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                    currentJobID: currentJobID
+                    currentJobID: currentJobID,
+                    workerVersion: WorkerVersion.current
                 )
             )
         } catch {
