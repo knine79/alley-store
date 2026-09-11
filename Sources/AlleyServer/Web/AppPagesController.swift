@@ -24,6 +24,7 @@ struct AppPagesController: RouteCollection, Sendable {
         pages.post("new", use: submitNew)
         pages.get(":appID", use: detail)
         pages.post(":appID", "edit", use: submitEdit)
+        pages.post(":appID", "delete", use: deletePendingApp)
         pages.post(":appID", "deploy-tokens", use: issueDeployToken)
         pages.post(":appID", "deploy-tokens", ":tokenID", "revoke", use: revokeDeployToken)
         pages.post(":appID", "feedback", use: submitFeedback)
@@ -144,6 +145,17 @@ struct AppPagesController: RouteCollection, Sendable {
         }
     }
 
+    /// 이 사람에게 보이는 확인 중인 등록. 관리자는 전부 본다.
+    private func pendingRows(for request: Request) async throws -> [PendingAppRow] {
+        let user = try request.requireUser()
+        let userID = try user.requireID()
+        return try await App.query(on: request.db)
+            .filter(\.$bundleIDPending == true)
+            .all()
+            .filter { user.role.canAdminister || $0.$owner.id == userID }
+            .map { PendingAppRow(id: try $0.requireID().uuidString, name: $0.name) }
+    }
+
     private func render(
         newFormWith values: AppFormValues,
         error: String?,
@@ -159,7 +171,8 @@ struct AppPagesController: RouteCollection, Sendable {
                 bundleIDPrefix: settings.bundleIDPrefix,
                 enforceBundleIDPrefix: settings.enforceBundleIDPrefix,
                 appsPath: APIPath.apps,
-                versionRootPath: "\(APIPath.apiRoot)/versions"
+                versionRootPath: "\(APIPath.apiRoot)/versions",
+                pendingApps: try await pendingRows(for: request)
             )
         ).get()
     }
@@ -376,6 +389,24 @@ struct AppPagesController: RouteCollection, Sendable {
             logger: request.logger
         )
         return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
+    }
+
+    // MARK: - 확정 전 앱 치우기
+
+    /// 번들 ID 가 확정되지 않은 등록을 지운다 (ADR-0039).
+    @Sendable
+    func deletePendingApp(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+
+        try await PendingAppRemoval.remove(
+            app,
+            by: user,
+            storage: request.application.artifactStorage,
+            on: request.db,
+            logger: request.logger
+        )
+        return request.redirect(to: "/apps")
     }
 
     // MARK: - 피드백
@@ -600,6 +631,8 @@ struct AppRow: Encodable {
     /// 별점 평균. 아무도 안 남겼으면 nil.
     var ratingAverage: String?
     var ratingCount: Int
+    /// 번들 ID 가 아직 정해지지 않았나. 이때만 지울 수 있다 (ADR-0039).
+    var isPending: Bool
 
     init(app: App, latestReleased: Version?, rating: RatingSummary? = nil) throws {
         self.id = try app.requireID().uuidString
@@ -615,6 +648,7 @@ struct AppRow: Encodable {
         self.latestReleasedVersion = latestReleased?.shortVersion
         self.ratingAverage = rating?.displayAverage
         self.ratingCount = rating?.count ?? 0
+        self.isPending = app.bundleIDPending
     }
 }
 
@@ -723,6 +757,8 @@ struct AppFormContext: Encodable {
     /// 스크립트가 없으면 폼이 그대로 `POST` 되어 등록만 된다 (ADR-0031).
     var appsPath: String
     var versionRootPath: String
+    /// 이 사람이 걸어둔 확인 중인 등록. 같은 앱을 또 만들지 않게 보여준다 (ADR-0039).
+    var pendingApps: [PendingAppRow]
 }
 
 struct AppDetailContext: Encodable {

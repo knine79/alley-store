@@ -10,6 +10,20 @@
     #endif
 </div>
 
+<!-- 확정 전 앱. 어떤 앱인지 아직 정해지지 않아서 지울 수 있다 (ADR-0039). -->
+#if(app.isPending):#if(canManage):
+<div class="notice notice-warn">
+    <p>
+        <strong>아직 확인 중입니다.</strong> 올린 파일을 열어 번들 ID 를 읽으면 이 앱이
+        무엇인지 정해집니다. 그 전에는 출시할 수 없고 목록에도 나오지 않습니다.
+    </p>
+    <form class="row-form" method="post" action="/apps/#(app.id)/delete"
+          data-confirm="이 등록을 지웁니다. 올린 파일도 함께 지워집니다. 되돌릴 수 없습니다.">
+        <button class="button button-danger" type="submit">이 등록 지우기</button>
+    </form>
+</div>
+#endif#endif
+
 #if(app.summary):
 <p class="lead-text">#(app.summary)</p>
 #endif
@@ -480,6 +494,27 @@
         </div>
     </form>
 </section>
+#endif
+
+<!-- 되돌릴 수 없는 폼 앞에 세우는 팝업. `data-confirm` 이 붙은 폼이 쓴다. -->
+#if(canManage):
+<dialog class="modal" id="confirm-dialog" aria-labelledby="confirm-title">
+    <form method="dialog">
+        <h2 class="modal-title" id="confirm-title">정말 할까요?</h2>
+        <div class="modal-body">
+            <p id="confirm-message"></p>
+        </div>
+        <!-- 취소가 먼저라 Enter 로 닫으면 아무 일도 없다. Esc 도 마찬가지다. -->
+        <div class="modal-actions">
+            <button class="button" type="submit" value="cancel">취소</button>
+            <button class="button button-danger" type="submit" value="accept" id="confirm-accept">
+                지우기
+            </button>
+        </div>
+    </form>
+</dialog>
+
+<script src="/confirm.js?v=#(page.assetVersion)" defer></script>
 #endif
 #endexport
 #endextend

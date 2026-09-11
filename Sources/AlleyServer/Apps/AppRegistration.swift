@@ -122,7 +122,23 @@ enum AppRegistration {
 
         let trimmed = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
         try validateBundleID(trimmed, settings: settings, logger: logger)
-        try await requireUnusedBundleID(trimmed, on: database)
+
+        // **여기서 걸리면 올린 사람이 할 수 있는 일이 둘뿐이다.** 그것을 말해준다.
+        // 확정 전에는 번들 ID 가 임시값이라 등록할 때는 이 충돌을 알 수 없다. 겹친다는
+        // 사실이 드러나는 곳이 여기 하나뿐이라, 여기서 안 알려주면 아무도 안 알려준다.
+        if let existing = try await App.query(on: database)
+            .filter(\.$bundleID == trimmed)
+            .first()
+        {
+            throw Abort(
+                .conflict,
+                reason: """
+                    번들 ID '\(trimmed)' 는 이미 '\(existing.name)' 이 쓰고 있습니다. \
+                    같은 앱이라면 그 앱에 새 버전으로 올리고 이 등록은 지우세요. \
+                    다른 앱이라면 번들 ID 를 바꿔 다시 빌드해야 합니다.
+                    """
+            )
+        }
 
         app.bundleID = trimmed
         app.bundleIDPending = false

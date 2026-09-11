@@ -195,6 +195,8 @@ entitlements 세 개를 그대로 유지한 채 통과했습니다.
 - [x] 앱 번들이 아닌 zip 과 zip·dmg 가 아닌 파일을 올리기 전에 거절한다
 - [x] EKS Pod Identity 자격증명을 직접 받아온다. Soto 가 그 방식을 모른다
       ([ADR-0038](adr/0038-container-credentials-provider.md))
+- [x] 확정 전 등록을 지운다. 번들 ID 가 겹칠 때 무엇을 해야 하는지 말한다
+      ([ADR-0039](adr/0039-remove-unconfirmed-registrations.md))
 
 콘솔은 빌드 스텝 없는 중립 CSS 한 장으로 만듭니다. 강조색과 로고는 스토어 설정에서
 와서, 다른 조직이 띄우면 그 조직 것으로 보입니다. 사내용 고급 화면이 필요해지면

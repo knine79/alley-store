@@ -2,6 +2,19 @@
 #export("content"):
 <h1 class="page-title">새 앱</h1>
 
+<!-- 확인 중인 등록이 걸려 있으면 같은 앱을 또 만들기 쉽다. 등록할 때는 번들 ID 가
+     임시값이라 겹치는지 알 수 없고, 겹친 사실은 워커가 확정할 때에야 드러난다
+     (ADR-0039). 그 전에 여기서 말해준다. -->
+#if(count(pendingApps) > 0):
+<p class="notice notice-warn">
+    아직 확인 중인 등록이 #(count(pendingApps))개 있습니다. <strong>같은 앱을 다시
+    올리는 중이라면 새로 만들지 마세요.</strong> 그 등록에 이어서 올리거나, 필요 없으면
+    지우고 시작하세요. 번들 ID 가 겹치면 올린 뒤에 실패합니다.
+    #for(app in pendingApps):
+    <a href="/apps/#(app.id)">#(app.name)</a>#if(!isLast): · #endif
+    #endfor
+</p>
+#endif
 
 #if(error):
 <p class="notice notice-error">#(error)</p>
