@@ -39,13 +39,16 @@ public enum WorkerReleaseService {
         guard !data.isEmpty else {
             throw Abort(.badRequest, reason: "빈 파일입니다.")
         }
-        // zip 인지만 본다. 번들이 제대로 들었는지는 받아서 풀어보는 워커가 안다.
         guard data.starts(with: [0x50, 0x4B, 0x03, 0x04]) else {
             throw Abort(
                 .badRequest,
                 reason: "zip 이 아닙니다. ./scripts/build-worker-app.sh --sign 이 만든 zip 을 올려주세요."
             )
         }
+        // **정말 워커 번들인지 여기서 본다.** 설치 키트를 잘못 올리는 일이 흔하고,
+        // 그것도 zip 이라 예전에는 그냥 통과했다. 잘못됐다는 사실이 10분 뒤 워커
+        // 로그에만 남으면 아무도 못 알아본다.
+        try WorkerBundleInspection.requireTopLevelApp(in: data)
         if try await WorkerRelease.query(on: database).filter(\.$version == version).first() != nil {
             throw Abort(
                 .conflict,

@@ -334,3 +334,77 @@ extension Application {
         return version
     }
 }
+
+
+/// 워커 릴리스 검사용 zip 픽스처 (ADR-0042).
+///
+/// 실제 `zip`(1) 을 부르지 않는다. 리눅스 CI 에서도 돌아야 하고, 검사가 보는 것은
+/// 중앙 디렉터리의 이름들뿐이다.
+enum ZipFixture {
+    /// 이름만 든 zip. 검사가 읽는 것은 목차뿐이라 목차만 맞추면 된다.
+    static func zip(names: [String]) -> Data {
+        var central = Data()
+        var offset: UInt32 = 0
+        var local = Data()
+
+        func put16(_ value: UInt16, into data: inout Data) {
+            data.append(UInt8(value & 0xFF))
+            data.append(UInt8((value >> 8) & 0xFF))
+        }
+        func put32(_ value: UInt32, into data: inout Data) {
+            for shift in stride(from: 0, through: 24, by: 8) {
+                data.append(UInt8((value >> UInt32(shift)) & 0xFF))
+            }
+        }
+
+        for name in names {
+            let bytes = Array(name.utf8)
+
+            var header = Data()
+            put32(0x0403_4B50, into: &header)
+            for _ in 0..<11 { put16(0, into: &header) }
+            put16(UInt16(bytes.count), into: &header)
+            put16(0, into: &header)
+            header.append(contentsOf: bytes)
+            local.append(header)
+
+            var entry = Data()
+            put32(0x0201_4B50, into: &entry)
+            // 서명(4) 다음부터 이름 길이(28)까지가 24바이트다. 하나 더 쓰면 이름
+            // 길이를 읽는 자리가 밀리고, 파서는 길이 0 인 이름만 본다.
+            for _ in 0..<12 { put16(0, into: &entry) }
+            put16(UInt16(bytes.count), into: &entry)
+            put16(0, into: &entry)  // extra
+            put16(0, into: &entry)  // comment
+            put16(0, into: &entry)  // disk
+            put16(0, into: &entry)  // internal attrs
+            put32(0, into: &entry)  // external attrs
+            put32(offset, into: &entry)
+            entry.append(contentsOf: bytes)
+            central.append(entry)
+
+            offset = UInt32(local.count)
+        }
+
+        var eocd = Data()
+        put32(0x0605_4B50, into: &eocd)
+        put16(0, into: &eocd)
+        put16(0, into: &eocd)
+        put16(UInt16(names.count), into: &eocd)
+        put16(UInt16(names.count), into: &eocd)
+        put32(UInt32(central.count), into: &eocd)
+        put32(UInt32(local.count), into: &eocd)
+        put16(0, into: &eocd)
+
+        return local + central + eocd
+    }
+
+    /// 최상위에 `.app` 이 있는, 워커 릴리스로 받아들여지는 zip.
+    static func workerBundle() -> Data {
+        zip(names: [
+            "alley-worker.app/",
+            "alley-worker.app/Contents/Info.plist",
+            "alley-worker.app/Contents/MacOS/alley-worker",
+        ])
+    }
+}

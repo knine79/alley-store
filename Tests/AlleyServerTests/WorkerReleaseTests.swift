@@ -11,9 +11,9 @@ import VaporTesting
 /// 워커가 한참 돌면서 dmg 를 zip 으로 풀다 엉뚱한 진단을 내놨다.
 @Suite("워커 릴리스")
 struct WorkerReleaseTests {
-    /// 앞 4바이트만 zip 인 최소 픽스처. 내용은 워커가 풀어볼 몫이다.
-    private static func zipBytes(_ filler: Int = 64) -> Data {
-        Data([0x50, 0x4B, 0x03, 0x04]) + Data(repeating: 0xAB, count: filler)
+    /// 최상위에 `.app` 이 있는 zip. 서버가 그것까지 확인한다 (ADR-0042).
+    private static func zipBytes() -> Data {
+        ZipFixture.workerBundle()
     }
 
     @Test("올리면 배포 중이 된다")
@@ -33,9 +33,10 @@ struct WorkerReleaseTests {
             )
 
             #expect(release.isCurrent)
-            #expect(release.fileSize == 68)
+            #expect(release.fileSize == Int64(Self.zipBytes().count))
             // 행만 남기고 오브젝트를 안 올리면 워커가 404 나는 주소를 받는다.
-            #expect(try await storage.head(key: release.storageKey) == 68)
+            #expect(try await storage.head(key: release.storageKey)
+                == Int64(Self.zipBytes().count))
             let current = try #require(try await WorkerRelease.current(on: app.db))
             #expect(current.version == "0.2.0")
         }
