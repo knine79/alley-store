@@ -117,7 +117,7 @@ public enum WorkerReleaseService {
         guard !release.isCurrent else {
             throw Abort(
                 .conflict,
-                reason: "배포 중인 릴리스는 지울 수 없습니다. 다른 릴리스를 먼저 배포하세요."
+                reason: "배포 완료된 릴리스는 지울 수 없습니다. 다른 릴리스를 먼저 배포하세요."
             )
         }
         if !release.storageKey.isEmpty {
