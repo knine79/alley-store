@@ -89,10 +89,19 @@ public enum EntitlementsGuidance {
         plist 입니다.
         """
 
-    /// 어디에 넣나.
-    public static let howToSend = """
-        CLI 는 `alley upload ... --entitlements build/app.entitlements` 로, 웹 콘솔은 \
-        새 버전 화면의 'entitlements' 파일 선택으로 함께 올립니다.
+    /// 웹 콘솔에서 붙이는 법. **실패한 버전 옆에서만 쓴다.**
+    ///
+    /// 새 버전 화면의 파일 칸은 ADR-0036 이 없앴다. 올릴 때 묻지 않고, 번들을 열어보고
+    /// 정말 필요할 때 실패 옆에서 받는다. 그 뒤로도 안내가 없어진 칸을 가리키고 있어서,
+    /// 실패한 사람이 새 버전 화면까지 가서 찾다가 못 찾았다. 붙일 자리는 그 실패 바로
+    /// 아래에 이미 있다.
+    public static let howToSendInConsole = """
+        이 실패 바로 아래 'entitlements' 칸에 파일을 넣고 '붙여서 다시 시도' 를 누르세요.
+        """
+
+    /// CLI 로 붙이는 법.
+    public static let howToSendWithCLI = """
+        CLI 로 올린다면 `alley upload ... --entitlements build/app.entitlements` 입니다.
         """
 
     /// Electron 을 품었는데 JIT 권한이 없을 때.
@@ -105,15 +114,19 @@ public enum EntitlementsGuidance {
         서명해도 공증은 통과하므로 아무도 실행할 수 없는 앱이 그대로 나갑니다. 그래서 여기서 멈춥니다.
 
         <key>\(jitKey)</key><true/> 를 넣은 entitlements plist 를 버전과 함께 올리세요. \
-        \(whereToFind) \(howToSend)
+        \(whereToFind) \(howToSendInConsole) \(howToSendWithCLI)
         """
     }
 
     /// entitlements 없이 서명했을 때 잡 로그에 남기는 한 줄.
     ///
     /// 실패시키지 않는다. 네이티브 맥 앱은 대부분 정말로 필요 없다.
+    ///
+    /// **여기서는 콘솔의 붙이는 칸을 가리키지 않는다.** 그 칸은 실패한 버전 옆에만
+    /// 나온다. 이 줄이 남는 잡은 서명에 성공했으므로 붙일 자리가 없다. 필요하다면
+    /// entitlements 를 갖춰 다시 올리는 것이 길이다.
     public static let noneProvided = """
         entitlements 없이 서명했습니다. \(whenNeeded) 설치는 되는데 실행하자마자 죽는다면 \
-        이것을 먼저 의심하세요. \(howToSend)
+        이것을 먼저 의심하고, entitlements 를 붙여 새 버전을 올리세요. \(howToSendWithCLI)
         """
 }
