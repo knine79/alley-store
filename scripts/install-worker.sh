@@ -52,7 +52,8 @@
 #
 # 환경변수로도 줄 수 있습니다. 이름은 설정 파일의 항목과 같습니다:
 #   ALLEY_SERVER_URL, ALLEY_WORKER_TOKEN, ALLEY_SIGNING_IDENTITY,
-#   ALLEY_NOTARY_PROFILE, ALLEY_WORKER_NAME, ALLEY_P12_PASSWORD
+#   ALLEY_NOTARY_PROFILE, ALLEY_WORKER_NAME, ALLEY_P12_PASSWORD,
+#   ALLEY_KEYCHAIN_PASSWORD
 #
 # Sparkle 자동 업데이트를 쓰는 조직은 서명 키도 넣습니다 (ADR-0017):
 #   ALLEY_SPARKLE_PRIVATE_KEY  Ed25519 시드(base64). `openssl rand -base64 32`
@@ -110,6 +111,7 @@ ALLEY_NOTARY_PROFILE
 ALLEY_SPARKLE_PRIVATE_KEY
 ALLEY_P12_PATH
 ALLEY_P12_PASSWORD
+ALLEY_KEYCHAIN_PASSWORD
 ALLEY_ASC_KEY_PATH
 ALLEY_ASC_KEY_ID
 ALLEY_ASC_ISSUER_ID
@@ -178,6 +180,10 @@ ALLEY_BUNDLE_PATH=alley-worker.app
 # Developer ID 인증서와 개인키. 이 맥에 이미 있으면 비워두세요.
 ALLEY_P12_PATH=
 ALLEY_P12_PASSWORD=
+# 이 맥의 로그인 키체인 암호. 위의 인증서 암호와 **다른 값**입니다.
+# codesign 이 키를 쓸 때 승인 창을 띄우지 않게 하는 데 씁니다. 비워두면 인증서
+# 암호로 시도하고, 둘이 다르면 첫 서명에서 승인 창이 떠 워커가 거기서 멈춥니다.
+ALLEY_KEYCHAIN_PASSWORD=
 # 비우면 키체인에서 Developer ID Application 을 찾아 씁니다.
 # 여러 개면 물어봅니다.
 ALLEY_SIGNING_IDENTITY=
@@ -410,11 +416,30 @@ import_certificate() {
         die "인증서를 넣지 못했습니다: $output"
     fi
 
-    # codesign 이 키를 쓸 때마다 묻지 않도록 파티션 목록을 연다. 암호를 다시
-    # 받아야 하는 자리라 실패해도 멈추지 않는다. 실패하면 첫 서명에서 한 번 묻는다.
-    security set-key-partition-list -S apple-tool:,apple: -s \
-        -k "$password" "$HOME/Library/Keychains/login.keychain-db" >/dev/null 2>&1 \
-        || warn "키 접근 허용 설정에 실패했습니다. 첫 서명에서 키체인 암호를 한 번 물을 수 있습니다."
+    # codesign 이 키를 쓸 때마다 묻지 않도록 파티션 목록을 연다.
+    #
+    # **여기 `-k` 는 로그인 키체인 암호다.** 바로 위 `import` 의 `-P` 가 받는 P12
+    # 암호와 다른 값이다. 둘을 같게 쓰는 사람도 있어서 오래 들키지 않았는데, 다르면
+    # 이 명령은 언제나 실패한다.
+    #
+    # 실패해도 설치를 멈추지는 않는다. 다만 그 맥은 첫 서명에서 키체인 접근 승인
+    # 창을 띄우고, **무인으로 도는 워커에는 그 창에 답할 사람이 없다.** 잡 하나가
+    # 타임아웃까지 멈춘 채로 남고, 화면을 보는 사람이 없으면 원인도 안 보인다.
+    # 그래서 경고 문구에 그 대가와 손으로 여는 명령을 함께 적는다.
+    local keychain_password="${ALLEY_KEYCHAIN_PASSWORD:-$password}"
+    if ! security set-key-partition-list -S apple-tool:,apple: -s \
+        -k "$keychain_password" "$HOME/Library/Keychains/login.keychain-db" >/dev/null 2>&1
+    then
+        warn "키 접근 허용 설정에 실패했습니다.
+  ALLEY_KEYCHAIN_PASSWORD 에는 인증서(.p12) 암호가 아니라 이 맥의 **로그인 키체인
+  암호**를 넣습니다. 비워두면 인증서 암호로 시도하고, 둘이 다르면 여기서 실패합니다.
+
+  이대로 두면 첫 서명에서 키체인 접근 승인 창이 뜨고, 무인으로 도는 워커는 그 자리에서
+  멈춥니다. 지금 손으로 열려면:
+
+    security set-key-partition-list -S apple-tool:,apple: -s \\
+      -k '<로그인 키체인 암호>' ~/Library/Keychains/login.keychain-db"
+    fi
 }
 
 # 공증 자격증명을 키체인에 프로필 이름으로 저장한다.

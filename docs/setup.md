@@ -472,11 +472,17 @@ ALLEY_BUNDLE_PATH=alley-worker.app
 
 ALLEY_P12_PATH=~/signing.p12
 ALLEY_P12_PASSWORD=인증서-암호
+ALLEY_KEYCHAIN_PASSWORD=이-맥의-로그인-키체인-암호
 
 ALLEY_ASC_KEY_PATH=~/AuthKey_XXXXXXXXXX.p8
 ALLEY_ASC_KEY_ID=XXXXXXXXXX
 ALLEY_ASC_ISSUER_ID=00000000-0000-0000-0000-000000000000
 ```
+
+**`ALLEY_KEYCHAIN_PASSWORD` 는 인증서 암호가 아니라 그 맥에 로그인할 때 쓰는
+암호입니다.** `codesign` 이 개인키를 꺼낼 때 승인 창을 띄우지 않게 하는 데 쓰고,
+이 값이 맞지 않으면 첫 서명에서 창이 뜬 채로 멈춥니다. 워커는 아무도 안 보는
+맥에서 도니까 그 창에 답할 사람이 없습니다.
 
 경로는 `~/` 로 시작하는 홈 기준, `/` 로 시작하는 절대 경로, 그냥 이름만 쓰는 상대
 경로 셋 다 됩니다. 상대 경로는 지금 있는 위치에서 먼저 찾고, 없으면 설정 파일이
