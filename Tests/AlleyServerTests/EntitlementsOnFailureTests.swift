@@ -87,6 +87,28 @@ struct EntitlementsOnFailureTests {
         }
     }
 
+    /// 그 파일이 아예 없는 사람이 실제로 온다. 애드혹 서명으로 개발하던 앱에는
+    /// entitlements 를 만들 이유가 없었고, 그런 앱이 올라온다. 키 이름 하나만
+    /// 알려주면 XML 뼈대부터 막힌다.
+    @Test("붙일 파일이 없는 사람에게 본보기를 준다")
+    func failureCarriesTemplate() async throws {
+        try await withMigratedApp { app in
+            let (owner, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let seeded = try await seedFailure(on: app, owner: owner, code: .entitlementsRejected)
+
+            try await app.testing().test(
+                .GET, "/apps/\(seeded.appID.uuidString)", headers: .sessionCookie(token)
+            ) { response in
+                let body = response.body.string
+                #expect(body.contains(EntitlementsGuidance.jitKey))
+                #expect(body.contains("com.apple.security.cs.disable-library-validation"))
+                // XML 은 이스케이프되어 나가야 한다. 날것으로 나가면 페이지가 깨진다.
+                #expect(body.contains("&lt;plist"))
+                #expect(!body.contains("<plist"))
+            }
+        }
+    }
+
     /// ADR-0036 이 새 버전 화면의 파일 칸을 없앴다. 안내가 계속 그 칸을 가리키면
     /// 실패한 사람이 없는 것을 찾으러 간다. 붙일 자리는 그 실패 바로 아래에 있다.
     @Test("안내가 없어진 새 버전 화면 칸을 가리키지 않는다")

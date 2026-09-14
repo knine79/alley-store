@@ -83,10 +83,24 @@ public enum EntitlementsGuidance {
         "대부분의 맥 앱은 필요 없습니다. Electron 처럼 JIT 를 쓰는 런타임을 품은 앱만 필요합니다."
 
     /// 그 파일을 어디서 얻나.
+    ///
+    /// **없을 수도 있다고 먼저 말한다.** 예전 문구는 "빌드 설정에 이미 있습니다" 로
+    /// 시작해서, 없는 사람은 한참 찾다가 막혔다. 애드혹 서명으로 개발하던 앱에는
+    /// 만들 이유가 없었고, 그런 앱이 실제로 올라온다.
     public static let whereToFind = """
-        파일은 대개 앱 빌드 설정에 이미 있습니다. Xcode 는 CODE_SIGN_ENTITLEMENTS 가 \
-        가리키는 .entitlements 파일이고, Electron 은 빌드 스크립트가 codesign 에 넘기는 \
-        plist 입니다.
+        빌드 설정에 이미 있을 수 있습니다. Xcode 는 CODE_SIGN_ENTITLEMENTS 가 가리키는 \
+        .entitlements 파일이고, electron-builder 는 보통 build/entitlements.mac.plist \
+        입니다. 없으면 새로 만들어도 됩니다. 파일 이름은 아무거나 되고 확장자만 \
+        .plist 나 .entitlements 면 됩니다.
+        """
+
+    /// 왜 내 맥에서는 되는데 여기서는 안 되나.
+    ///
+    /// 이 한 줄이 없으면 "실행되자마자 죽습니다" 가 오진처럼 읽힌다. 멀쩡히 쓰고 있던
+    /// 앱이라 더 그렇다.
+    public static let whyItWorksLocally = """
+        개발 중에는 Hardened Runtime 없이 서명되어 이 권한이 필요 없었을 수 있습니다. \
+        스토어 배포는 공증이 필요하고, 공증은 Hardened Runtime 을 요구합니다.
         """
 
     /// 웹 콘솔에서 붙이는 법. **실패한 버전 옆에서만 쓴다.**
@@ -104,6 +118,38 @@ public enum EntitlementsGuidance {
         CLI 로 올린다면 `alley upload ... --entitlements build/app.entitlements` 입니다.
         """
 
+    /// Electron 앱이 Hardened Runtime 아래에서 돌기 위한 최소 entitlements.
+    ///
+    /// electron-builder 가 기본으로 넣는 네 키와 같다. 파일이 아예 없는 사람에게 키
+    /// 이름 하나만 알려주면 XML 뼈대부터 막힌다. 그래서 그대로 복사해 쓸 수 있는 전문을
+    /// 준다.
+    ///
+    /// **이것은 최소값이지 정답이 아니다.** 카메라·마이크처럼 더 쓰는 권한이 있으면 키가
+    /// 더 필요하고, 그때는 서명과 공증은 통과하는데 그 기능만 조용히 안 된다.
+    public static let electronTemplate = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+        \t<key>com.apple.security.cs.allow-jit</key>
+        \t<true/>
+        \t<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+        \t<true/>
+        \t<key>com.apple.security.cs.allow-dyld-environment-variables</key>
+        \t<true/>
+        \t<key>com.apple.security.cs.disable-library-validation</key>
+        \t<true/>
+        </dict>
+        </plist>
+        """
+
+    /// 위 본보기를 그대로 쓰기 전에 알아야 할 것.
+    public static let electronTemplateNotes = """
+        electron-builder 의 기본값입니다. 프로젝트에 build/entitlements.mac.plist 가 \
+        이미 있으면 그쪽이 정확합니다. 앱이 카메라나 마이크 같은 권한을 더 쓴다면 키를 \
+        더 넣어야 하고, 빠뜨리면 서명과 공증은 통과하는데 그 기능만 조용히 안 됩니다.
+        """
+
     /// Electron 을 품었는데 JIT 권한이 없을 때.
     ///
     /// 이대로 서명하면 공증은 통과하고 실행만 안 되는 앱이 나간다. 그래서 서명 전에 멈춘다.
@@ -113,7 +159,9 @@ public enum EntitlementsGuidance {
         Hardened Runtime 아래에서 이 권한 없이 V8 을 띄우면 앱이 실행되자마자 죽습니다. \
         서명해도 공증은 통과하므로 아무도 실행할 수 없는 앱이 그대로 나갑니다. 그래서 여기서 멈춥니다.
 
-        <key>\(jitKey)</key><true/> 를 넣은 entitlements plist 를 버전과 함께 올리세요. \
+        \(whyItWorksLocally)
+
+        \(jitKey) 를 담은 entitlements plist 를 버전과 함께 올리세요. \
         \(whereToFind) \(howToSendInConsole) \(howToSendWithCLI)
         """
     }

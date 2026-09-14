@@ -110,6 +110,18 @@
                         </label>
                         <button class="button button-primary" type="submit">붙여서 다시 시도</button>
                     </form>
+                    <!-- 그 파일이 아예 없는 사람이 있습니다. 애드혹 서명으로 개발하던
+                         앱에는 만들 이유가 없었고, 키 이름 하나만 알려주면 XML 뼈대부터
+                         막힙니다. 그래서 복사해 바로 쓸 전문을 둡니다.
+
+                         entitlements_rejected 에는 프로필이 필요한 권한인데 프로필이
+                         없는 경우도 들어옵니다. 그쪽에는 이 본보기가 답이 아니라서
+                         제목에 Electron 을 적고 접어둡니다. -->
+                    <details class="log">
+                        <summary>Electron 앱인데 entitlements 파일이 없다면</summary>
+                        <p class="field-note">#(entitlementsElectronNotes)</p>
+                        <pre class="log-body">#(entitlementsElectronTemplate)</pre>
+                    </details>
                     #endif#endif
                     #if(version.log):
                     <details class="log">

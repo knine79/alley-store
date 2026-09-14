@@ -320,6 +320,8 @@ struct AppPagesController: RouteCollection, Sendable {
                 canUpload: canUpload,
                 canManage: canManage,
                 entitlementsWhereToFind: EntitlementsGuidance.whereToFind,
+                entitlementsElectronTemplate: EntitlementsGuidance.electronTemplate,
+                entitlementsElectronNotes: EntitlementsGuidance.electronTemplateNotes,
                 removal: RemovalCostRow(try await AppRemoval.cost(of: app, on: request.db))
             )
         ).get()
@@ -788,6 +790,10 @@ struct AppDetailContext: Encodable {
     var canManage: Bool
     /// 권한이 모자라 실패한 버전 옆에 붙일 안내. 그 파일을 어디서 구하나 (ADR-0036).
     var entitlementsWhereToFind: String
+    /// 그 파일이 아예 없는 사람을 위한 본보기. Electron 앱 기준이다.
+    var entitlementsElectronTemplate: String
+    /// 본보기를 그대로 쓰기 전에 알아야 할 것.
+    var entitlementsElectronNotes: String
     /// 지우면 무엇이 사라지는지 (ADR-0041).
     var removal: RemovalCostRow
 }
