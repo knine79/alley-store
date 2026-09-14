@@ -42,7 +42,8 @@
 #   --asc-key-id <값>     그 키의 Key ID (10자)
 #   --asc-issuer <값>     Issuer ID (UUID)
 #   --notary-profile <값> 공증 프로필 이름 (기본값: alley)
-#   --uninstall           설치한 것을 되돌립니다
+#   --uninstall           설치한 것을 되돌립니다. 라벨을 설정 파일에서 정했다면
+#                         `--config <파일>` 을 함께 주세요
 #
 # `--p12` 와 `--asc-key` 는 생략해도 됩니다. 이미 그 맥에 인증서와 공증 프로필이
 # 있으면 설치만 합니다.
@@ -53,7 +54,7 @@
 # 환경변수로도 줄 수 있습니다. 이름은 설정 파일의 항목과 같습니다:
 #   ALLEY_SERVER_URL, ALLEY_WORKER_TOKEN, ALLEY_SIGNING_IDENTITY,
 #   ALLEY_NOTARY_PROFILE, ALLEY_WORKER_NAME, ALLEY_P12_PASSWORD,
-#   ALLEY_KEYCHAIN_PASSWORD
+#   ALLEY_KEYCHAIN_PASSWORD, ALLEY_WORKER_LABEL
 #
 # Sparkle 자동 업데이트를 쓰는 조직은 서명 키도 넣습니다 (ADR-0017):
 #   ALLEY_SPARKLE_PRIVATE_KEY  Ed25519 시드(base64). `openssl rand -base64 32`
@@ -61,13 +62,21 @@
 
 set -euo pipefail
 
-# 다른 조직에서 그대로 쓰는 값이므로 example 로 둔다. 필요하면 여기만 바꾼다.
-LABEL="${ALLEY_WORKER_LABEL:-com.example.alley-worker}"
+# 라벨은 설정 파일을 읽은 뒤 다시 정한다. 여기서 한 번 정해두는 것은 설정을 읽지
+# 않고 끝나는 경로(--help) 때문이다.
+#
+# 기본값은 다른 조직에서 그대로 쓰는 값이므로 example 로 둔다. 그대로 두면 운영
+# 맥에 `com.example.alley-worker` 가 굳고, 그 뒤로 launchctl 명령마다 example 이
+# 따라다닌다. 설정 파일에서 바꿀 수 있게 CONFIG_KEYS 에 넣어뒀다.
+resolve_label() {
+    LABEL="${ALLEY_WORKER_LABEL:-com.example.alley-worker}"
+    PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+}
+resolve_label
 
 INSTALL_DIR="$HOME/Library/Application Support/alley-worker"
 APP_DIR="$INSTALL_DIR/alley-worker.app"
 EXECUTABLE="$APP_DIR/Contents/MacOS/alley-worker"
-PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG_DIR="$HOME/Library/Logs"
 LOG_FILE="$LOG_DIR/alley-worker.log"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -97,6 +106,7 @@ ASC_KEY_PATH=""
 ASC_KEY_ID="${ASC_KEY_ID:-}"
 ASC_ISSUER_ID="${ASC_ISSUER_ID:-}"
 CONFIG_PATH=""
+DO_UNINSTALL=""
 
 # 설정 파일에서 읽을 수 있는 키. 여기 없는 키는 오타로 본다.
 #
@@ -109,6 +119,7 @@ ALLEY_WORKER_NAME
 ALLEY_SIGNING_IDENTITY
 ALLEY_NOTARY_PROFILE
 ALLEY_SPARKLE_PRIVATE_KEY
+ALLEY_WORKER_LABEL
 ALLEY_P12_PATH
 ALLEY_P12_PASSWORD
 ALLEY_KEYCHAIN_PASSWORD
@@ -175,6 +186,11 @@ ALLEY_WORKER_NAME=
 # ── 설치할 번들 ──────────────────────────────────────
 # 키트 안의 .app 경로. --bundle 로 줘도 됩니다.
 ALLEY_BUNDLE_PATH=alley-worker.app
+# LaunchAgent 라벨. 보통 워커 번들 ID 와 같게 둡니다.
+# 비우면 com.example.alley-worker 를 쓰는데, 그러면 launchctl 명령마다 example 이
+# 따라다닙니다. 나중에 바꾸려면 맥마다 plist 를 옮겨야 하니 처음에 정하세요.
+# 여기서 정한 라벨은 --uninstall 에도 쓰이니 제거할 때도 --config 를 같이 주세요.
+ALLEY_WORKER_LABEL=
 
 # ── 서명 ─────────────────────────────────────────────
 # Developer ID 인증서와 개인키. 이 맥에 이미 있으면 비워두세요.
@@ -255,8 +271,11 @@ load_config() {
 while [ $# -gt 0 ]; do
     case "$1" in
         --uninstall)
-            uninstall
-            exit 0
+            # 여기서 바로 지우지 않는다. 라벨이 설정 파일에 있을 수 있고, 그것을
+            # 읽기 전에 지우면 기본 라벨의 plist 만 찾다가 "설치된 것이 없습니다" 로
+            # 끝난다. 실제로 돌던 워커는 그대로 남는다.
+            DO_UNINSTALL=1
+            shift
             ;;
         --config)
             CONFIG_PATH="${2:-}"
@@ -323,7 +342,20 @@ if [ -n "$CONFIG_PATH" ]; then
     $0 --init-config $CONFIG_PATH"
 
     load_config "$CONFIG_PATH"
+fi
 
+# 라벨을 다시 정한다. 설정 파일에 있으면 그것이 이긴다.
+resolve_label
+
+# 제거는 라벨만 있으면 된다. 인증서나 번들 경로는 보지 않는다. 설치가 끝나면 p12 와
+# API 키는 지우라고 안내하므로, 그 검사를 지나게 하면 시킨 대로 한 맥에서 제거가
+# 막힌다.
+if [ -n "$DO_UNINSTALL" ]; then
+    uninstall
+    exit 0
+fi
+
+if [ -n "$CONFIG_PATH" ]; then
     [ -n "$P12_PATH" ] || P12_PATH="${ALLEY_P12_PATH:-}"
     [ -n "$ASC_KEY_PATH" ] || ASC_KEY_PATH="${ALLEY_ASC_KEY_PATH:-}"
     [ -n "$ASC_KEY_ID" ] || ASC_KEY_ID="${ALLEY_ASC_KEY_ID:-}"
