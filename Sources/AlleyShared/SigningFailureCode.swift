@@ -131,9 +131,12 @@ public enum SigningFailureGuidance {
                 깨진 프레임워크가 흔한 원인입니다.
                 """
         case .entitlementsRejected:
+            // 이 문구는 웹 콘솔에서만 읽힌다(`failureAdvice`). 붙일 칸이 바로 아래
+            // 있으므로 그 자리를 가리킨다. CLI 로 올리는 사람을 위해 한 줄 더 붙인다.
             return """
-                entitlements 를 고쳐 다시 올리세요. \(EntitlementsGuidance.whenNeeded) \
-                \(EntitlementsGuidance.howToSend)
+                \(EntitlementsGuidance.whenNeeded) \
+                \(EntitlementsGuidance.howToSendInConsole) \
+                \(EntitlementsGuidance.howToSendWithCLI)
                 """
         case .bundleLayoutInvalid:
             return """

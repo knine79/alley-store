@@ -87,6 +87,15 @@ struct EntitlementsOnFailureTests {
         }
     }
 
+    /// ADR-0036 이 새 버전 화면의 파일 칸을 없앴다. 안내가 계속 그 칸을 가리키면
+    /// 실패한 사람이 없는 것을 찾으러 간다. 붙일 자리는 그 실패 바로 아래에 있다.
+    @Test("안내가 없어진 새 버전 화면 칸을 가리키지 않는다")
+    func adviceDoesNotPointAtRemovedField() {
+        let advice = SigningFailureGuidance.whatToDo(.entitlementsRejected)
+        #expect(!advice.contains("새 버전 화면"))
+        #expect(advice.contains("붙여서 다시 시도"))
+    }
+
     /// 인증서 만료처럼 파일과 상관없는 실패에는 칸이 나오지 않는다. 올린 사람이
     /// 할 수 있는 일이 없는데 파일을 달라고 하면 헤매게 된다.
     @Test("다른 이유로 실패하면 그냥 다시 시도한다")
