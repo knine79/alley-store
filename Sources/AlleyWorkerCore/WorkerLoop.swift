@@ -53,10 +53,35 @@ public struct WorkerLoop: Sendable {
                 log("잡 \(job.id) 를 받았습니다. 버전: \(job.versionID)")
                 await process(job)
             } catch {
-                log("서버와 통신하지 못했습니다: \(error). \(Self.retryDelay) 뒤에 다시 시도합니다.")
+                log("""
+                    서버와 통신하지 못했습니다: \(error). \(Self.retryDelay) 뒤에 다시 시도합니다.\
+                    \(Self.hint(for: error, pollTimeout: config.pollTimeout))
+                    """)
                 try? await Task.sleep(for: Self.retryDelay)
             }
         }
+    }
+
+    /// 게이트웨이가 끊은 것으로 보이면 어디를 봐야 하는지 한 줄 덧붙인다.
+    ///
+    /// **이 실패는 서버 문제처럼 읽힌다.** 앞단 프록시의 타임아웃이 `pollTimeout`
+    /// 보다 짧으면 큐가 빌 때마다 프록시가 먼저 끊고 502·504 를 준다. 잡이 있을
+    /// 때는 곧바로 응답이 와서 서명은 멀쩡히 돌기 때문에, 로그만 보고 서버나
+    /// 네트워크를 한참 뒤지게 된다.
+    ///
+    /// **조용히 넘기지는 않는다.** 게이트웨이가 정말 죽어서 나는 502·504 와 구분할
+    /// 방법이 없다. 그것까지 감추면 진짜 장애가 안 보인다. 그래서 줄은 그대로 남기고
+    /// 짚을 곳만 알려준다.
+    static func hint(for error: any Error, pollTimeout: Int) -> String {
+        guard case .badResponse(let status, _)? = error as? WorkerClient.ClientError,
+              status == 502 || status == 504
+        else {
+            return ""
+        }
+        return """
+             큐가 비었을 때만 이렇게 된다면 앞단 프록시가 먼저 끊은 것입니다. \
+            ALLEY_POLL_TIMEOUT(지금 \(pollTimeout)초)을 프록시 타임아웃보다 짧게 잡으세요.
+            """
     }
 
     /// 새 워커로 갈아끼웠으면 true. 그때 루프를 끝내야 한다.
