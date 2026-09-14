@@ -54,6 +54,12 @@ self-hosted, macos, alley-signing
 | `ALLEY_SERVER_URL` | 스토어 서버 주소 |
 | `ALLEY_OPERATOR_TOKEN` | 관리 > 서명 워커 화면에서 발급한 운영 토큰 (`alleyo_…`) |
 | `ALLEY_STORE_APP_TOKEN` | 스토어 앱의 배포 토큰 (`alleyd_…`) |
+| `ALLEY_REGISTRY_USER` | (선택) 서버 이미지를 받을 레지스트리 사용자 |
+| `ALLEY_REGISTRY_TOKEN` | (선택) 그 레지스트리 토큰 |
+
+아래 둘은 `scripts/rollout-server.sh` 가 비공개 레지스트리에서 이미지를 받을 때만
+필요합니다. 그 스크립트가 다른 값을 더 쓴다면 `adopt.yml` 의 **서버 롤아웃** 단계
+`env:` 에 함께 적어주세요. 워크플로는 그 스크립트가 무엇을 필요로 하는지 모릅니다.
 
 **인증서와 공증 자격증명은 시크릿에 넣지 않습니다.** 러너가 도는 맥의 키체인에
 이미 있습니다. `config/signing.env` 에 이름만 적습니다.
