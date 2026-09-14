@@ -9,7 +9,16 @@
 # 하는 일은 "그 태그로 굴려라" 하나입니다.
 #
 # 받는 값:
-#   ALLEY_RELEASE_TAG   예: v0.3.0
+#   ALLEY_RELEASE_TAG     예: v0.3.0
+#   ALLEY_REGISTRY_USER   레지스트리 사용자. 시크릿이 없으면 빈 값
+#   ALLEY_REGISTRY_TOKEN  레지스트리 토큰. 시크릿이 없으면 빈 값
+#
+# **여기 없는 값을 쓰려면 `adopt.yml` 의 "서버 롤아웃" 단계에 줄을 더하세요.**
+# 그러지 않으면 `set -u` 때문에 `unbound variable` 로 죽습니다.
+#
+# 이 단계는 잡의 마지막입니다. 여기서만 실패하면 빌드·서명·공증·업로드는 이미
+# 끝난 것이라, 이미지를 손으로 굴리면 그 릴리스는 그대로 유효합니다. 러너가 도는
+# 맥에 `docker` 가 없어서 걸리는 경우가 그렇습니다.
 
 set -euo pipefail
 
@@ -17,6 +26,15 @@ TAG="${ALLEY_RELEASE_TAG:?ALLEY_RELEASE_TAG 가 필요합니다}"
 IMAGE="ghcr.io/knine79/alley-store:${TAG#v}"
 
 echo "굴릴 이미지: $IMAGE"
+
+# 비공개 레지스트리에서 받는다면 먼저 로그인합니다. 값이 비어 있으면 왜 안 되는지
+# 여기서 말해주는 편이 낫습니다. 뒤에서 "이미지를 못 받았다" 로 나오면 원인이 안
+# 보입니다.
+#
+# if [ -n "$ALLEY_REGISTRY_USER" ]; then
+#     printf '%s' "$ALLEY_REGISTRY_TOKEN" \
+#         | docker login ghcr.io -u "$ALLEY_REGISTRY_USER" --password-stdin
+# fi
 
 # ── 예시 1. docker compose 로 띄운 경우 ──
 #
