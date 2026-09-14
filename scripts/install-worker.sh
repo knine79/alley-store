@@ -54,7 +54,7 @@
 # 환경변수로도 줄 수 있습니다. 이름은 설정 파일의 항목과 같습니다:
 #   ALLEY_SERVER_URL, ALLEY_WORKER_TOKEN, ALLEY_SIGNING_IDENTITY,
 #   ALLEY_NOTARY_PROFILE, ALLEY_WORKER_NAME, ALLEY_P12_PASSWORD,
-#   ALLEY_KEYCHAIN_PASSWORD, ALLEY_WORKER_LABEL
+#   ALLEY_KEYCHAIN_PASSWORD, ALLEY_WORKER_LABEL, ALLEY_POLL_TIMEOUT
 #
 # Sparkle 자동 업데이트를 쓰는 조직은 서명 키도 넣습니다 (ADR-0017):
 #   ALLEY_SPARKLE_PRIVATE_KEY  Ed25519 시드(base64). `openssl rand -base64 32`
@@ -116,6 +116,7 @@ CONFIG_KEYS="
 ALLEY_SERVER_URL
 ALLEY_WORKER_TOKEN
 ALLEY_WORKER_NAME
+ALLEY_POLL_TIMEOUT
 ALLEY_SIGNING_IDENTITY
 ALLEY_NOTARY_PROFILE
 ALLEY_SPARKLE_PRIVATE_KEY
@@ -182,6 +183,10 @@ ALLEY_SERVER_URL=https://store.example.com
 ALLEY_WORKER_TOKEN=
 # 관리 화면에 보일 이름. 비우면 이 맥의 컴퓨터 이름을 씁니다.
 ALLEY_WORKER_NAME=
+# 잡을 기다리는 long-poll 을 몇 초 걸지. 비우면 30 입니다.
+# **앞단 프록시의 타임아웃보다 짧아야 합니다.** 길면 큐가 빌 때마다 504 가 나고,
+# 서명은 멀쩡히 되는데 로그가 "서버와 통신하지 못했습니다" 로 가득 찹니다.
+ALLEY_POLL_TIMEOUT=
 
 # ── 설치할 번들 ──────────────────────────────────────
 # 키트 안의 .app 경로. --bundle 로 줘도 됩니다.
@@ -658,6 +663,7 @@ if ! env \
     ALLEY_SIGNING_IDENTITY="$ALLEY_SIGNING_IDENTITY" \
     ALLEY_NOTARY_PROFILE="$ALLEY_NOTARY_PROFILE" \
     ALLEY_WORKER_NAME="$ALLEY_WORKER_NAME" \
+    ALLEY_POLL_TIMEOUT="${ALLEY_POLL_TIMEOUT:-}" \
     ALLEY_SPARKLE_PRIVATE_KEY="${ALLEY_SPARKLE_PRIVATE_KEY:-}" \
     "$EXECUTABLE" preflight
 then
@@ -695,6 +701,8 @@ cat > "$PLIST" <<PLIST_EOF
         <string>$ALLEY_NOTARY_PROFILE</string>
         <key>ALLEY_WORKER_NAME</key>
         <string>$ALLEY_WORKER_NAME</string>
+        <key>ALLEY_POLL_TIMEOUT</key>
+        <string>${ALLEY_POLL_TIMEOUT:-}</string>
         <key>ALLEY_SPARKLE_PRIVATE_KEY</key>
         <string>${ALLEY_SPARKLE_PRIVATE_KEY:-}</string>
     </dict>
