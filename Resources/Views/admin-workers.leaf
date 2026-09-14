@@ -53,7 +53,7 @@
                 #endif
             </td>
             <td class="table-tight table-muted">#if(worker.osVersion):#(worker.osVersion)#else:—#endif</td>
-            <td class="table-tight table-muted">#if(worker.lastSeen):#(worker.lastSeen)#else:접속한 적 없음#endif</td>
+            <td class="table-tight table-muted">#if(worker.lastSeen):<time datetime="#(worker.lastSeen.iso)" data-date-only="#(worker.lastSeen.dateOnly)">#(worker.lastSeen.display)</time>#else:접속한 적 없음#endif</td>
             <td class="table-tight">
                 #if(worker.isBusy):
                 <span class="badge badge-released">작업 중</span>
@@ -95,7 +95,7 @@
                 <td class="table-fill table-muted">#(worker.name)</td>
                 <td class="table-tight table-muted">#(worker.workerVersion)</td>
                 <td class="table-tight table-muted">#if(worker.osVersion):#(worker.osVersion)#else:—#endif</td>
-                <td class="table-tight table-muted">#if(worker.lastSeen):#(worker.lastSeen)#else:접속한 적 없음#endif</td>
+                <td class="table-tight table-muted">#if(worker.lastSeen):<time datetime="#(worker.lastSeen.iso)" data-date-only="#(worker.lastSeen.dateOnly)">#(worker.lastSeen.display)</time>#else:접속한 적 없음#endif</td>
                 <td class="table-tight"><span class="badge badge-failed">폐기됨</span></td>
             </tr>
             #endfor
@@ -147,7 +147,7 @@
                 <td class="table-tight table-muted">#(job.version)</td>
                 <td class="table-tight">#(job.state)</td>
                 <td class="table-tight">#(job.attempt)</td>
-                <td class="table-tight table-muted">#if(job.lastSeen):#(job.lastSeen)#else:—#endif</td>
+                <td class="table-tight table-muted">#if(job.lastSeen):<time datetime="#(job.lastSeen.iso)" data-date-only="#(job.lastSeen.dateOnly)">#(job.lastSeen.display)</time>#else:—#endif</td>
             </tr>
             #if(job.failureTitle):
             <tr>
@@ -217,7 +217,7 @@
             #for(token in operatorTokens):
             <tr>
                 <td class="table-fill table-strong">#(token.name)</td>
-                <td class="table-tight table-muted">#if(token.lastUsed):#(token.lastUsed)#else:쓴 적 없음#endif</td>
+                <td class="table-tight table-muted">#if(token.lastUsed):<time datetime="#(token.lastUsed.iso)" data-date-only="#(token.lastUsed.dateOnly)">#(token.lastUsed.display)</time>#else:쓴 적 없음#endif</td>
                 <td class="table-tight"><span class="badge">쓸 수 있음</span></td>
                 <td class="table-tight">
                     <form class="row-form" method="post"
@@ -247,7 +247,7 @@
                 #for(token in revokedOperatorTokens):
                 <tr>
                     <td class="table-fill table-muted">#(token.name)</td>
-                    <td class="table-tight table-muted">#if(token.lastUsed):#(token.lastUsed)#else:쓴 적 없음#endif</td>
+                    <td class="table-tight table-muted">#if(token.lastUsed):<time datetime="#(token.lastUsed.iso)" data-date-only="#(token.lastUsed.dateOnly)">#(token.lastUsed.display)</time>#else:쓴 적 없음#endif</td>
                     <td class="table-tight"><span class="badge badge-failed">폐기됨</span></td>
                 </tr>
                 #endfor
@@ -297,7 +297,7 @@
             <tr>
                 <td class="table-fill table-strong">#(release.version)</td>
                 <td class="table-tight table-muted">#(release.size)</td>
-                <td class="table-tight table-muted">#(release.uploadedAt)</td>
+                <td class="table-tight table-muted"><time datetime="#(release.uploadedAt.iso)" data-date-only="#(release.uploadedAt.dateOnly)">#(release.uploadedAt.display)</time></td>
                 <td class="table-tight">
                     #if(release.isCurrent):
                     <span class="badge badge-released">배포 중</span>
