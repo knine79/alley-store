@@ -8,7 +8,7 @@
 /// 비교해 낡았는지 판단한다.
 public enum WorkerVersion {
     /// 올릴 때마다 커진다. 서버와 워커가 문자열로 비교하지 않고 숫자로 견준다.
-    public static let current = "0.2.0"
+    public static let current = "0.3.0"
 
     /// `1.2.3` 을 견줄 수 있는 형태로 바꾼다. 못 읽으면 nil.
     ///
