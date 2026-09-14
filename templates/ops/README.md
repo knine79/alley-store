@@ -45,6 +45,15 @@ self-hosted, macos, alley-signing
 **그 맥은 자동 로그인을 켜야 합니다.** 로그인 키체인이 잠겨 있으면 서명이 조용히
 실패합니다. `notarytool` 은 `User interaction is not allowed` 로 죽습니다.
 
+자세한 절차는 `runbook/setup-runner.md` 에 있습니다. 설치가 끝나면 점검 스크립트를
+돌리세요. **설치는 됐는데 나중에 터지는 것들**을 여기서 잡습니다.
+
+```bash
+./scripts/check-signing-mac.sh
+```
+
+서명과 공증을 실제로 해보고, 그 맥에 공개 레포 러너가 함께 있는지도 봅니다.
+
 ### 3. 시크릿 넣기
 
 레포 Settings > Secrets 에 넣습니다.
@@ -88,6 +97,10 @@ config/
   adopt.yml                 빌드 → 서명 → 업로드 → 롤아웃
   watch.yml                 제품 레포 새 릴리스 감지 → PR 생성
 credentials.md              자격증명 대장
+scripts/
+  check-signing-mac.sh      서명 맥이 제대로 섰는지 본다
+  rollout-server.sh         이미지를 배포 플랫폼으로 옮김 (.example 참고)
 runbook/                    무엇이 잘못됐을 때 무엇을 하나
+  setup-runner.md           서명 맥에 러너 얹기
 incidents/                  겪은 일. 시간이 지나면 재구성 안 되는 것
 ```
