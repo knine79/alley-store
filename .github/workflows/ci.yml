@@ -128,14 +128,55 @@ jobs:
       # 레지스트리 쓰기는 이 잡에만 준다.
       packages: write
     steps:
+      # PR 에서는 이미지가 필요할 때만 짓는다.
+      #
+      # 이 잡 하나가 CI 시간의 대부분이다. 실측에서 전체 16분 중 11분 38초였고,
+      # 그중 7분 36초가 `swift build -c release --static-swift-stdlib` 였다.
+      # 레이어 캐시가 있어도 `COPY . .` 뒤라서 소스가 한 글자만 바뀌면 다시 돈다.
+      #
+      # PR 에서는 `push: false` 라 이미지가 나가지도 않는다. 짓는 목적은 Dockerfile
+      # 과 의존성이 여전히 유효한지 보는 것인데, 그 둘이 그대로면 새로 알 수 있는
+      # 것이 거의 없다. 소스 자체는 바로 앞 `build-and-test` 잡이 컴파일하고
+      # 테스트한다.
+      #
+      # `push` (main·태그)에서는 언제나 짓는다. 그때는 이미지가 실제로 나간다.
+      - name: 이미지를 지어야 하나
+        id: need
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "PR 이 아닙니다. 짓습니다."
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed=$(gh api --paginate \
+            "/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --jq '.[].filename')
+
+          if printf '%s\n' "$changed" \
+              | grep -qE '^(Dockerfile|\.dockerignore|Package\.swift|Package\.resolved|\.github/workflows/ci\.yml)$'; then
+            echo "Dockerfile 이나 의존성이 바뀌었습니다. 짓습니다."
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Dockerfile 과 의존성이 그대로입니다. 건너뜁니다."
+            echo "  소스는 '빌드 및 테스트 (Linux)' 잡이 컴파일하고 테스트했습니다."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.need.outputs.build == 'true'
 
       - uses: docker/setup-buildx-action@v3
+        if: steps.need.outputs.build == 'true'
 
       # 이미지 주소를 레포 경로에서 뽑는다. 포크해도 자기 레포로 나간다.
       # 대문자가 섞인 레포 이름은 액션이 알아서 소문자로 바꾼다.
       - name: 태그 계산
         id: meta
+        if: steps.need.outputs.build == 'true'
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
@@ -152,7 +193,7 @@ jobs:
       # PR 에서는 로그인하지 않는다. 포크에서 온 PR 의 토큰에는 쓰기 권한이 없어
       # 밀어봐야 실패한다. 짓는 것까지는 그대로 검증된다.
       - name: 레지스트리 로그인
-        if: github.event_name != 'pull_request'
+        if: steps.need.outputs.build == 'true' && github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -160,6 +201,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 빌드 및 발행
+        if: steps.need.outputs.build == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
