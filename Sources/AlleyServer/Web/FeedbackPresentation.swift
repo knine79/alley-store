@@ -44,7 +44,7 @@ enum FeedbackPresentation {
                     authorName: entry.isAnonymous ? nil : entry.user.name,
                     isAnonymous: entry.isAnonymous,
                     isMine: isMine,
-                    createdAt: DateStyle.minute.string(from: entry.createdAt ?? Date()),
+                    createdAt: DateStyle.minute.display(from: entry.createdAt ?? Date()),
                     canDelete: isMine || canManage
                 )
             )

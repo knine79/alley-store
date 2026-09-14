@@ -77,7 +77,7 @@
                 <td class="table-tight table-strong">#(version.shortVersion)</td>
                 <td class="table-tight table-muted">#(version.buildNumber)</td>
                 <td class="table-tight table-muted">#if(version.fileSize):#(version.fileSize)#else:—#endif</td>
-                <td class="table-tight table-muted">#(version.createdAt)</td>
+                <td class="table-tight table-muted"><time datetime="#(version.createdAt.iso)" data-date-only="#(version.createdAt.dateOnly)">#(version.createdAt.display)</time></td>
                 <td class="table-tight table-muted">#if(version.downloadCount):#(version.downloadCount)#else:—#endif</td>
                 <td class="table-fill">
                     <span class="badge badge-#(version.state)">#(version.stateName)</span>
@@ -265,7 +265,7 @@
                     #if(entry.authorName):#(entry.authorName)#else:익명#endif
                 </span>
                 <span class="table-muted">#(entry.versionName)</span>
-                <span class="table-muted">#(entry.createdAt)</span>
+                <span class="table-muted"><time datetime="#(entry.createdAt.iso)" data-date-only="#(entry.createdAt.dateOnly)">#(entry.createdAt.display)</time></span>
                 #if(entry.canDelete):
                 <form class="row-form feedback-delete" method="post"
                       action="/apps/#(app.id)/feedback/#(entry.id)/delete">
@@ -393,7 +393,7 @@
             #for(token in feedTokens):
             <tr>
                 <td class="table-fill table-strong">#(token.name)</td>
-                <td class="table-tight table-muted">#if(token.lastUsed):#(token.lastUsed)#else:쓰인 적 없음#endif</td>
+                <td class="table-tight table-muted">#if(token.lastUsed):<time datetime="#(token.lastUsed.iso)" data-date-only="#(token.lastUsed.dateOnly)">#(token.lastUsed.display)</time>#else:쓰인 적 없음#endif</td>
                 <td class="table-tight">
                     #if(token.isActive):
                     <span class="badge">쓸 수 있음</span>
@@ -465,7 +465,7 @@
             #for(token in deployTokens):
             <tr>
                 <td class="table-fill table-strong">#(token.name)</td>
-                <td class="table-tight table-muted">#if(token.lastUsed):#(token.lastUsed)#else:쓰인 적 없음#endif</td>
+                <td class="table-tight table-muted">#if(token.lastUsed):<time datetime="#(token.lastUsed.iso)" data-date-only="#(token.lastUsed.dateOnly)">#(token.lastUsed.display)</time>#else:쓰인 적 없음#endif</td>
                 <td class="table-tight">
                     #if(token.isActive):
                     <span class="badge">쓸 수 있음</span>

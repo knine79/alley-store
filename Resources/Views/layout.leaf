@@ -37,5 +37,8 @@
         #extend("admin-nav")
         #import("content")
     </main>
+
+    <!-- 날짜를 보는 사람의 타임존으로 다시 그린다. 없어도 서버가 쓴 값이 남는다. -->
+    <script src="/local-time.js?v=#(page.assetVersion)" defer></script>
 </body>
 </html>

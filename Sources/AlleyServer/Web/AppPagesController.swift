@@ -225,7 +225,7 @@ struct AppPagesController: RouteCollection, Sendable {
                     DeployTokenRow(
                         id: token.id?.uuidString ?? "",
                         name: token.name,
-                        lastUsed: token.lastUsedAt.map { DateStyle.minute.string(from: $0) },
+                        lastUsed: token.lastUsedAt.map { DateStyle.minute.display(from: $0) },
                         isActive: token.isActive
                     )
                 }
@@ -671,7 +671,7 @@ struct VersionRow: Encodable {
     var canRelease: Bool
     var releaseNotes: String?
     var fileSize: String?
-    var createdAt: String
+    var createdAt: DisplayDate
     var failureReason: String?
     /// 서명 워커가 남긴 로그. 실패했을 때만 화면에 편다.
     ///
@@ -709,7 +709,7 @@ struct VersionRow: Encodable {
         self.canRelease = version.state.canTransition(to: .released)
         self.releaseNotes = version.releaseNotes
         self.fileSize = version.bestArtifact?.fileSize.map(ByteCount.humanReadable)
-        self.createdAt = DateStyle.day.string(from: version.createdAt ?? Date())
+        self.createdAt = DateStyle.day.display(from: version.createdAt ?? Date())
         self.failureReason = version.failureReason
         self.log = report?.log
         // 코드를 그대로 내보내지 않는다. 사람이 읽는 문장과 함께만 보여준다 (ADR-0023).
@@ -845,7 +845,7 @@ struct FeedbackRow: Encodable {
     var authorName: String?
     var isAnonymous: Bool
     var isMine: Bool
-    var createdAt: String
+    var createdAt: DisplayDate
     /// 지금 보는 사람이 지울 수 있는지.
     var canDelete: Bool
 }
@@ -865,10 +865,10 @@ extension DeployTokenFormValues: Content {}
 struct DeployTokenRow: Encodable {
     var id: String
     var name: String
-    var lastUsed: String?
+    var lastUsed: DisplayDate?
     var isActive: Bool
 
-    init(id: String, name: String, lastUsed: String?, isActive: Bool) {
+    init(id: String, name: String, lastUsed: DisplayDate?, isActive: Bool) {
         self.id = id
         self.name = name
         self.lastUsed = lastUsed
@@ -879,7 +879,7 @@ struct DeployTokenRow: Encodable {
         self.init(
             id: token.id?.uuidString ?? "",
             name: token.name,
-            lastUsed: token.lastUsedAt.map { DateStyle.minute.string(from: $0) },
+            lastUsed: token.lastUsedAt.map { DateStyle.minute.display(from: $0) },
             isActive: token.isActive
         )
     }
@@ -919,6 +919,23 @@ enum ByteCount {
     }
 }
 
+/// 화면에 넘기는 날짜.
+///
+/// **표시 문자열과 ISO 8601 을 함께 담는다.** 서버가 만든 문자열은 서버 타임존
+/// 기준인데, 컨테이너는 보통 UTC 라 보는 사람의 시각과 어긋난다. 그렇다고 서버에
+/// 타임존을 박으면 다른 시간대에서 보는 사람이 또 어긋난다.
+///
+/// 그래서 ISO 를 함께 보내고 브라우저가 자기 타임존으로 다시 그린다. 스크립트가
+/// 돌지 않아도 `display` 가 그대로 보이므로 화면이 비지는 않는다.
+struct DisplayDate: Encodable {
+    /// 서버가 만든 값. 스크립트가 없을 때 그대로 보인다.
+    let display: String
+    /// `<time datetime>` 에 넣는 값. 브라우저가 이것으로 로컬 시각을 만든다.
+    let iso: String
+    /// 날짜만 쓰는 자리인지. 브라우저가 시각을 붙일지 정하는 데 쓴다.
+    let dateOnly: Bool
+}
+
 /// 날짜를 화면에 맞게 미리 문자열로 만든다.
 ///
 /// Leaf 에서 날짜를 다루면 형식이 템플릿마다 갈린다. 서버에서 한 번 정해서 넘긴다.
@@ -938,5 +955,19 @@ enum DateStyle {
             formatter.dateFormat = "yyyy. M. d. HH:mm"
         }
         return formatter.string(from: date)
+    }
+
+    /// 화면용. 알림 문구처럼 브라우저를 거치지 않는 곳은 `string(from:)` 을 쓴다.
+    ///
+    /// 포매터를 `static let` 으로 두지 않는다. `ISO8601DateFormatter` 가 Sendable 이
+    /// 아니라 Swift 6 에서 막힌다. 위 `string(from:)` 도 같은 이유로 매번 만든다.
+    func display(from date: Date) -> DisplayDate {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return DisplayDate(
+            display: string(from: date),
+            iso: formatter.string(from: date),
+            dateOnly: self == .day
+        )
     }
 }
