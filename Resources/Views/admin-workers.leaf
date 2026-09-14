@@ -274,7 +274,7 @@
 <section class="section">
     <h2 class="section-title">워커 릴리스</h2>
     <p class="body-text">
-        워커는 여기 <strong>배포 중</strong>으로 표시된 번들과 자기 버전을 견줘, 낮으면
+        워커는 여기 <strong>배포 완료</strong>로 표시된 번들과 자기 버전을 견줘, 낮으면
         일이 없을 때 스스로 갈아끼웁니다. 이 서버가 아는 버전은
         <code>#(serverWorkerVersion)</code> 입니다.
     </p>
@@ -300,7 +300,7 @@
                 <td class="table-tight table-muted"><time datetime="#(release.uploadedAt.iso)" data-date-only="#(release.uploadedAt.dateOnly)">#(release.uploadedAt.display)</time></td>
                 <td class="table-tight">
                     #if(release.isCurrent):
-                    <span class="badge badge-released">배포 중</span>
+                    <span class="badge badge-released">배포 완료</span>
                     #else:
                     <span class="badge">보관</span>
                     #endif
