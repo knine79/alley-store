@@ -1268,6 +1268,23 @@ textarea.input {
     word-break: break-word;
 }
 
+/* ── 접어둔 이력 ─────────────────────────────────────────── */
+
+/* 폐기한 워커와 운영 토큰. 기록으로 남기되 지금 무엇이 도는지를 가리지 않는다. */
+.archive {
+    margin-top: var(--space-3);
+}
+
+.archive summary {
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: var(--font-sm);
+}
+
+.archive[open] summary {
+    margin-bottom: var(--space-2);
+}
+
 /* ── 별점 ────────────────────────────────────────────────── */
 
 .rating-summary {

@@ -475,6 +475,36 @@ struct WorkerPageTests {
         }
     }
 
+    @Test("폐기한 워커는 접어둔 목록으로 내려간다")
+    func revokedWorkersAreFolded() async throws {
+        try await withMigratedApp { app in
+            app.useFakeStorage()
+            let (admin, cookie) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            _ = try await AdminOperations.registerWorker(
+                named: "build-mac-01", by: admin, on: app.db, logger: app.logger
+            )
+            let retired = try await AdminOperations.registerWorker(
+                named: "build-mac-99", by: admin, on: app.db, logger: app.logger
+            )
+
+            try await app.testing().test(
+                .POST, "/admin/workers/\(retired.worker.id.uuidString)/revoke",
+                headers: .form(cookie: cookie)
+            ) { #expect($0.status == .seeOther) }
+
+            try await app.testing().test(
+                .GET, "/admin/workers", headers: .sessionCookie(cookie)
+            ) { response in
+                let html = response.body.string
+                // 기록이므로 화면에서 사라지지는 않는다. 접어둘 뿐이다.
+                #expect(html.contains("build-mac-99"))
+                #expect(html.contains("폐기된 워커 1개 보기"))
+                // 현역은 접히지 않는다.
+                #expect(html.contains("build-mac-01"))
+            }
+        }
+    }
+
     @Test("이름이 비면 발급하지 않는다")
     func rejectsEmptyName() async throws {
         try await withMigratedApp { app in

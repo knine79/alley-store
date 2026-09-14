@@ -213,7 +213,18 @@ struct AdminPagesController: RouteCollection, Sendable {
         issuedOperatorToken: String? = nil,
         on request: Request
     ) async throws -> View {
-        let workers = try await Worker.query(on: request.db).sort(\.$name).all()
+        // 폐기한 워커도 함께 읽어 화면에서 나눈다. 행은 지우지 않는다. 잡 이력이
+        // 이 워커를 가리키고, "이 토큰이 존재했다" 는 것 자체가 기록이다. 다만 맥을
+        // 교체할 때마다 목록이 한 줄씩 길어지므로, 기본 목록은 현역만 보여주고
+        // 폐기된 것은 접어둔다.
+        let workerRows = try await Worker.query(on: request.db)
+            .sort(\.$name)
+            .all()
+            .map { try WorkerRow(worker: $0) }
+        let operatorTokenRows = try await OperatorToken.query(on: request.db)
+            .sort(\.$createdAt, .descending)
+            .all()
+            .map { try OperatorTokenRow(token: $0) }
         // 최근 잡을 함께 보여준다. 멈춘 잡을 큐로 되돌린 사실은 여기서만 보인다.
         // 시도 횟수가 1 보다 크면 누군가 그 잡을 다시 내보냈다는 뜻이다.
         let jobs = try await SigningJob.query(on: request.db)
@@ -226,7 +237,8 @@ struct AdminPagesController: RouteCollection, Sendable {
             "admin-workers",
             WorkerListPageContext(
                 page: try await request.pageContext(adminTab: .workers),
-                workers: try workers.map { try WorkerRow(worker: $0) },
+                workers: workerRows.filter(\.isActive),
+                revokedWorkers: workerRows.filter { !$0.isActive },
                 jobs: jobs.map { SigningJobRow(job: $0) },
                 issued: issued.map { IssuedWorkerToken(name: $0.worker.name, token: $0.token) },
                 error: error,
@@ -235,10 +247,8 @@ struct AdminPagesController: RouteCollection, Sendable {
                     .sort(\.$createdAt, .descending)
                     .all()
                     .map { try WorkerReleaseRow(release: $0) },
-                operatorTokens: try await OperatorToken.query(on: request.db)
-                    .sort(\.$createdAt, .descending)
-                    .all()
-                    .map { try OperatorTokenRow(token: $0) },
+                operatorTokens: operatorTokenRows.filter(\.isActive),
+                revokedOperatorTokens: operatorTokenRows.filter { !$0.isActive },
                 issuedOperatorToken: issuedOperatorToken.map { IssuedOperatorToken(value: $0) }
             )
         ).get()
@@ -781,7 +791,10 @@ struct PortalPageContext: Encodable {
 
 struct WorkerListPageContext: Encodable {
     var page: PageContext
+    /// 지금 쓰는 워커. 폐기한 것은 여기 없다.
     var workers: [WorkerRow]
+    /// 폐기한 워커. 화면에서는 접어둔다.
+    var revokedWorkers: [WorkerRow]
     var jobs: [SigningJobRow]
     var issued: IssuedWorkerToken?
     var error: String?
@@ -790,6 +803,8 @@ struct WorkerListPageContext: Encodable {
     var releases: [WorkerReleaseRow]
     /// 운영 파이프라인이 쓰는 토큰들 (ADR-0043).
     var operatorTokens: [OperatorTokenRow]
+    /// 폐기한 운영 토큰. 워커와 같은 이유로 접어둔다.
+    var revokedOperatorTokens: [OperatorTokenRow]
     /// 방금 발급한 토큰. 한 번만 보여준다.
     var issuedOperatorToken: IssuedOperatorToken?
 }
