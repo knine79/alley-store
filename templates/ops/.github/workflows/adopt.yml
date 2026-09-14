@@ -72,10 +72,24 @@ jobs:
         run: |
           set -euo pipefail
           # 값에 공백이 있어 `export $(cat …)` 은 쓸 수 없다. 한 줄씩 넣는다.
+          #
+          # 따옴표는 여기서 벗긴다. 그 파일들은 셸에서 `source` 할 수 있게 값을
+          # 따옴표로 감싸 두는데, `$GITHUB_ENV` 는 셸이 아니라 `KEY=VALUE` 를 글자
+          # 그대로 읽는다. 그대로 넣으면 따옴표가 값의 일부가 되고, 그때 나오는
+          # 오류는 원인을 짐작하기 어렵다.
+          #
+          #   Error: Profile name contains invalid characters: ["Quotation Mark", …]
           for file in config/signing.env config/store.env; do
             while IFS= read -r line; do
               case "$line" in ''|'#'*) continue ;; esac
-              printf '%s\n' "${line%$'\r'}" >> "$GITHUB_ENV"
+              line="${line%$'\r'}"
+              key="${line%%=*}"
+              value="${line#*=}"
+              case "$value" in
+                '"'*'"') value="${value#\"}"; value="${value%\"}" ;;
+                "'"*"'") value="${value#\'}"; value="${value%\'}" ;;
+              esac
+              printf '%s=%s\n' "$key" "$value" >> "$GITHUB_ENV"
             done < "$file"
           done
 
@@ -86,8 +100,10 @@ jobs:
       - name: 서명 환경 점검
         run: |
           set -euo pipefail
-          security find-identity -v -p codesigning | grep -q "Developer ID Application" \
-            || { echo "키체인에 Developer ID 가 없거나 잠겨 있습니다." >&2; exit 1; }
+          # 리터럴이 아니라 설정값으로 찾는다. 리터럴로 보면 `ALLEY_SIGNING_IDENTITY`
+          # 가 잘못돼 있어도 이 줄은 통과하고, 한참 뒤 서명 단계에서 드러난다.
+          security find-identity -v -p codesigning | grep -qF "$ALLEY_SIGNING_IDENTITY" \
+            || { echo "키체인에서 '$ALLEY_SIGNING_IDENTITY' 를 찾지 못했습니다. 없거나 키체인이 잠겨 있습니다." >&2; exit 1; }
           xcrun notarytool history --keychain-profile "$ALLEY_NOTARY_PROFILE" \
             --output-format json >/dev/null \
             || { echo "공증 자격증명을 쓸 수 없습니다. 키체인이 잠겼을 수 있습니다." >&2; exit 1; }
