@@ -600,8 +600,14 @@ entitlements 는 "이 앱이 무엇을 해도 되는지" 를 적어 서명에 �
 없는 앱이 배포까지 그대로 갑니다.** Electron 앱은 워커가 서명 전에 막아주지만, 다른 JIT
 런타임은 잡지 못합니다.
 
-파일은 대개 앱 빌드 설정에 이미 있습니다. Xcode 는 `CODE_SIGN_ENTITLEMENTS` 가 가리키는
-`.entitlements` 파일이고, Electron 은 빌드 스크립트가 `codesign` 에 넘기는 plist 입니다.
+파일은 빌드 설정에 이미 있을 수 있습니다. Xcode 는 `CODE_SIGN_ENTITLEMENTS` 가 가리키는
+`.entitlements` 파일이고, electron-builder 는 보통 `build/entitlements.mac.plist` 입니다.
+
+**없는 경우도 흔합니다.** 개발 중에는 애드혹 서명이라 Hardened Runtime 이 걸리지 않고,
+그러면 JIT 제한도 없어서 만들 이유가 없었습니다. 개발자 맥에서 잘 돌던 앱이 여기서
+처음 막히는 것이 그래서입니다. 없으면 새로 만들면 됩니다. 파일 이름은 아무거나 되고
+확장자만 `.plist` 나 `.entitlements` 면 됩니다. 실패 화면에 Electron 기준 본보기를
+복사해 쓸 수 있게 붙여뒀습니다.
 
 **웹 콘솔은 올릴 때 이 파일을 묻지 않습니다.** 번들에 붙어 있으면 워커가 읽어 그대로
 다시 붙이고, 없는데 필요하면 그때 실패시키면서 붙일 자리를 냅니다
