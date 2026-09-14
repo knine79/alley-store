@@ -52,7 +52,7 @@
                     #endif
                 </td>
                 <td class="table-tight table-muted">#(certificate.type)</td>
-                <td class="table-tight table-muted">#if(certificate.expires):#(certificate.expires)#else:—#endif</td>
+                <td class="table-tight table-muted">#if(certificate.expires):<time datetime="#(certificate.expires.iso)" data-date-only="#(certificate.expires.dateOnly)">#(certificate.expires.display)</time>#else:—#endif</td>
                 <td class="table-tight">
                     #if(certificate.needsAttention):
                     <span class="badge badge-failed">#(certificate.daysLeft)일</span>

@@ -607,13 +607,13 @@ struct IssuedOperatorToken: Encodable {
 struct OperatorTokenRow: Encodable {
     var id: String
     var name: String
-    var lastUsed: String?
+    var lastUsed: DisplayDate?
     var isActive: Bool
 
     init(token: OperatorToken) throws {
         self.id = try token.requireID().uuidString
         self.name = token.name
-        self.lastUsed = token.lastUsedAt.map { DateStyle.minute.string(from: $0) }
+        self.lastUsed = token.lastUsedAt.map { DateStyle.minute.display(from: $0) }
         self.isActive = token.isActive
     }
 }
@@ -630,14 +630,14 @@ struct WorkerReleaseRow: Encodable {
     var id: String
     var version: String
     var size: String
-    var uploadedAt: String
+    var uploadedAt: DisplayDate
     var isCurrent: Bool
 
     init(release: WorkerRelease) throws {
         self.id = try release.requireID().uuidString
         self.version = release.version
         self.size = ByteCount.humanReadable(release.fileSize)
-        self.uploadedAt = DateStyle.minute.string(from: release.createdAt ?? Date())
+        self.uploadedAt = DateStyle.minute.display(from: release.createdAt ?? Date())
         self.isCurrent = release.isCurrent
     }
 }
@@ -646,7 +646,7 @@ struct WorkerRow: Encodable {
     var id: String
     var name: String
     var osVersion: String?
-    var lastSeen: String?
+    var lastSeen: DisplayDate?
     var isBusy: Bool
     var isActive: Bool
     /// 이 워커가 알린 버전. 모르면 "모름" 으로 그린다 (ADR-0042).
@@ -661,7 +661,7 @@ struct WorkerRow: Encodable {
         self.id = worker.id?.uuidString ?? ""
         self.name = worker.name
         self.osVersion = worker.osVersion
-        self.lastSeen = worker.lastSeenAt.map { DateStyle.minute.string(from: $0) }
+        self.lastSeen = worker.lastSeenAt.map { DateStyle.minute.display(from: $0) }
         self.isBusy = worker.currentJobID != nil
         self.isActive = worker.isActive
         self.workerVersion = worker.workerVersion ?? "모름"
@@ -682,7 +682,7 @@ struct SigningJobRow: Encodable {
     var state: String
     /// 몇 번째 시도인지. 1 보다 크면 멈춰서 되돌린 적이 있다는 뜻이다.
     var attempt: Int
-    var lastSeen: String?
+    var lastSeen: DisplayDate?
     /// 실패 이유. 왜 멈췄는지가 여기 남는다.
     var note: String?
     /// 무엇 때문인지 한 줄로. 갈래를 모르면 nil.
@@ -700,7 +700,7 @@ struct SigningJobRow: Encodable {
         self.version = version.map { "\($0.shortVersion) (\($0.buildNumber))" } ?? "?"
         self.state = Self.stateName(job.state)
         self.attempt = job.attempt
-        self.lastSeen = (job.heartbeatAt ?? job.claimedAt).map { DateStyle.minute.string(from: $0) }
+        self.lastSeen = (job.heartbeatAt ?? job.claimedAt).map { DateStyle.minute.display(from: $0) }
         self.note = job.failureReason
         // 코드를 그대로 내보내지 않는다. 사람이 읽는 문장과 함께만 보여준다 (ADR-0023).
         self.failureTitle = job.failureCode.map(SigningFailureGuidance.title)
@@ -736,7 +736,7 @@ extension BundleIDFormValues: Content {}
 struct CertificateRow: Encodable {
     var name: String
     var type: String
-    var expires: String?
+    var expires: DisplayDate?
     var daysLeft: Int?
     /// 서명에 쓰는 인증서인지. 이게 만료되면 워커가 멈춘다.
     var isDeveloperID: Bool
@@ -746,7 +746,7 @@ struct CertificateRow: Encodable {
     init(certificate: ASCCertificate) {
         self.name = certificate.name
         self.type = certificate.type
-        self.expires = certificate.expiresAt.map { DateStyle.day.string(from: $0) }
+        self.expires = certificate.expiresAt.map { DateStyle.day.display(from: $0) }
         let days = certificate.daysUntilExpiry()
         self.daysLeft = days
         self.isDeveloperID = certificate.isDeveloperID
