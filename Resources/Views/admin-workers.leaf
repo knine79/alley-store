@@ -104,6 +104,24 @@
 </details>
 #endif
 
+<!-- 등록 폼은 목록 바로 아래 둡니다. 운영 토큰과 워커 릴리스가 같은 모양이고,
+     폐기는 목록에서 바로 되는데 추가만 페이지 끝에 있으면 처음 쓰는 사람이
+     "여기서 워커를 추가할 수 있나" 를 한 번 헤맵니다. -->
+<section class="section">
+    <h2 class="section-title">워커 등록</h2>
+    <form class="form" method="post" action="/admin/workers">
+        <label class="field">
+            <span class="field-label">이름</span>
+            <input class="input" type="text" name="name" required placeholder="build-mac-01"
+                   autocapitalize="off" autocorrect="off" spellcheck="false">
+            <span class="field-note">어느 머신인지 알아볼 수 있는 이름이면 됩니다. 워커가 접속하면 자기 설정의 이름으로 덮어씁니다.</span>
+        </label>
+        <div class="form-actions">
+            <button class="button button-primary" type="submit">토큰 발급</button>
+        </div>
+    </form>
+</section>
+
 #if(count(jobs) == 0):
 #else:
 <section class="section">
@@ -332,21 +350,6 @@
 
         <div class="form-actions">
             <button class="button button-primary" type="submit">릴리스 올리기</button>
-        </div>
-    </form>
-</section>
-
-<section class="section">
-    <h2 class="section-title">워커 등록</h2>
-    <form class="form" method="post" action="/admin/workers">
-        <label class="field">
-            <span class="field-label">이름</span>
-            <input class="input" type="text" name="name" required placeholder="build-mac-01"
-                   autocapitalize="off" autocorrect="off" spellcheck="false">
-            <span class="field-note">어느 머신인지 알아볼 수 있는 이름이면 됩니다. 워커가 접속하면 자기 설정의 이름으로 덮어씁니다.</span>
-        </label>
-        <div class="form-actions">
-            <button class="button button-primary" type="submit">토큰 발급</button>
         </div>
     </form>
 </section>
