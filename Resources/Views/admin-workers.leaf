@@ -24,7 +24,7 @@
 
 #if(count(workers) == 0):
 <div class="empty">
-    <p>아직 등록된 워커가 없습니다.</p>
+    <p>지금 쓰는 워커가 없습니다.</p>
     <p class="empty-note">워커를 등록해야 미서명 업로드가 서명 단계로 넘어갑니다.</p>
 </div>
 #else:
@@ -55,27 +55,53 @@
             <td class="table-tight table-muted">#if(worker.osVersion):#(worker.osVersion)#else:—#endif</td>
             <td class="table-tight table-muted">#if(worker.lastSeen):#(worker.lastSeen)#else:접속한 적 없음#endif</td>
             <td class="table-tight">
-                #if(worker.isActive):
                 #if(worker.isBusy):
                 <span class="badge badge-released">작업 중</span>
                 #else:
                 <span class="badge">대기 중</span>
                 #endif
-                #else:
-                <span class="badge badge-failed">폐기됨</span>
-                #endif
             </td>
             <td class="table-tight">
-                #if(worker.isActive):
                 <form class="row-form" method="post" action="/admin/workers/#(worker.id)/revoke">
                     <button class="button" type="submit">폐기</button>
                 </form>
-                #endif
             </td>
         </tr>
         #endfor
     </tbody>
 </table>
+#endif
+
+<!-- 폐기한 워커는 지우지 않고 접어둡니다. 잡 이력이 이 워커를 가리키고, 그 토큰이
+     존재했다는 것 자체가 기록입니다. 다만 맥을 교체할 때마다 목록이 길어져서
+     지금 무엇이 도는지 안 보이므로 기본으로는 펴지 않습니다. -->
+#if(count(revokedWorkers) == 0):
+#else:
+<details class="archive">
+    <summary>폐기된 워커 #count(revokedWorkers)개 보기</summary>
+    <table class="table">
+        <thead>
+            <tr>
+                <th class="table-fill">이름</th>
+                <th class="table-tight">워커 버전</th>
+                <th class="table-tight">macOS</th>
+                <th class="table-tight">마지막 접속</th>
+                <th class="table-tight">상태</th>
+            </tr>
+        </thead>
+        <tbody>
+            #for(worker in revokedWorkers):
+            <tr>
+                <td class="table-fill table-muted">#(worker.name)</td>
+                <td class="table-tight table-muted">#(worker.workerVersion)</td>
+                <td class="table-tight table-muted">#if(worker.osVersion):#(worker.osVersion)#else:—#endif</td>
+                <td class="table-tight table-muted">#if(worker.lastSeen):#(worker.lastSeen)#else:접속한 적 없음#endif</td>
+                <td class="table-tight"><span class="badge badge-failed">폐기됨</span></td>
+            </tr>
+            #endfor
+        </tbody>
+    </table>
+</details>
 #endif
 
 #if(count(jobs) == 0):
@@ -158,7 +184,7 @@
     #endif
 
     #if(count(operatorTokens) == 0):
-    <p class="empty">아직 발급한 운영 토큰이 없습니다.</p>
+    <p class="empty">쓸 수 있는 운영 토큰이 없습니다.</p>
     #else:
     <table class="table">
         <thead>
@@ -174,27 +200,42 @@
             <tr>
                 <td class="table-fill table-strong">#(token.name)</td>
                 <td class="table-tight table-muted">#if(token.lastUsed):#(token.lastUsed)#else:쓴 적 없음#endif</td>
+                <td class="table-tight"><span class="badge">쓸 수 있음</span></td>
                 <td class="table-tight">
-                    #if(token.isActive):
-                    <span class="badge">쓸 수 있음</span>
-                    #else:
-                    <span class="badge badge-failed">폐기됨</span>
-                    #endif
-                </td>
-                <td class="table-tight">
-                    #if(token.isActive):
                     <form class="row-form" method="post"
                           action="/admin/operator-tokens/#(token.id)/revoke">
                         <button class="button" type="submit">폐기</button>
                     </form>
-                    #else:
-                    <span class="table-muted">—</span>
-                    #endif
                 </td>
             </tr>
             #endfor
         </tbody>
     </table>
+    #endif
+
+    #if(count(revokedOperatorTokens) == 0):
+    #else:
+    <details class="archive">
+        <summary>폐기된 운영 토큰 #count(revokedOperatorTokens)개 보기</summary>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th class="table-fill">이름</th>
+                    <th class="table-tight">마지막 사용</th>
+                    <th class="table-tight">상태</th>
+                </tr>
+            </thead>
+            <tbody>
+                #for(token in revokedOperatorTokens):
+                <tr>
+                    <td class="table-fill table-muted">#(token.name)</td>
+                    <td class="table-tight table-muted">#if(token.lastUsed):#(token.lastUsed)#else:쓴 적 없음#endif</td>
+                    <td class="table-tight"><span class="badge badge-failed">폐기됨</span></td>
+                </tr>
+                #endfor
+            </tbody>
+        </table>
+    </details>
     #endif
 
     <form class="form" method="post" action="/admin/operator-tokens">
