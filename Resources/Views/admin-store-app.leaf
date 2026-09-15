@@ -209,6 +209,7 @@
                 <th class="table-tight">빌드</th>
                 <th class="table-tight">빌드한 때</th>
                 <th class="table-fill">상태</th>
+                <th class="table-tight"><span class="visually-hidden">출시</span></th>
             </tr>
         </thead>
         <tbody>
@@ -223,18 +224,42 @@
                 </td>
                 <td class="table-fill">
                     <span class="badge badge-#(build.state)">#(build.stateLabel)</span>
+                    #if(build.failureTitle):
+                    <span class="table-note">
+                        <strong>#(build.failureTitle)</strong>
+                        <code class="failure-code">#(build.failureCode)</code>
+                    </span>
+                    <span class="table-note">#(build.failureAdvice)</span>
+                    #endif
+                    #if(build.log):
+                    <details class="log">
+                        <summary>서명 로그</summary>
+                        <pre class="log-body">#(build.log)</pre>
+                    </details>
+                    #endif
+                </td>
+                <td class="table-tight">
+                    #if(build.isReleased):
+                    <form class="row-form" method="post"
+                          action="/apps/#(appID)/versions/#(build.id)/unrelease">
+                        <button class="button" type="submit">철회</button>
+                    </form>
+                    #elseif(build.canRelease):
+                    <form class="row-form" method="post"
+                          action="/apps/#(appID)/versions/#(build.id)/release">
+                        <button class="button button-primary" type="submit">출시</button>
+                    </form>
+                    #elseif(build.canRetry):
+                    <form class="row-form" method="post"
+                          action="/apps/#(appID)/versions/#(build.id)/retry">
+                        <button class="button" type="submit">다시 시도</button>
+                    </form>
+                    #endif
                 </td>
             </tr>
             #endfor
         </tbody>
     </table>
-
-    #if(appPath):
-    <p class="table-note">
-        출시와 철회, 서명 로그는 <a href="#(appPath)">앱 화면</a> 에서 합니다.
-        스토어 앱도 다른 앱과 같은 길을 지나갑니다.
-    </p>
-    #endif
     #else:
     <p class="empty">아직 빌드한 적이 없습니다.</p>
     #endif

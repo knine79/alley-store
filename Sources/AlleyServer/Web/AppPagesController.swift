@@ -67,11 +67,33 @@ struct AppPagesController: RouteCollection, Sendable {
             }
         }
 
+        // **스토어 앱은 목록에 넣지 않는다.** 다른 앱을 받는 도구라 같은 줄에 서면
+        // 안 된다. 관리는 관리 > 스토어 앱 한 화면에서 끝나고, 받는 것은 아래 안내
+        // 한 줄이 맡는다 (ADR-0046).
+        let storeAppID = try await request.storeAppSettings().$app.id
+
         let rows: [AppRow] = try settled.compactMap { app in
             let appID = try app.requireID()
+            guard appID != storeAppID else { return nil }
             let released = latest[appID]
             guard released != nil || user.role.canPublish else { return nil }
             return try AppRow(app: app, latestReleased: released, rating: ratings[appID])
+        }
+
+        // 스토어 앱이 없는 사람에게는 이것이 유일한 입구다 (이슈 #17). 목록에서
+        // 뺐다고 받을 길까지 없애면 아무도 시작할 수 없다.
+        var bootstrap: StoreAppBootstrapRow?
+        if let storeAppID,
+           let storeApp = settled.first(where: { (try? $0.requireID()) == storeAppID }),
+           let released = latest[storeAppID],
+           let versionID = released.id
+        {
+            bootstrap = StoreAppBootstrapRow(
+                name: storeApp.name,
+                version: "\(released.shortVersion) (빌드 \(released.buildNumber))",
+                downloadPath:
+                    "/apps/\(storeAppID.uuidString)/versions/\(versionID.uuidString)/download"
+            )
         }
 
         // **감추기만 하면 워커가 실패했을 때 찾을 방법이 없다.** 목록에서 빼되 올린
@@ -89,7 +111,8 @@ struct AppPagesController: RouteCollection, Sendable {
                 page: try await request.pageContext(title: "앱"),
                 apps: rows,
                 canRegister: user.role.canPublish,
-                pendingApps: mine
+                pendingApps: mine,
+                storeApp: bootstrap
             )
         ).get()
     }
@@ -179,9 +202,22 @@ struct AppPagesController: RouteCollection, Sendable {
 
     // MARK: - 상세
 
+    /// 앱 상세.
+    ///
+    /// **스토어 앱은 여기로 오지 않는다.** 그 앱에 관한 일은 관리 > 스토어 앱 한
+    /// 화면에서 끝난다 (ADR-0046). 화면이 둘이면 출시를 어디서 하는지가 갈리고,
+    /// 목록에서 빼놓고 상세만 남겨두면 들어갈 수 없는 자리가 된다.
     @Sendable
-    func detail(request: Request) async throws -> View {
-        try await renderDetail(on: request, issuedToken: nil)
+    func detail(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+
+        if try await request.storeAppSettings().$app.id == app.requireID() {
+            return request.redirect(
+                to: user.role.canAdminister ? AdminTab.storeApp.path : "/apps"
+            )
+        }
+        return htmlResponse(try await renderDetail(on: request, issuedToken: nil), status: .ok)
     }
 
     /// 상세 화면을 그린다.
@@ -777,6 +813,15 @@ struct AppListContext: Encodable {
     var apps: [AppRow]
     var canRegister: Bool
     var pendingApps: [PendingAppRow] = []
+    /// 스토어 앱을 받는 자리. 출시본이 없으면 nil 이다.
+    var storeApp: StoreAppBootstrapRow?
+}
+
+/// 목록 맨 위에 두는 스토어 앱 안내.
+struct StoreAppBootstrapRow: Encodable {
+    var name: String
+    var version: String
+    var downloadPath: String
 }
 
 struct AppFormContext: Encodable {

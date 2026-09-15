@@ -12,6 +12,15 @@
     #endif
 </div>
 
+<!-- 스토어 앱은 목록에 넣지 않는다. 다른 앱을 받는 도구라 같은 줄에 서면 안 된다.
+     대신 받는 자리는 남긴다. 스토어 앱이 없는 사람에게는 이것이 유일한 입구다. -->
+#if(storeApp):
+<p class="notice notice-hint">
+    <strong>#(storeApp.name)</strong> 으로 앱을 받고 업데이트합니다. 아직 없다면
+    <a href="#(storeApp.downloadPath)">여기서 받으세요</a> (#(storeApp.version)).
+</p>
+#endif
+
 <!-- 등록이 끝나지 않은 앱. 목록에는 안 넣지만 올린 사람이 찾아갈 길은 남긴다.
      워커가 실패하면 이 줄이 유일한 입구다 (ADR-0034). -->
 #if(count(pendingApps) > 0):

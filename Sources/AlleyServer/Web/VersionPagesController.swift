@@ -237,6 +237,12 @@ struct VersionPagesController: RouteCollection, Sendable {
 
         try apply(version)
         try await version.save(on: request.db)
+
+        // 스토어 앱은 자기 화면으로 돌아간다. 그 앱의 상세는 관리 화면으로 보내므로
+        // (ADR-0046) 여기서 앱 주소로 보내면 한 번 더 튕긴다.
+        if try await request.storeAppSettings().$app.id == appID {
+            return request.redirect(to: AdminTab.storeApp.path)
+        }
         return request.redirect(to: "/apps/\(appID.uuidString)")
     }
 }

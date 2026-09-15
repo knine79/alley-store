@@ -141,7 +141,7 @@ public enum StoreAppBuildService {
             buildNumber: buildNumber,
             releaseNotes: nil,
             minimumOSVersion: settings.minimumSystemVersion,
-            // 서명은 워커가 한다. 서버가 지은 것은 언제나 미서명이다.
+            // 서명은 워커가 한다. 서버가 빌드한 것은 언제나 미서명이다.
             uploadKind: .unsigned,
             entitlements: nil,
             createdByID: try admin.requireID()

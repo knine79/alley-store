@@ -76,7 +76,7 @@ struct StoreAppPagesTests {
         }
     }
 
-    /// 바탕 번들이 없으면 지을 것이 없다. 버튼은 꺼져 있지만 요청이 직접 올 수 있다.
+    /// 베이스 번들이 없으면 빌드할 것이 없다. 버튼은 꺼져 있지만 요청이 직접 올 수 있다.
     @Test("바탕 번들 없이 지으려 하면 무엇이 없는지 말한다")
     func buildRequiresBaseBundle() async throws {
         try await withMigratedApp { app in
@@ -122,7 +122,7 @@ struct StoreAppPagesTests {
         }
     }
 
-    /// 짓는 길 전체가 한 번에 지나가는지 본다. 설정 → 바탕 번들 → 아이콘 → 짓기 →
+    /// 빌드 경로 전체가 한 번에 지나가는지 본다. 설정 → 베이스 번들 → 아이콘 → 빌드 →
     /// 버전·아티팩트·서명 잡까지다.
     @Test("지으면 버전과 서명 잡이 생긴다")
     func buildProducesVersionAndJob() async throws {
