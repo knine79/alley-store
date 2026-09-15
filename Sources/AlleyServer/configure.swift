@@ -128,6 +128,9 @@ private func configureMigrations(_ app: Application) {
 
     // 관리자가 올리는 브랜딩 이미지 (ADR-0045).
     app.migrations.add(CreateBrandingAsset())
+
+    // 스토어 앱을 무엇으로 지을지 (ADR-0046).
+    app.migrations.add(CreateStoreAppSettings())
 }
 
 /// 미들웨어 스택.

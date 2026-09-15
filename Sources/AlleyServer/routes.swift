@@ -40,6 +40,7 @@ func routes(_ app: Application) throws {
     try app.register(collection: AppPagesController())
     try app.register(collection: VersionPagesController())
     try app.register(collection: AdminPagesController())
+    try app.register(collection: StoreAppPagesController())
 }
 
 struct HealthResponse: Content {

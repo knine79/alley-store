@@ -163,8 +163,17 @@ info "번들을 만들었습니다: $APP_DIR"
 
 if [ "${1:-}" != "--sign" ]; then
     bundle_seal_adhoc "$APP_DIR"
+
+    # 서명하지 않은 번들도 zip 으로 내놓는다. 관리 화면의 "바탕 번들" 이 이것을
+    # 받아 조직의 값으로 다시 싼다 (ADR-0046). 이름을 앱 이름이 아니라 고정값으로
+    # 두는 것은, 이 산출물을 받아가는 쪽(릴리스 asset, 관리 화면)이 앱 이름을 모르기
+    # 때문이다.
+    UNSIGNED_ARCHIVE="$OUTPUT_DIR/alley-store-app-unsigned.zip"
+    bundle_archive "$APP_DIR" "$UNSIGNED_ARCHIVE"
+
     echo
     echo "서명하지 않은 번들입니다. 다른 맥에서 실행하려면 --sign 으로 다시 만드세요."
+    echo "바탕 번들: $UNSIGNED_ARCHIVE"
     exit 0
 fi
 

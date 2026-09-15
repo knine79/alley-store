@@ -1,4 +1,4 @@
-/// 관리자 화면 다섯 개를 묶는 탭.
+/// 관리자 화면 여섯 개를 묶는 탭.
 ///
 /// 전에는 화면마다 제목 오른쪽에 다른 부분집합을 링크로 놓았다. 통계에서는 역할
 /// 관리와 개발자 포털로 갈 수 없었고, 개발자 포털에서는 역할 관리로 갈 수 없었다.
@@ -11,13 +11,18 @@
 ///
 /// ## 순서
 ///
-/// `설정 → 사람 → 우리 기계 → Apple → 통계`
+/// `설정 → 스토어 앱 → 사람 → 우리 기계 → Apple → 통계`
 ///
-/// 앞의 넷은 **바꾸는** 화면이고 마지막 하나는 **보는** 화면이다. 바꾸는 넷은 설정
-/// 대상이 가까운 것에서 먼 것으로 간다. 스토어 자신 → 그 안의 사람 → 우리가 돌리는
-/// 기계 → Apple 쪽 계정. 서명 워커와 개발자 포털이 붙어 있는 것은 워커가 포털의
-/// 인증서로 서명하기 때문이다. 통계는 바꿀 것이 없고 다른 화면이 통계에 기대지도
-/// 않아서 끝이다.
+/// 앞의 다섯은 **바꾸는** 화면이고 마지막 하나는 **보는** 화면이다. 바꾸는 다섯은
+/// 설정 대상이 가까운 것에서 먼 것으로 간다. 스토어 자신 → 스토어가 내놓는 앱 →
+/// 그 안의 사람 → 우리가 돌리는 기계 → Apple 쪽 계정. 서명 워커와 개발자 포털이
+/// 붙어 있는 것은 워커가 포털의 인증서로 서명하기 때문이다. 통계는 바꿀 것이 없고
+/// 다른 화면이 통계에 기대지도 않아서 끝이다.
+///
+/// 스토어 앱이 스토어 설정 바로 옆인 것은 둘 다 "스토어 자신" 이기 때문이다. 다만
+/// 성격이 달라서 화면을 나눴다. 설정은 바꾸면 다음 요청부터 반영되고, 스토어 앱은
+/// 바꾼 뒤 **다시 지어 올려야** 반영된다. 한 화면에 섞으면 저장 버튼 하나가 두
+/// 가지 뜻을 갖는다.
 ///
 /// 스토어 설정이 첫 칸인 데는 이유가 하나 더 있다. 껍데기의 "관리" 링크가
 /// `/admin/settings` 로 오므로, 들어온 자리가 첫 칸이어야 지금 어디인지 헷갈리지
@@ -27,6 +32,7 @@
 /// 다음 사람이 또 근거 없이 바꾼다. 구조로 정한 순서는 근거를 적을 수 있다.
 enum AdminTab: String, CaseIterable, Sendable {
     case settings
+    case storeApp
     case users
     case workers
     case portal
@@ -38,6 +44,7 @@ enum AdminTab: String, CaseIterable, Sendable {
     var title: String {
         switch self {
         case .settings: "스토어 설정"
+        case .storeApp: "스토어 앱"
         case .users: "역할 관리"
         case .workers: "서명 워커"
         case .portal: "개발자 포털"
@@ -48,6 +55,7 @@ enum AdminTab: String, CaseIterable, Sendable {
     var path: String {
         switch self {
         case .settings: "/admin/settings"
+        case .storeApp: "/admin/store-app"
         case .users: "/admin/users"
         case .workers: "/admin/workers"
         case .portal: "/admin/portal"
@@ -57,7 +65,7 @@ enum AdminTab: String, CaseIterable, Sendable {
 
     /// 지금 보고 있는 화면을 표시한 탭 목록.
     ///
-    /// 현재 탭도 목록에서 빼지 않는다. 다섯 칸이 늘 같은 자리에 있어야 화면을 옮겨도
+    /// 현재 탭도 목록에서 빼지 않는다. 여섯 칸이 늘 같은 자리에 있어야 화면을 옮겨도
     /// 탭이 움직이지 않는다. 대신 `isCurrent` 를 보고 템플릿이 링크가 아니라 글자로
     /// 그린다.
     static func links(current: AdminTab) -> [AdminTabLink] {

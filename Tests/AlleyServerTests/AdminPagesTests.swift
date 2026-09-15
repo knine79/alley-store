@@ -10,8 +10,8 @@ struct AdminPageAccessTests {
     @Test(
         "관리자가 아니면 볼 수 없다",
         arguments: [
-            "/admin", "/admin/settings", "/admin/users", "/admin/workers",
-            "/admin/stats", "/admin/portal",
+            "/admin", "/admin/settings", "/admin/store-app", "/admin/users",
+            "/admin/workers", "/admin/stats", "/admin/portal",
         ]
     )
     func nonAdminsAreBlocked(_ path: String) async throws {
@@ -54,11 +54,13 @@ struct AdminPageAccessTests {
 @Suite("관리자 화면 탭")
 struct AdminNavTests {
     /// 화면마다 다른 부분집합을 링크로 놓던 것을 하나로 모았다. 그래서 확인할 것은
-    /// "다섯 칸이 어느 화면에서나 같은 순서로 있는가" 다. 여기 적힌 순서가 곧 기대값이고,
+    /// "여섯 칸이 어느 화면에서나 같은 순서로 있는가" 다. 여기 적힌 순서가 곧 기대값이고,
     /// 근거는 `AdminTab` 에 있다.
-    static let expectedOrder = ["스토어 설정", "역할 관리", "서명 워커", "개발자 포털", "통계"]
+    static let expectedOrder = [
+        "스토어 설정", "스토어 앱", "역할 관리", "서명 워커", "개발자 포털", "통계",
+    ]
 
-    @Test("다섯 화면 전부에서 같은 순서로 나오고 지금 있는 곳이 표시된다", arguments: AdminTab.allCases)
+    @Test("여섯 화면 전부에서 같은 순서로 나오고 지금 있는 곳이 표시된다", arguments: AdminTab.allCases)
     func tabsAreIdenticalOnEveryAdminPage(_ current: AdminTab) async throws {
         try await withMigratedApp { app in
             let (_, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
@@ -84,7 +86,7 @@ struct AdminNavTests {
                 )
                 #expect(!nav.contains(#"href="\#(current.path)""#))
 
-                // 나머지 넷은 눌러서 갈 수 있어야 한다.
+                // 나머지는 눌러서 갈 수 있어야 한다.
                 for other in AdminTab.allCases where other != current {
                     #expect(nav.contains(#"<a class="tab" href="\#(other.path)">"#))
                 }

@@ -18,9 +18,37 @@ permissions:
   contents: write
 
 jobs:
+  # 관리 화면이 받아갈 바탕 번들 (ADR-0046).
+  #
+  # **서명하지 않는다.** 브랜딩 없는 껍데기이고, 조직의 이름·아이콘을 입히는 것도
+  # Developer ID 로 서명하는 것도 그쪽 서버와 워커가 한다. 그래서 이것은 ADR-0043 이
+  # 금지한 "서명된 산출물" 이 아니다.
+  store-app:
+    name: 바탕 번들 짓기
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 의존성 캐시
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: macos-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: macos-spm-
+
+      - name: 번들 조립
+        run: ./scripts/build-store-app.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alley-store-app-unsigned
+          path: .build/store-app/alley-store-app-unsigned.zip
+          if-no-files-found: error
+
   release:
     name: GitHub Release 만들기
     runs-on: ubuntu-latest
+    needs: store-app
     steps:
       - uses: actions/checkout@v4
         with:
@@ -66,10 +94,17 @@ jobs:
           JSON
           cat manifest.json
 
+      - name: 바탕 번들 받아오기
+        uses: actions/download-artifact@v4
+        with:
+          name: alley-store-app-unsigned
+
       - name: 릴리스 만들기
         uses: softprops/action-gh-release@v2
         with:
-          files: manifest.json
+          files: |
+            manifest.json
+            alley-store-app-unsigned.zip
           generate_release_notes: true
           body: |
             ## 무엇이 들었나
@@ -79,10 +114,18 @@ jobs:
             | 제품 | `${{ steps.version.outputs.product }}` |
             | 워커 | `${{ steps.version.outputs.worker }}` |
             | 서버 이미지 | `ghcr.io/${{ github.repository }}:${{ steps.version.outputs.product }}` |
+            | 바탕 번들 | `alley-store-app-unsigned.zip` (아래 첨부) |
+
+            ## 스토어 앱을 새로 내려면
+
+            `alley-store-app-unsigned.zip` 을 받아 **관리 > 스토어 앱** 의 바탕 번들에
+            올리세요. 조직의 이름과 아이콘을 입혀 다시 싸고 서명 워커에 넘기는 것은
+            서버가 합니다 (ADR-0046).
 
             ## 서명된 산출물은 여기 없습니다
 
-            워커와 스토어 앱, CLI 는 **조직이 자기 Developer ID 로 서명해야** 합니다
+            워커와 CLI 는 **조직이 자기 Developer ID 로 서명해야** 합니다
             (ADR-0043). 운영 레포가 이 태그를 고정해 받아 빌드·서명합니다.
+            위 바탕 번들은 브랜딩 없는 미서명 껍데기라 여기서 내놓습니다.
 
             처음 세우신다면 `templates/ops/` 를 복사해 시작하세요.
