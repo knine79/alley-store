@@ -31,7 +31,8 @@ RUN cp "$(swift build --package-path /build -c release --show-bin-path)/alley-se
     && find -L /build/.build/release -regex '.*\.resources$' -exec cp -Ra {} ./ \; \
     && cp -R /build/Public ./Public \
     && mkdir -p ./Resources \
-    && cp -R /build/Resources/Views ./Resources/Views
+    && cp -R /build/Resources/Views ./Resources/Views \
+    && cp -R /build/Resources/DefaultBranding ./Resources/DefaultBranding
 
 # ==============================================================================
 # 실행 단계
