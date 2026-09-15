@@ -54,14 +54,17 @@ struct StoreAppPagesController: RouteCollection, Sendable {
         let assets = try await BrandingAssetService.all(on: request.db)
         let shipped = try await settings.hasShipped(on: request.db)
 
-        var builds: [StoreAppBuildRow] = []
+        var rows: [StoreAppBuildRow] = []
         if let appID = settings.$app.id {
-            builds = try await Version.query(on: request.db)
+            let builds = try await Version.query(on: request.db)
                 .filter(\.$app.$id == appID)
                 .sort(\.$buildNumber, .descending)
                 .limit(Self.recentBuildCount)
                 .all()
-                .map(StoreAppBuildRow.init)
+            let reports = try await SigningJob.latestReports(
+                ofVersions: builds.map { try $0.requireID() }, on: request.db
+            )
+            rows = try builds.map { StoreAppBuildRow($0, report: reports[try $0.requireID()]) }
         }
 
         return try await request.view.render(
@@ -75,11 +78,11 @@ struct StoreAppPagesController: RouteCollection, Sendable {
                 isLocked: shipped,
                 blockers: settings.missingPieces(iconIsSet: assets[.appIcon] != nil),
                 canBuild: settings.baseBundleKey != nil && !settings.bundleID.isEmpty,
-                builds: builds,
+                builds: rows,
                 error: error,
                 saved: saved,
                 built: built,
-                appPath: settings.$app.id.map { "/apps/\($0.uuidString)" }
+                appID: settings.$app.id?.uuidString
             )
         ).get()
     }
@@ -193,7 +196,7 @@ struct StoreAppPagesController: RouteCollection, Sendable {
 
         let icon: (png: Data, edge: Int)?
         if let asset = try await BrandingAssetService.find(kind: .appIcon, on: request.db) {
-            let png = try await request.application.brandingCache.data(forKey: asset.storageKey) {
+            let png = try await request.application.storedImages.data(forKey: asset.storageKey) {
                 try await request.application.artifactStorage.get(
                     key: asset.storageKey,
                     limit: BrandingAssetService.maximumUploadSize
@@ -335,6 +338,10 @@ struct StoreAppBaseBundle: Encodable {
 }
 
 /// 최근 빌드 표의 한 줄.
+///
+/// 출시·철회·서명 로그가 전부 여기 있다. 스토어 앱에 관한 일은 이 화면에서 끝난다
+/// (ADR-0046). 다른 앱처럼 상세 화면으로 보내면 목록에 없는 앱의 상세로 들어가게
+/// 되고, 무엇을 어디서 하는지가 갈린다.
 struct StoreAppBuildRow: Encodable {
     var id: String
     var shortVersion: String
@@ -342,14 +349,30 @@ struct StoreAppBuildRow: Encodable {
     var state: String
     var stateLabel: String
     var createdAt: DisplayDate?
+    var isReleased: Bool
+    var canRelease: Bool
+    var canRetry: Bool
+    /// 서명 워커가 남긴 로그. 실패했을 때만 펴 본다.
+    var log: String?
+    var failureTitle: String?
+    var failureAdvice: String?
+    var failureCode: String?
 
-    init(_ version: Version) {
+    init(_ version: Version, report: SigningJob.Report? = nil) {
         self.id = version.id?.uuidString ?? ""
         self.shortVersion = version.shortVersion
         self.buildNumber = version.buildNumber
         self.state = version.state.rawValue
         self.stateLabel = version.state.displayName
-        // 방금 지은 것이 목록에 뜨는 화면이라 시각까지 보여준다. 날짜만으로는
+        self.isReleased = version.state.isPubliclyVisible
+        self.canRelease = version.state.canTransition(to: .released)
+        self.canRetry = version.state == .failed
+        self.log = report?.log
+        // 코드를 그대로 내보내지 않는다. 사람이 읽는 문장과 함께만 보여준다 (ADR-0023).
+        self.failureTitle = report?.failureCode.map(SigningFailureGuidance.title)
+        self.failureAdvice = report?.failureCode.map(SigningFailureGuidance.whatToDo)
+        self.failureCode = report?.failureCode?.rawValue
+        // 방금 빌드한 것이 목록에 뜨는 화면이라 시각까지 보여준다. 날짜만으로는
         // 오늘 세 번 빌드했을 때 무엇이 방금 것인지 알 수 없다.
         self.createdAt = version.createdAt.map(DateStyle.minute.display(from:))
     }
@@ -372,9 +395,6 @@ struct StoreAppPageContext: Encodable {
     var saved: Bool
     /// 방금 빌드한 버전. `0.4.0 (3)` 꼴.
     var built: String?
-    /// 스토어 앱의 앱 화면. 아직 한 번도 빌드하지 않았으면 nil 이다.
-    ///
-    /// 출시·철회·서명 로그는 여기서 하지 않고 그 화면에서 한다. 스토어 앱도
-    /// 다른 앱과 같은 길을 지나가므로 화면을 두 벌 만들 이유가 없다.
-    var appPath: String?
+    /// 출시·철회 폼이 부를 주소를 만들 때 쓴다. 한 번도 빌드하지 않았으면 nil 이다.
+    var appID: String?
 }

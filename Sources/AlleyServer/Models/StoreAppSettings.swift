@@ -9,7 +9,7 @@ import Vapor
 ///
 /// **왜 `store_settings` 에 컬럼으로 붙이지 않았나.** 성격이 다르다. 스토어 설정은
 /// 바꾸면 다음 요청부터 바로 반영되는 값들이고, 여기 있는 것은 **바꾼다고 아무 일도
-/// 일어나지 않는** 값들이다. 번들을 다시 지어 올려야 의미가 생긴다. 한 화면에 섞으면
+/// 일어나지 않는** 값들이다. 번들을 다시 빌드해 올려야 의미가 생긴다. 한 화면에 섞으면
 /// "저장" 버튼 하나가 두 가지 뜻을 갖는다.
 ///
 /// **왜 환경변수가 아닌가.** 예전에는 `STORE_APP_URL_SCHEME` 만 환경변수에 있었고,
@@ -45,7 +45,7 @@ public final class StoreAppSettings: Model, @unchecked Sendable {
     @Field(key: "minimum_system_version")
     public var minimumSystemVersion: String
 
-    /// CI 가 만든 브랜딩 없는 번들이 놓인 자리. 없으면 지을 수 없다.
+    /// CI 가 만든 브랜딩 없는 번들이 놓인 자리. 없으면 빌드할 수 없다.
     @OptionalField(key: "base_bundle_key")
     public var baseBundleKey: String?
 

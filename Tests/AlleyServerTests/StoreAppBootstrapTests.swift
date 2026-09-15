@@ -90,22 +90,50 @@ struct StoreAppBootstrapTests {
         try await version.$artifacts.load(on: app.db)
     }
 
-    @Test("스토어 앱은 화면에 받기 링크가 있다")
-    func storeAppShowsDownloadLink() async throws {
+    /// **스토어 앱은 목록에 서지 않는다.** 다른 앱을 받는 도구라 같은 줄에 두면
+    /// 안 된다. 대신 받는 자리는 남는다. 스토어 앱이 없는 사람에게는 그것이 유일한
+    /// 입구라, 목록에서 뺐다고 받을 길까지 없애면 아무도 시작할 수 없다.
+    @Test("목록에 줄로 서지 않고 받는 자리만 둔다")
+    func storeAppIsNotListedButDownloadable() async throws {
         try await withMigratedApp { app in
             let (admin, _) = try await app.makeUser(email: "admin@example.com", role: .admin)
-            let (storeApp, _) = try await Self.makeStoreApp(on: app, owner: admin)
-
-            // 올릴 권한이 없는 보통 사용자로 본다. 그래야 "스토어 앱이라서" 열린
-            // 것인지 "권한이 있어서" 열린 것인지 구분된다.
+            let (storeApp, version) = try await Self.makeStoreApp(on: app, owner: admin)
             let (_, token) = try await app.makeUser(email: "user@example.com", role: .user)
 
-            try await app.testing().test(
-                .GET, "/apps/\(try storeApp.requireID().uuidString)",
-                headers: .sessionCookie(token)
-            ) { response in
+            let appPath = "/apps/\(try storeApp.requireID().uuidString)"
+            let downloadPath = "\(appPath)/versions/\(try version.requireID().uuidString)/download"
+
+            try await app.testing().test(.GET, "/apps", headers: .sessionCookie(token)) { response in
+                let html = response.body.string
                 #expect(response.status == .ok)
-                #expect(response.body.string.contains("이 버전 받기"))
+                // 목록의 줄(카드)로는 없다. 카드 링크는 주소가 따옴표로 끝난다.
+                #expect(!html.contains("\(appPath)\""))
+                // 받는 자리는 있다.
+                #expect(html.contains("여기서 받으세요"))
+                #expect(html.contains(downloadPath))
+            }
+        }
+    }
+
+    /// 스토어 앱에 관한 일은 관리 > 스토어 앱 한 화면에서 끝난다. 상세를 남겨두면
+    /// 무엇을 어디서 하는지가 갈린다.
+    @Test("스토어 앱 상세는 관리 화면으로 보낸다")
+    func storeAppDetailRedirects() async throws {
+        try await withMigratedApp { app in
+            let (admin, adminToken) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            let (storeApp, _) = try await Self.makeStoreApp(on: app, owner: admin)
+            let path = "/apps/\(try storeApp.requireID().uuidString)"
+
+            try await app.testing().test(.GET, path, headers: .sessionCookie(adminToken)) { response in
+                #expect(response.status == .seeOther)
+                #expect(response.headers.first(name: .location) == "/admin/store-app")
+            }
+
+            // 관리자가 아니면 그 화면에 못 들어간다. 목록으로 보낸다.
+            let (_, token) = try await app.makeUser(email: "user@example.com", role: .user)
+            try await app.testing().test(.GET, path, headers: .sessionCookie(token)) { response in
+                #expect(response.status == .seeOther)
+                #expect(response.headers.first(name: .location) == "/apps")
             }
         }
     }
