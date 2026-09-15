@@ -283,7 +283,7 @@ curl -fsSL -o .env https://raw.githubusercontent.com/<소유자>/<레포>/main/.
 ```
 
 레포를 클론해서 개발할 때는 `cp .env.example .env` 만 하면 됩니다. 클론에는
-`docker-compose.override.yml` 이 함께 있어서 이미지를 받는 대신 소스에서 짓습니다.
+`docker-compose.override.yml` 이 함께 있어서 이미지를 받는 대신 소스에서 빌드합니다.
 아래 절차는 나머지가 같습니다.
 
 `.env` 에서 반드시 채워야 하는 것:
@@ -569,7 +569,7 @@ Developer ID 개인키를 CI 에 두어야 하는데, 그것은 위에 적은 �
 구성원이 앱을 찾아 설치하는 맥 앱입니다. 웹 콘솔로도 같은 일을 할 수 있지만, 스토어
 앱이 있어야 업데이트 알림을 받습니다.
 
-### 권하는 길: 관리 화면에서 짓기
+### 권하는 길: 관리 화면에서 빌드하기
 
 **맥 앞에 앉지 않고 웹에서 끝낼 수 있습니다** ([ADR-0046](adr/0046-server-assembles-store-app.md)).
 
@@ -587,7 +587,7 @@ Developer ID 개인키를 CI 에 두어야 하는데, 그것은 위에 적은 �
 
 ### 직접 빌드하기
 
-서명 맥에서 스크립트로 짓는 길도 그대로 있습니다. 운영 CI 가 이 길을 씁니다.
+서명 맥에서 스크립트로 빌드하는 길도 그대로 있습니다. 운영 CI 가 이 길을 씁니다.
 
 ```bash
 export ALLEY_STORE_APP_BUNDLE_ID="com.example.alley.store"
@@ -603,7 +603,7 @@ export ALLEY_NOTARY_PROFILE="alley-notary"
 
 **값을 안 넘기면 빌드는 그냥 성공하고 기본값으로 나갑니다.** 번들 ID 가 기본값이면
 스토어 앱이 "이 앱이 깔려 있나" 를 판단하지 못합니다. 스크립트가 시작할 때 무엇으로
-짓는지 찍으니 첫 줄을 확인하세요.
+빌드하는지 찍으니 첫 줄을 확인하세요.
 
 `ALLEY_STORE_APP_SERVER_URL` 이 이 스토어의 주소입니다. **박아두면 받은 사람이 주소를
 입력하지 않고 바로 로그인합니다** ([ADR-0044](adr/0044-store-app-knows-its-server.md)).

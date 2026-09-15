@@ -24,7 +24,7 @@ jobs:
   # Developer ID 로 서명하는 것도 그쪽 서버와 워커가 한다. 그래서 이것은 ADR-0043 이
   # 금지한 "서명된 산출물" 이 아니다.
   store-app:
-    name: 베이스 번들 짓기
+    name: 베이스 번들 빌드
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4

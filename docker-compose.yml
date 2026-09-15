@@ -7,12 +7,12 @@
 # 어디에 배포하든 서버는 아래 환경변수만 알면 됩니다.
 #
 # 서버는 발행된 이미지를 받아 씁니다 (ADR-0021). 레포를 클론했다면
-# docker-compose.override.yml 이 함께 읽혀서 소스에서 짓습니다.
+# docker-compose.override.yml 이 함께 읽혀서 소스에서 빌드합니다.
 
 services:
   server:
     # ALLEY_IMAGE 와 ALLEY_IMAGE_TAG 는 .env 에서 옵니다.
-    # 클론해서 쓰면 override 가 소스를 지어 이 이름을 붙이므로 그대로 두면 됩니다.
+    # 클론해서 쓰면 override 가 소스를 빌드해 이 이름을 붙이므로 그대로 두면 됩니다.
     image: ${ALLEY_IMAGE:-alley-store}:${ALLEY_IMAGE_TAG:-dev}
     env_file:
       - .env

@@ -65,7 +65,7 @@ die() { printf '오류: %s\n' "$*" >&2; exit 1; }
 #
 # 그래서 화면에 보이는 이름과 실행 파일 이름을 나눈다. 서버가 빌드하는 경로도 같은
 # 규칙을 쓴다(`StoreAppBundleRewriter.executableName(for:)`). 둘이 갈라지면 어느
-# 경로로 지었느냐에 따라 번들 구조가 달라진다.
+# 경로로 빌드했느냐에 따라 번들 구조가 달라진다.
 case "$APP_NAME" in
     *[!\ -~]*)
         EXECUTABLE_NAME="$(printf '%s' "$APP_NAME" | LC_ALL=C tr -cd '[:alnum:]')"
@@ -95,7 +95,7 @@ if [ -n "$SERVER_URL" ]; then
     <string>$SERVER_URL</string>"
 fi
 
-# 무엇으로 짓는지 먼저 찍는다. 값이 안 넘어와도 빌드는 성공하고 기본값으로 나가서,
+# 무엇으로 빌드하는지 먼저 찍는다. 값이 안 넘어와도 빌드는 성공하고 기본값으로 나가서,
 # 번들 ID 가 틀린 것을 한참 뒤에 설치 화면에서 알게 된다.
 info "$APP_NAME $VERSION ($BUILD)"
 echo "  번들 ID  $BUNDLE_ID"

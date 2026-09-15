@@ -52,7 +52,7 @@ jobs:
       - name: 테스트
         run: swift test --skip-build
 
-  # 워커와 스토어 앱은 macOS 전용이다. 리눅스 잡은 이 둘을 짓지 못한다.
+  # 워커와 스토어 앱은 macOS 전용이다. 리눅스 잡은 이 둘을 빌드하지 못한다.
   build-macos:
     name: 워커·스토어 앱 (macOS)
     runs-on: macos-15
@@ -76,7 +76,7 @@ jobs:
         run: ./scripts/build-store-app.sh
 
       # 이 zip 이 관리 화면의 "베이스 번들" 이다 (ADR-0046). 서버가 조직의 이름과
-      # 아이콘으로 다시 싸므로, 여기서는 브랜딩 없이 짓고 서명도 하지 않는다.
+      # 아이콘으로 다시 싸므로, 여기서는 브랜딩 없이 빌드하고 서명도 하지 않는다.
       # 서명된 산출물을 이 레포가 내놓지 않는 이유는 ADR-0043 에 있다.
       - name: 베이스 번들 올리기
         uses: actions/upload-artifact@v4
@@ -90,14 +90,14 @@ jobs:
       # 실제로 애플 실리콘 링커가 붙이는 ad-hoc 서명 때문에 번들이 검증을 통과하지
       # 못하던 것을 뒤늦게 발견했다.
       #
-      # 스토어 앱 다음에 두는 것은 둘 다 release 빌드라 앞 단계가 지어놓은 의존성을
+      # 스토어 앱 다음에 두는 것은 둘 다 release 빌드라 앞 단계가 빌드해 둔 의존성을
       # 그대로 쓰기 위해서다. 순서를 바꾸면 잡이 느려진다.
       #
       # 서명은 하지 않는다. Developer ID 개인키를 CI 에 두지 않는다(ADR-0002).
       - name: 워커 번들 조립
         run: ./scripts/build-worker-app.sh
 
-      # 이 테스트들은 macOS 에서만 지어진다. 리눅스 잡이 돌리는 swift test 에는
+      # 이 테스트들은 macOS 에서만 빌드된다. 리눅스 잡이 돌리는 swift test 에는
       # 스토어 앱 타깃이 아예 없으므로 여기서 돌리지 않으면 아무도 돌리지 않는다.
       - name: macOS 전용 테스트
         run: swift test --filter 'AlleyStoreTests|AlleyWorkerTests'
@@ -125,7 +125,7 @@ jobs:
       - name: 검사 실행
         run: ./scripts/check-secrets.sh
 
-  # 서버 이미지를 지어서 ghcr.io 에 올린다 (ADR-0021).
+  # 서버 이미지를 빌드해 ghcr.io 에 올린다 (ADR-0021).
   # 운영은 소스를 두지 않고 이 이미지를 받아 쓴다.
   docker:
     name: Docker 이미지
@@ -138,26 +138,26 @@ jobs:
       # 레지스트리 쓰기는 이 잡에만 준다.
       packages: write
     steps:
-      # PR 에서는 이미지가 필요할 때만 짓는다.
+      # PR 에서는 이미지가 필요할 때만 빌드한다.
       #
       # 이 잡 하나가 CI 시간의 대부분이다. 실측에서 전체 16분 중 11분 38초였고,
       # 그중 7분 36초가 `swift build -c release --static-swift-stdlib` 였다.
       # 레이어 캐시가 있어도 `COPY . .` 뒤라서 소스가 한 글자만 바뀌면 다시 돈다.
       #
-      # PR 에서는 `push: false` 라 이미지가 나가지도 않는다. 짓는 목적은 Dockerfile
+      # PR 에서는 `push: false` 라 이미지가 나가지도 않는다. 빌드하는 목적은 Dockerfile
       # 과 의존성이 여전히 유효한지 보는 것인데, 그 둘이 그대로면 새로 알 수 있는
       # 것이 거의 없다. 소스 자체는 바로 앞 `build-and-test` 잡이 컴파일하고
       # 테스트한다.
       #
-      # `push` (main·태그)에서는 언제나 짓는다. 그때는 이미지가 실제로 나간다.
-      - name: 이미지를 지어야 하나
+      # `push` (main·태그)에서는 언제나 빌드한다. 그때는 이미지가 실제로 나간다.
+      - name: 이미지를 빌드해야 하나
         id: need
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "PR 이 아닙니다. 짓습니다."
+            echo "PR 이 아닙니다. 빌드합니다."
             echo "build=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -168,7 +168,7 @@ jobs:
 
           if printf '%s\n' "$changed" \
               | grep -qE '^(Dockerfile|\.dockerignore|Package\.swift|Package\.resolved|\.github/workflows/ci\.yml)$'; then
-            echo "Dockerfile 이나 의존성이 바뀌었습니다. 짓습니다."
+            echo "Dockerfile 이나 의존성이 바뀌었습니다. 빌드합니다."
             echo "build=true" >> "$GITHUB_OUTPUT"
           else
             echo "Dockerfile 과 의존성이 그대로입니다. 건너뜁니다."
@@ -201,7 +201,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
 
       # PR 에서는 로그인하지 않는다. 포크에서 온 PR 의 토큰에는 쓰기 권한이 없어
-      # 밀어봐야 실패한다. 짓는 것까지는 그대로 검증된다.
+      # 밀어봐야 실패한다. 빌드하는 것까지는 그대로 검증된다.
       - name: 레지스트리 로그인
         if: steps.need.outputs.build == 'true' && github.event_name != 'pull_request'
         uses: docker/login-action@v3
