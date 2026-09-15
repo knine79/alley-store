@@ -45,23 +45,35 @@
     #for(app in apps):
     <li>
         <a class="card" href="/apps/#(app.id)">
-            <span class="card-head">
-                <span class="card-title">#(app.name)</span>
-                <code class="card-id">#(app.bundleID)</code>
-            </span>
-            #if(app.summary):
-            <span class="card-summary">#(app.summary)</span>
-            #endif
-            <span class="card-meta">
-                #if(app.latestReleasedVersion):
-                <span class="card-release">#(app.latestReleasedVersion) 출시됨</span>
+            <!-- 아이콘은 번들에서 뽑아둔 것이다. 없는 앱은 이름 첫 글자를 대신
+                 그린다. 빈 사각형을 두면 "덜 만들어진 앱" 처럼 보인다. -->
+            <span class="card-icon" aria-hidden="true">
+                #if(app.iconURL):
+                <img src="#(app.iconURL)" alt="">
                 #else:
-                <span class="card-quiet">출시본 없음</span>
+                <span class="card-icon-letter">#(app.initial)</span>
                 #endif
-                #if(app.ratingAverage):
-                <span class="rating-summary">★ #(app.ratingAverage) <span class="rating-count">(#(app.ratingCount))</span></span>
+            </span>
+
+            <span class="card-body">
+                <span class="card-head">
+                    <span class="card-title">#(app.name)</span>
+                    <code class="card-id">#(app.bundleID)</code>
+                </span>
+                #if(app.summary):
+                <span class="card-summary">#(app.summary)</span>
                 #endif
-                #if(app.category):<span class="card-category">#(app.category)</span>#endif
+                <span class="card-meta">
+                    #if(app.latestReleasedVersion):
+                    <span class="card-release">#(app.latestReleasedVersion) 출시됨</span>
+                    #else:
+                    <span class="card-quiet">출시본 없음</span>
+                    #endif
+                    #if(app.ratingAverage):
+                    <span class="rating-summary">★ #(app.ratingAverage) <span class="rating-count">(#(app.ratingCount))</span></span>
+                    #endif
+                    #if(app.category):<span class="card-category">#(app.category)</span>#endif
+                </span>
             </span>
         </a>
     </li>

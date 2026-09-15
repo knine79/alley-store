@@ -81,9 +81,12 @@ enum AdminOperations {
         if cleaned.isEmpty, !confirmed {
             throw Abort(
                 .badRequest,
+                // 파라미터 이름을 사람에게 보여주지 않는다. 이 문구는 웹 화면의 빨간
+                // 줄에 그대로 나오는데, 거기서 할 수 있는 일은 체크박스를 켜는 것이지
+                // 필드를 "보내는" 것이 아니다.
                 reason: """
                     허용 도메인을 비우면 어떤 계정이든 로그인할 수 있습니다. \
-                    정말 그렇게 하려면 confirmOpenToAnyDomain 을 함께 보내세요.
+                    정말 그렇게 하려면 바로 아래의 확인을 켜고 다시 저장해주세요.
                     """
             )
         }

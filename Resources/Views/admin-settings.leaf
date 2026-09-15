@@ -10,154 +10,169 @@
 <p class="notice notice-ok">저장했습니다.</p>
 #endif
 
-<form class="form" method="post" action="/admin/settings">
-    <fieldset class="form-group">
-        <legend class="form-group-title">이름과 겉모습</legend>
+<!-- **폼은 하나다.** 예전에는 "이름과 겉모습" 과 "로그인 허용 범위" 가 각자 폼과
+     저장 버튼을 갖고 있었다. 그런데 서버는 화면의 모든 값이 한 번에 온다고 보고
+     빠진 값을 "지우겠다" 로 읽는다. 그래서 위쪽 저장을 누르면 허용 도메인을 비우려
+     한다며 거절당했고, 눌러도 아무것도 저장되지 않았다.
 
-        <label class="field">
-            <span class="field-label">스토어 이름</span>
-            <input class="input" type="text" name="storeName" required value="#(values.storeName)">
-        </label>
+     구역마다 저장을 두려면 서버가 "안 보낸 값은 그대로 둔다" 를 알아야 하는데,
+     그러면 체크박스를 끄는 것과 안 보내는 것이 구분되지 않는다. 화면 하나에 저장
+     하나가 더 단순하고, 실제로 여기서 고치는 값들은 함께 보고 함께 정하는 것들이다.
 
-        <label class="field">
-            <span class="field-label">로고 주소 <span class="field-optional">선택</span></span>
-            <input class="input" type="url" name="logoURL" value="#(values.logoURL)"
-                   placeholder="https://example.com/logo.png"
-                   autocapitalize="off" autocorrect="off" spellcheck="false">
-            <span class="field-note">
-                비우면 이름만 표시됩니다. 아래에서 로고 파일을 올렸다면 그쪽이 쓰입니다.
-            </span>
-        </label>
+     이미지는 이 폼 밖에 둔다. 파일 입력이 섞이면 설정 한 칸을 고칠 때마다 폼 전체가
+     multipart 로 나가고, 그때 "이미지를 안 골랐다" 와 "지우겠다" 가 구분되지 않는다. -->
+<form class="form form-sections" method="post" action="/admin/settings">
+    <section class="section">
+        <h2 class="section-title">이름과 겉모습</h2>
 
-        <label class="field">
-            <span class="field-label">강조색 <span class="field-optional">선택</span></span>
-            <input class="input" type="text" name="accentColor" value="#(values.accentColor)"
-                   placeholder="#3b6fd4"
-                   autocapitalize="off" autocorrect="off" spellcheck="false">
-            <span class="field-note"><code>#RGB</code>, <code>#RRGGBB</code>, <code>#RRGGBBAA</code> 형식입니다.</span>
-        </label>
-    </fieldset>
+        <div class="form-group form-grid">
+            <label class="field field-wide">
+                <span class="field-label">스토어 이름</span>
+                <input class="input" type="text" name="storeName" required value="#(values.storeName)">
+            </label>
 
-    <div class="form-actions">
+            <label class="field">
+                <span class="field-label">로고 주소 <span class="field-optional">선택</span></span>
+                <input class="input" type="url" name="logoURL" value="#(values.logoURL)"
+                       placeholder="https://example.com/logo.png"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+                <span class="field-note">
+                    비우면 이름만 표시됩니다. 아래에서 로고 파일을 올렸다면 그쪽이 쓰입니다.
+                </span>
+            </label>
+
+            <label class="field">
+                <span class="field-label">강조색 <span class="field-optional">선택</span></span>
+                <input class="input" type="text" name="accentColor" value="#(values.accentColor)"
+                       placeholder="#3b6fd4"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+                <span class="field-note"><code>#RGB</code>, <code>#RRGGBB</code>, <code>#RRGGBBAA</code> 형식입니다.</span>
+            </label>
+        </div>
+    </section>
+
+    <section class="section">
+        <h2 class="section-title">로그인 허용 범위</h2>
+
+        <div class="form-group">
+            <label class="field">
+                <span class="field-label">허용 도메인</span>
+                <input class="input" type="text" name="allowedEmailDomains"
+                       value="#(values.allowedEmailDomains)" placeholder="example.com, example.org"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+                <span class="field-note">쉼표로 나눠 적습니다.</span>
+            </label>
+
+            <label class="check check-attached">
+                <input type="checkbox" name="confirmOpenToAnyDomain" value="on">
+                <span>
+                    <span class="check-name">위 칸을 비워 누구나 로그인할 수 있게 하겠습니다</span>
+                    <span class="check-note">
+                        비우면 로그인 공급자에 계정이 있는 사람은 누구나 들어옵니다. 그렇게
+                        두려면 이것을 켜야 저장됩니다.
+                    </span>
+                </span>
+            </label>
+        </div>
+    </section>
+
+    <section class="section">
+        <h2 class="section-title">앱 등록 규칙</h2>
+
+        <div class="form-group">
+            <label class="field">
+                <span class="field-label">번들 ID 프리픽스 <span class="field-optional">선택</span></span>
+                <input class="input" type="text" name="bundleIDPrefix" value="#(values.bundleIDPrefix)"
+                       placeholder="com.example"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+            </label>
+
+            <label class="check check-attached">
+                <input type="checkbox" name="enforceBundleIDPrefix" value="on"
+                       #if(values.enforceBundleIDPrefix):checked#endif>
+                <span>
+                    <span class="check-name">위 프리픽스에 맞지 않는 앱은 등록을 막습니다</span>
+                    <span class="check-note">끄면 막지 않고 로그에만 남깁니다.</span>
+                </span>
+            </label>
+        </div>
+    </section>
+
+    <section class="section">
+        <h2 class="section-title">피드백</h2>
+
+        <div class="form-group">
+            <label class="check">
+                <input type="checkbox" name="allowsAnonymousFeedback" value="on"
+                       #if(values.allowsAnonymousFeedback):checked#endif>
+                <span>
+                    <span class="check-name">피드백을 익명으로 남길 수 있습니다</span>
+                    <span class="check-note">
+                        끄면 이름을 감춘 피드백이 거절됩니다. 이미 익명으로 남긴 글은 그대로
+                        익명으로 남습니다. 남길 때의 약속을 나중에 뒤집으면 그 사람이 쓴 것이
+                        다른 뜻이 됩니다.
+                    </span>
+                </span>
+            </label>
+        </div>
+    </section>
+
+    <!-- 구역이 넷이라 버튼이 어느 구역 것인지 헷갈리면 안 된다. 카드 밖의 띠 하나로
+         두어 "이 화면 전체를 저장한다" 를 자리로 말한다. -->
+    <div class="form-actions form-actions-bar">
+        <span class="form-actions-note action-back">위 네 구역을 함께 저장합니다.</span>
         <button class="button button-primary" type="submit">저장</button>
     </div>
 </form>
 
-<!-- 이미지는 위 폼 밖에 둔다. 파일 입력이 섞이면 설정 한 칸을 고칠 때마다 폼 전체가
-     multipart 로 나가고, 그때 "이미지를 안 골랐다" 와 "지우겠다" 가 구분되지 않는다.
-     칸마다 폼을 따로 두면 누른 버튼이 곧 하려던 일이다. -->
 <section class="section">
     <h2 class="section-title">브랜딩 이미지</h2>
     <p class="section-lead">
-        올리는 즉시 바뀝니다. 스토어 앱 아이콘은
+        올리는 즉시 바뀝니다. 저장 버튼과 상관없습니다. 스토어 앱 아이콘은
         <a href="/admin/store-app">스토어 앱</a> 화면에 있습니다.
     </p>
 
-    <div class="branding-grid">
+    <div class="icon-grid icon-grid-pair">
         #for(slot in branding):
-        <div class="branding-slot">
-            <div class="branding-preview">
-                #if(slot.imageURL):
-                <img src="#(slot.imageURL)" alt="#(slot.label) 미리보기" width="96" height="96">
-                #else:
-                <span class="branding-empty">없음</span>
-                #endif
-            </div>
-
-            <div class="branding-body">
-                <h3 class="branding-name">#(slot.label)</h3>
-                #if(slot.summary):
-                <p class="branding-summary">#(slot.summary)</p>
-                #endif
-                <p class="branding-requirement">#(slot.requirement)</p>
-
-                <div class="branding-actions">
-                    <form method="post" action="/admin/settings/branding/#(slot.kind)"
-                          enctype="multipart/form-data">
-                        <input type="hidden" name="returnPath" value="/admin/settings">
-                        <input class="file" type="file" name="image" accept="image/png" required
-                               data-image-rule="#(slot.rule)" data-image-label="#(slot.label)">
-                        <button class="button" type="submit">올리기</button>
-                    </form>
-
+        <div class="icon-field">
+            <!-- 그림 자체가 버튼이다. 누르면 파일 고르기가 열리고, 고르면 바로
+                 올라간다. 스크립트가 없으면 아래 "올리기" 버튼이 그대로 남는다. -->
+            <form method="post" action="/admin/settings/branding/#(slot.kind)"
+                  enctype="multipart/form-data">
+                <input type="hidden" name="returnPath" value="/admin/settings">
+                <label class="icon-well" title="눌러서 #(slot.label) 고르기">
                     #if(slot.imageURL):
+                    <img src="#(slot.imageURL)" alt="#(slot.label)">
+                    #else:
+                    <span class="icon-well-empty">없음</span>
+                    #endif
+                    <span class="icon-well-hint" aria-hidden="true">바꾸기</span>
+                    <input class="icon-well-input" type="file" name="image" accept="image/png"
+                           required data-image-rule="#(slot.rule)" data-image-label="#(slot.label)"
+                           data-auto-submit="1">
+                </label>
+                <button class="button button-small icon-well-submit" type="submit">올리기</button>
+            </form>
+
+            <div class="icon-field-body">
+                <h3 class="icon-field-name">#(slot.label)</h3>
+                #if(slot.summary):
+                <p class="icon-field-note">#(slot.summary)</p>
+                #endif
+                <p class="icon-field-note">#(slot.requirement)</p>
+
+                #if(slot.imageURL):
+                <div class="icon-field-actions">
                     <form method="post" action="/admin/settings/branding/#(slot.kind)/remove">
                         <input type="hidden" name="returnPath" value="/admin/settings">
-                        <button class="button button-quiet" type="submit">지우기</button>
+                        <button class="button button-small button-quiet" type="submit">지우기</button>
                     </form>
-                    #endif
                 </div>
+                #endif
             </div>
         </div>
         #endfor
     </div>
 </section>
-
-<form class="form" method="post" action="/admin/settings">
-
-    <fieldset class="form-group">
-        <legend class="form-group-title">로그인 허용 범위</legend>
-
-        <label class="field">
-            <span class="field-label">허용 도메인</span>
-            <input class="input" type="text" name="allowedEmailDomains"
-                   value="#(values.allowedEmailDomains)" placeholder="example.com, example.org"
-                   autocapitalize="off" autocorrect="off" spellcheck="false">
-            <span class="field-note">쉼표로 나눠 적습니다.</span>
-        </label>
-
-        <label class="check check-attached">
-            <input type="checkbox" name="confirmOpenToAnyDomain" value="on">
-            <span>
-                <span class="check-name">위 칸을 비워 누구나 로그인할 수 있게 하겠습니다</span>
-                <span class="check-note">
-                    비우면 Google 계정이 있는 사람은 누구나 들어옵니다. 그렇게 두려면
-                    이것을 켜야 저장됩니다.
-                </span>
-            </span>
-        </label>
-    </fieldset>
-
-    <fieldset class="form-group">
-        <legend class="form-group-title">앱 등록 규칙</legend>
-
-        <label class="field">
-            <span class="field-label">번들 ID 프리픽스 <span class="field-optional">선택</span></span>
-            <input class="input" type="text" name="bundleIDPrefix" value="#(values.bundleIDPrefix)"
-                   placeholder="com.example"
-                   autocapitalize="off" autocorrect="off" spellcheck="false">
-        </label>
-
-        <label class="check check-attached">
-            <input type="checkbox" name="enforceBundleIDPrefix" value="on"
-                   #if(values.enforceBundleIDPrefix):checked#endif>
-            <span>
-                <span class="check-name">위 프리픽스에 맞지 않는 앱은 등록을 막습니다</span>
-                <span class="check-note">끄면 막지 않고 로그에만 남깁니다.</span>
-            </span>
-        </label>
-    </fieldset>
-
-    <fieldset class="form-group">
-        <legend class="form-group-title">피드백</legend>
-
-        <label class="check">
-            <input type="checkbox" name="allowsAnonymousFeedback" value="on"
-                   #if(values.allowsAnonymousFeedback):checked#endif>
-            <span>
-                <span class="check-name">피드백을 익명으로 남길 수 있습니다</span>
-                <span class="check-note">
-                    끄면 이름을 감춘 피드백이 거절됩니다. 이미 익명으로 남긴 글은 그대로
-                    익명으로 남습니다. 남길 때의 약속을 나중에 뒤집으면 그 사람이 쓴 것이
-                    다른 뜻이 됩니다.
-                </span>
-            </span>
-        </label>
-    </fieldset>
-
-    <div class="form-actions">
-        <button class="button button-primary" type="submit">저장</button>
-    </div>
-</form>
 #endexport
 #endextend

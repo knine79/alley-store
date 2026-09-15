@@ -94,12 +94,26 @@
     function watch(input) {
         var rule = parseRule(input.dataset.imageRule);
         var label = input.dataset.imageLabel || "이미지";
-        var button = input.form && input.form.querySelector("button[type=submit]");
+        var form = input.form;
+        var button = form && form.querySelector("button[type=submit]");
+
+        // 그림 자체가 버튼인 자리(`.icon-well`)다. 고른 순간 바로 올린다.
+        //
+        // 누르기 → 고르기 → **다시 올리기 누르기** 는 한 걸음이 남는다. 그 걸음을
+        // 잊으면 고른 것이 반영되지 않은 채로 화면을 떠나고, 무엇이 잘못됐는지
+        // 알려주는 것도 없다. 고른 것이 곧 뜻이라 되물을 것이 없다.
+        var autoSubmits = input.dataset.autoSubmit === "1";
+        var well = input.closest(".icon-well");
+        if (autoSubmits && button) button.hidden = true;
 
         var note = document.createElement("p");
         note.className = "field-error";
         note.hidden = true;
-        input.insertAdjacentElement("afterend", note);
+        // 그림 자리에서는 입력이 그림 위에 겹쳐 있어서 그 바로 뒤에 두면 그림 안에
+        // 글자가 들어간다. 폼 끝에 붙인다.
+        (autoSubmits && form ? form : input).insertAdjacentElement(
+            autoSubmits && form ? "beforeend" : "afterend", note
+        );
 
         input.addEventListener("change", async function () {
             var file = input.files[0];
@@ -121,6 +135,12 @@
             note.hidden = !message;
             // 누를 수 있는데 반드시 실패하는 버튼을 남기지 않는다.
             if (button) button.disabled = !!message;
+
+            if (!message && autoSubmits && form) {
+                // 올리는 동안 같은 자리를 다시 누르면 같은 폼이 두 번 나간다.
+                if (well) well.classList.add("icon-well-busy");
+                form.submit();
+            }
         });
     }
 

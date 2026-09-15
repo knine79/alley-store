@@ -45,9 +45,24 @@
 
     --radius: 8px;
     --radius-small: 6px;
+    /* 카드의 모서리. 안쪽 요소(입력칸·버튼)보다 확실히 커야 겹쳐 보이지 않는다. */
+    --radius-large: 14px;
+    /* 앱 아이콘 자리. macOS 아이콘의 둥근 사각형에 가깝게 잡는다. */
+    --radius-icon: 22.5%;
+
+    /* 그림자는 두 단계만 둔다. 더 늘리면 무엇이 얼마나 떠 있는지가 흐려진다.
+       색을 검정이 아니라 글자색에서 섞어 뽑아, 어두운 화면에서도 탁해지지 않는다. */
+    --shadow-1: 0 1px 2px color-mix(in srgb, var(--shadow-ink) 6%, transparent);
+    --shadow-2:
+        0 1px 2px color-mix(in srgb, var(--shadow-ink) 6%, transparent),
+        0 8px 24px color-mix(in srgb, var(--shadow-ink) 8%, transparent);
+    --shadow-ink: #1a1a1e;
+
+    /* 손이 닿는 것에만 붙인다. 길면 굼떠 보이고, 없으면 딱딱하다. */
+    --ease: 0.14s ease;
 
     /* 본문 폭. 목록과 표가 주 내용이라 넓게 두면 칸이 벌어져서 읽기 나빠진다. */
-    --page-width: 860px;
+    --page-width: 880px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -63,6 +78,13 @@
         --ok-border: #3f6b4c;
         --ok-text: #8fcfa3;
         --danger: #c4483c;
+        /* 어두운 바탕에서는 그림자가 "더 어두워지는" 것으로 보이지 않는다.
+           검정을 그대로 쓰면 카드가 배경에 파묻히므로 더 짙게 깐다. */
+        --shadow-ink: #000000;
+        --shadow-1: 0 1px 2px color-mix(in srgb, var(--shadow-ink) 24%, transparent);
+        --shadow-2:
+            0 1px 2px color-mix(in srgb, var(--shadow-ink) 24%, transparent),
+            0 8px 24px color-mix(in srgb, var(--shadow-ink) 28%, transparent);
     }
 }
 
@@ -94,6 +116,11 @@ body {
     font-size: var(--font-base);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
+    /* 한국어는 낱말 안에서 줄이 바뀐다. 기본값으로 두면 "파비콘과 로고 / 는" 처럼
+       조사만 다음 줄로 떨어져서, 글이 아니라 글자를 흘려놓은 것처럼 읽힌다.
+       `keep-all` 은 띄어쓰기에서만 끊는다. 대신 긴 URL 이나 번들 ID 는 끊을 데가
+       없어져서 넘칠 수 있으므로, 그런 것을 담는 자리에서는 따로 풀어준다. */
+    word-break: keep-all;
 }
 
 code {
@@ -103,6 +130,9 @@ code {
     border: 1px solid var(--border);
     border-radius: var(--radius-small);
     padding: 1px var(--space-1);
+    /* 번들 ID·주소·환경변수 이름이 들어온다. 띄어쓰기가 없어서 `keep-all` 아래서는
+       끊을 데가 없고, 좁은 화면에서 카드를 밀고 나간다. 여기서만 되돌린다. */
+    word-break: break-all;
 }
 
 /* ── 상단 껍데기 ─────────────────────────────────────────── */
@@ -201,13 +231,73 @@ code {
 
 .page-lead {
     margin: 0 0 var(--space-6);
+    max-width: 68ch;
     color: var(--text-muted);
+}
+
+/* 화면 맨 위의 "이것이 무엇인가" 줄.
+ *
+ * 아이콘·이름·식별자를 한 덩어리로 세운다. 아이콘을 화면 중간의 한 구역에 두면
+ * 그 앱의 얼굴이 설정 항목 하나로 내려앉는다. 실제로 바뀌는 것 중 사람이 가장
+ * 먼저 알아보는 것이 아이콘이라 맨 위가 맞다. */
+.identity {
+    display: flex;
+    gap: var(--space-5);
+    align-items: center;
+    margin-bottom: var(--space-5);
+}
+
+/* 바꿀 수 없는 아이콘. 앱 아이콘은 번들에서 뽑으므로 여기서는 보여주기만 한다.
+   누를 수 있는 `.icon-well` 과 달리 커서도 테두리 반응도 없어야 한다. */
+.identity-icon {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius-icon);
+    background: color-mix(in srgb, var(--bg) 70%, var(--surface));
+    overflow: hidden;
+}
+
+.identity-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.identity-body {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.identity-body .page-title {
+    margin-bottom: var(--space-1);
+}
+
+.identity-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
+    align-items: center;
+    margin: 0;
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+}
+
+@media (max-width: 30rem) {
+    .identity {
+        flex-direction: column;
+        align-items: flex-start;
+    }
 }
 
 /* 구역 제목 밑에 붙는 한 줄. 화면 제목 밑의 것보다 아래 간격이 좁다. 바로 아래에
    그 구역의 내용이 이어져서, 화면 머리만큼 띄우면 제목에서 떨어져 보인다. */
 .section-lead {
-    margin: calc(var(--space-4) * -1) 0 var(--space-5);
+    margin: 0 0 var(--space-5);
+    max-width: 62ch;
+    font-size: var(--font-md);
     color: var(--text-muted);
 }
 
@@ -314,7 +404,10 @@ a.tab:hover {
 /* ── 버튼 ────────────────────────────────────────────────── */
 
 .button {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
     padding: var(--space-2) var(--space-4);
     min-height: 36px;
     border: 1px solid var(--border);
@@ -326,11 +419,38 @@ a.tab:hover {
     line-height: 1.4;
     font-weight: 500;
     text-decoration: none;
+    white-space: nowrap;
     cursor: pointer;
+    box-shadow: var(--shadow-1);
+    transition: border-color var(--ease), background var(--ease), transform var(--ease);
 }
 
 .button:hover {
     border-color: var(--text-muted);
+}
+
+/* 눌린 순간 1px 내려앉는다. 누른 것이 먹었는지를 화면이 바뀌기 전에 알려준다. */
+.button:active {
+    transform: translateY(1px);
+}
+
+/* 누를 수 없는 버튼은 눌러보기 전에 그렇게 보여야 한다. 예전에는 브라우저 기본
+   모양에 맡겨서, 빌드 조건이 안 맞는데도 누를 수 있는 버튼처럼 보였다. */
+.button:disabled {
+    opacity: 0.45;
+    box-shadow: none;
+    cursor: not-allowed;
+}
+
+.button:disabled:hover {
+    border-color: var(--border);
+}
+
+/* 표의 한 줄에 들어가는 버튼. 줄 높이를 밀어내지 않아야 한다. */
+.button-small {
+    min-height: 30px;
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--font-sm);
 }
 
 .button-primary {
@@ -401,6 +521,8 @@ a.tab:hover {
     background: transparent;
     border-color: transparent;
     color: var(--text-muted);
+    /* 배경도 테두리도 없는데 그림자만 남으면 글자가 떠 있는 것처럼 보인다. */
+    box-shadow: none;
 }
 
 .button-quiet:hover {
@@ -494,32 +616,50 @@ a.tab:hover {
     font-size: var(--font-lg);
 }
 
+/* 사람이 쓴 앱 설명. 줄바꿈을 그대로 살린다.
+ *
+ * **템플릿에 손으로 쓴 문단에는 쓰지 않는다.** `pre-wrap` 은 들여쓴 공백까지
+ * 살려서, 템플릿 들여쓰기가 화면에 그대로 여백으로 나온다. 실제로 관리 화면의
+ * 문단 둘이 한 칸 밀려서 나오고 있었다. 그런 문단은 `.section-lead` 다. */
 .body-text {
     margin: 0 0 var(--space-5);
+    max-width: 68ch;
     color: var(--text-muted);
     white-space: pre-wrap;
 }
 
+/* 화면을 이루는 한 덩어리.
+ *
+ * 예전에는 섹션 사이에 실선만 그었다. 배경이 같아서 경계는 보였지만 **안과 밖의
+ * 폭이 달랐다.** 본문 글은 화면 끝까지 가고 폼은 34rem 에서 잘려서, 한 화면에
+ * 기준선이 둘 생기고 오른쪽이 늘 비어 보였다. 카드로 묶으면 그 안의 모든 것이
+ * 카드 폭 하나를 기준으로 서고, 버튼도 그 끝에 맞는다.
+ *
+ * 위험 구역(`.section-danger`)은 자기 테두리를 이미 갖고 있어서 여기서 다시
+ * 칠하지 않는다. */
 .section {
-    margin-top: var(--space-7);
+    margin-top: var(--space-6);
+    padding: var(--space-5);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-large);
+    background: var(--surface);
+    box-shadow: var(--shadow-1);
+}
+
+.section-danger {
+    margin-top: var(--space-6);
 }
 
 .section-title {
     margin: 0 0 var(--space-4);
-    font-size: var(--font-xl);
+    font-size: var(--font-lg);
     line-height: 1.35;
     letter-spacing: -0.01em;
 }
 
-/* 섹션 사이에 실선 하나. 배경이 같은 화면에서 제목만으로는 경계가 안 보인다.
- *
- * **위험 구역은 빼야 한다.** 그 상자는 자기 테두리를 네 면에 갖고 있어서, 여기서
- * 위쪽에 실선을 하나 더 그으면 선이 겹친다. 예전에는 뒤에서 `border-top: 0` 으로
- * 덮었는데 그러면 겹친 선이 아니라 **그 상자의 위쪽 테두리가 지워졌다.** 상자가
- * 위만 뚫린 채로 보였다. 처음부터 적용하지 않는 것이 맞다. */
-.section + .section:not(.section-danger) {
-    padding-top: var(--space-7);
-    border-top: 1px solid var(--border);
+/* 제목 바로 밑에 붙는 설명은 제목과 한 덩어리다. 제목의 아래 여백을 지운다. */
+.section-title:has(+ .section-lead) {
+    margin-bottom: var(--space-1);
 }
 
 /* ── 카드 목록 ───────────────────────────────────────────── */
@@ -534,18 +674,61 @@ a.tab:hover {
 
 /* 카드 전체가 링크다. 제목만 눌리면 카드를 눌렀는데 아무 일도 안 일어난다. */
 .card {
-    display: block;
+    display: flex;
+    gap: var(--space-4);
+    align-items: flex-start;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-large);
     padding: var(--space-4);
     color: inherit;
     text-decoration: none;
-    transition: border-color 0.12s ease, background 0.12s ease;
+    box-shadow: var(--shadow-1);
+    transition: border-color var(--ease), box-shadow var(--ease), transform var(--ease);
 }
 
 .card:hover {
-    border-color: var(--text-muted);
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+    box-shadow: var(--shadow-2);
+}
+
+.card:active {
+    transform: translateY(1px);
+}
+
+/* 목록에 선 앱의 얼굴.
+ *
+ * 스토어 앱 목록에는 아이콘이 있는데 웹에는 없었다. 이름만 늘어선 목록은 다 같아
+ * 보이고, 찾는 앱을 글자로 읽어야 한다. 아이콘이 있으면 눈이 먼저 찾는다. */
+.card-icon {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-icon);
+    background: color-mix(in srgb, var(--bg) 70%, var(--surface));
+    overflow: hidden;
+}
+
+.card-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+/* 아이콘이 없는 앱. 빈 사각형을 두면 덜 만들어진 앱처럼 보인다.
+   글자는 서버가 한 글자만 보내준다 (`AppRow.initial`). */
+.card-icon-letter {
+    font-size: var(--font-xl);
+    font-weight: 600;
+    color: var(--text-muted);
+    line-height: 1;
+}
+
+.card-body {
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .card:focus-visible {
@@ -630,12 +813,20 @@ a.tab:hover {
 
 .table {
     width: 100%;
-    border-collapse: collapse;
+    /* `separate` 로 두어야 둥근 모서리가 셀에 잘리지 않는다. `collapse` 에서는
+       모서리 반경이 무시되고 네 귀가 각지게 나온다. */
+    border-collapse: separate;
+    border-spacing: 0;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-large);
     overflow: hidden;
     font-size: var(--font-md);
+}
+
+/* 카드 안에 들어간 표는 그림자를 갖지 않는다. 상자 안의 상자가 떠 보인다. */
+.section > .table {
+    box-shadow: none;
 }
 
 .table th,
@@ -647,6 +838,11 @@ a.tab:hover {
 
 .table tbody tr:last-child td {
     border-bottom: none;
+}
+
+/* 표 하나가 화면에 홀로 설 때는 카드처럼 띄운다. 통계 화면이 그렇다. */
+.page > .table {
+    box-shadow: var(--shadow-1);
 }
 
 .table th {
@@ -689,10 +885,18 @@ a.tab:hover {
 
 /* ── 폼 ──────────────────────────────────────────────────── */
 
+/* 카드 밖에 홀로 선 폼은 스스로 폭을 제한한다. 화면 끝까지 늘어난 입력칸은
+   눈이 시작점으로 돌아올 거리가 멀어서 읽기 나쁘다.
+   카드 안에서는 카드가 이미 폭을 정하므로 아래에서 이 제한을 푼다. */
 .form {
     max-width: 34rem;
     display: grid;
     gap: var(--space-5);
+}
+
+.section .form,
+.card-form {
+    max-width: none;
 }
 
 /* 묶음으로 나뉜 폼은 묶음 사이를 칸 사이보다 넓게 벌린다. 둘이 같으면 묶음 경계가
@@ -723,20 +927,39 @@ a.tab:hover {
 
 .input {
     width: 100%;
-    min-height: 36px;
+    min-height: 38px;
     padding: var(--space-2) var(--space-3);
     border: 1px solid var(--border);
     border-radius: var(--radius-small);
-    background: var(--surface);
+    /* 카드 위에 놓이므로 카드와 같은 흰색이면 칸의 경계가 테두리 한 줄뿐이다.
+       한 톤 내려 깔면 "여기에 쓰는 자리" 가 테두리 없이도 읽힌다. */
+    background: color-mix(in srgb, var(--bg) 45%, var(--surface));
     color: var(--text);
     font: inherit;
-    font-size: var(--font-base);
+    font-size: var(--font-md);
+    transition: border-color var(--ease), background var(--ease);
+}
+
+.input:hover {
+    border-color: var(--text-muted);
 }
 
 .input:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: -1px;
     border-color: var(--accent);
+    background: var(--surface);
+}
+
+/* 잠긴 칸. 고칠 수 없다는 것이 눌러보기 전에 보여야 한다. */
+.input[readonly] {
+    background: var(--bg);
+    color: var(--text-muted);
+    cursor: not-allowed;
+}
+
+.input[readonly]:hover {
+    border-color: var(--border);
 }
 
 textarea.input {
@@ -744,10 +967,167 @@ textarea.input {
     min-height: 5rem;
 }
 
+/* 폼 아래의 버튼 줄.
+ *
+ * 기본은 오른쪽이다. 눈이 마지막 칸을 채우고 내려오는 자리라 거기서 끝나야 한다.
+ * 취소나 뒤로처럼 **되돌아가는** 버튼은 `.action-back` 을 붙여 왼쪽 끝으로 민다.
+ * 주 동작 옆에 붙여두면 진행과 후퇴가 같은 무게로 보이고, 실제로 잘못 누른다. */
 .form-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--space-2);
+    align-items: center;
     justify-content: flex-end;
+}
+
+.action-back {
+    margin-right: auto;
+}
+
+/* 버튼 줄 왼쪽에 붙는 한 줄. 버튼이 무엇을 저장하는지 그 자리에서 말한다. */
+.form-actions-note {
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+}
+
+/* 카드 안에서는 버튼 줄이 카드 바닥에 놓인다. 위에 선을 하나 그어 "여기까지가
+   고치는 자리" 를 닫는다. 카드 좌우 패딩만큼 밖으로 빼서 선이 카드를 가로지른다. */
+.section > .form > .form-actions,
+.section > .form-actions,
+.section > .section-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: center;
+    justify-content: flex-end;
+    margin: var(--space-5) calc(var(--space-5) * -1) calc(var(--space-5) * -1);
+    padding: var(--space-4) var(--space-5);
+    border-top: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 55%, var(--surface));
+    border-radius: 0 0 calc(var(--radius-large) - 1px) calc(var(--radius-large) - 1px);
+}
+
+/* 카드 안에 또 접혀 있는 폼의 버튼 줄. 바닥 띠로 만들면 띠가 둘이 된다. */
+.form-actions-inline {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+}
+
+/* 카드 여러 장을 한 번에 저장하는 버튼.
+ *
+ * 어느 카드 안에 넣으면 그 카드만 저장하는 것처럼 보인다. 카드 밖에 카드와 같은
+ * 폭으로 띄워서 "여기까지 전부" 를 자리로 말한다. */
+.form-actions-bar {
+    padding: var(--space-4) var(--space-5);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-large);
+    background: var(--surface);
+    box-shadow: var(--shadow-1);
+}
+
+/* 카드를 담은 폼. 카드가 자기 위 여백을 갖고 있으면 폼의 `gap` 과 더해져 두 배로
+   벌어진다. 간격은 `gap` 한 군데서만 정한다. */
+.form-sections {
+    /* 카드가 폭을 정한다. `.form` 의 34rem 을 그대로 두면 카드까지 반 폭으로 잘려서,
+       같은 화면에 반 폭 카드와 온 폭 카드가 섞인다. */
+    max-width: none;
+    gap: var(--space-4);
+}
+
+.form-sections > .section {
+    margin-top: 0;
+}
+
+/* 지금 안 해도 되는 일을 접어둔다.
+ *
+ * 펴 두면 화면이 길어지고, 무엇이 늘 하는 일이고 무엇이 가끔 하는 일인지가
+ * 같은 무게로 보인다. 접어두면 그 구분이 화면에 그대로 남는다. */
+.disclosure {
+    margin-top: var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--bg) 45%, var(--surface));
+}
+
+/* 브라우저가 붙이는 삼각형을 지우고 직접 그린다. 기본 마커는 운영체제마다 모양이
+   다르고 글자와 세로 정렬이 맞지 않아, 한 줄 안에서 혼자 위로 떠 보인다. */
+.disclosure-summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--font-sm);
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    list-style: none;
+    transition: color var(--ease);
+}
+
+.disclosure-summary::-webkit-details-marker {
+    display: none;
+}
+
+.disclosure-summary::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(-45deg);
+    transition: transform var(--ease);
+}
+
+.disclosure[open] .disclosure-summary::before {
+    transform: rotate(45deg);
+}
+
+.disclosure-summary:hover {
+    color: var(--text);
+}
+
+.disclosure[open] .disclosure-summary {
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+}
+
+.disclosure-body {
+    padding: var(--space-4);
+}
+
+/* 고칠 수 없고 서버가 정한 값. 입력칸처럼 보이면 눌러보게 된다. */
+.readonly-value {
+    margin: 0;
+    padding: var(--space-2) 0;
+}
+
+/* "지금 이렇다" 한 줄. 이름과 값을 나란히 둔다.
+ *
+ * 이름을 `.stat-*` 로 짓지 않는다. 통계 화면이 이미 그 이름으로 34px 짜리 숫자
+ * 타일을 갖고 있어서, 같은 이름을 쓰면 뒤에 오는 정의가 이겨서 한 줄짜리 값이
+ * 제목보다 커진다. 실제로 그렇게 한 번 나갔다. */
+.fact-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
+    align-items: baseline;
+    margin: 0 0 var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--bg) 45%, var(--surface));
+}
+
+.fact-label {
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+}
+
+.fact-value {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
 }
 
 /* ── 폼 안의 묶음 (fieldset) ─────────────────────────────── */
@@ -783,7 +1163,36 @@ textarea.input {
 }
 
 .form-group {
-    gap: var(--space-4);
+    gap: var(--space-5);
+}
+
+/* 짧은 값들을 두 칸씩 나란히 둔다.
+ *
+ * 버전이나 스킴처럼 열 글자도 안 되는 값에 한 줄을 통째로 주면, 입력칸이 화면을
+ * 가로지르는데 글자는 왼쪽 끝에만 있다. 폼이 실제보다 길어 보이고 채울 것이
+ * 많아 보인다. 긴 값(이름·설명)은 `.field-wide` 로 한 줄을 다 쓴다. */
+.form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--space-4);
+}
+
+.form-grid > .field-wide,
+.form-grid > .check,
+.form-grid > .form-note {
+    grid-column: 1 / -1;
+}
+
+/* 좁은 화면에서는 두 칸이 둘 다 못 쓸 만큼 좁아진다. 한 줄로 되돌린다. */
+@media (max-width: 40rem) {
+    .form-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* 카드 안에 묶음이 둘 이상 놓일 때. 폼이 직접 담을 때는 `.form` 의 `gap` 이
+   벌려주지만, 카드가 담으면 벌려줄 것이 없어서 앞 칸과 다음 묶음 제목이 붙는다. */
+.section > .form-group + .form-group {
+    margin-top: var(--space-6);
 }
 
 /* legend 는 grid 항목이 아니다. 브라우저가 fieldset 위쪽에 따로 놓기 때문에 위 규칙의
@@ -913,7 +1322,14 @@ textarea.input {
 }
 
 /* 읽어두면 좋지만 막지는 않는 안내. 오류(빨강)나 경고(노랑)와 달라야 한다. */
+/* 읽어두면 좋지만 막지는 않는 안내.
+ *
+ * 카드 안에서는 카드와 같은 흰 바탕이면 바로 위 상자에 이어 붙은 것처럼 보인다.
+ * 한 톤 내려 깔아서 "따로 하는 말" 로 떼어 놓는다. */
 .notice-hint {
+    margin-top: var(--space-4);
+    background: color-mix(in srgb, var(--bg) 60%, var(--surface));
+    font-size: var(--font-sm);
     color: var(--text-muted);
     line-height: 1.6;
 }
@@ -1413,7 +1829,7 @@ textarea.input {
     display: flex;
     gap: var(--space-3);
     flex-wrap: wrap;
-    margin-bottom: var(--space-5);
+    margin-bottom: var(--space-6);
 }
 
 .stat {
@@ -1421,8 +1837,11 @@ textarea.input {
     min-width: 8rem;
     padding: var(--space-4);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    /* 카드와 같은 모서리·그림자를 쓴다. 한 화면에 상자가 두 종류로 보이면 무엇이
+       무엇의 안에 있는지가 흐려진다. */
+    border-radius: var(--radius-large);
     background: var(--surface);
+    box-shadow: var(--shadow-1);
 }
 
 .stat-value {
@@ -1441,37 +1860,26 @@ textarea.input {
     color: var(--text-muted);
 }
 
-/* ── 브랜딩 이미지 ───────────────────────────────────────── */
+/* ── 그림 올리는 자리 ────────────────────────────────────── */
 
-/* 파비콘·로고·앱 아이콘을 올리는 자리. 칸마다 폼이 따로다 (admin-settings.leaf 주석).
+/* 파비콘·로고·앱 아이콘을 올린다.
  *
- * 미리보기를 크게 두지 않는다. 여기서 보는 것은 "무엇이 올라가 있나" 이지 그림의
- * 품질이 아니다. 품질은 실제로 쓰이는 자리 - 브라우저 탭, Dock - 에서만 판단된다. */
-.branding-grid {
-    display: grid;
-    gap: var(--space-4);
-}
-
-.branding-slot {
-    display: flex;
-    gap: var(--space-4);
-    align-items: flex-start;
-    padding: var(--space-4);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface);
-}
-
-/* 미리보기 자리는 그림이 있든 없든 같은 크기다. 올리고 나서 칸이 움직이면
-   무엇이 바뀐 건지 한눈에 안 들어온다. */
-.branding-preview {
-    flex: 0 0 auto;
-    width: 96px;
-    height: 96px;
+ * **그림 자체가 버튼이다.** 예전에는 미리보기 옆에 브라우저 기본 파일 입력이
+ * 그대로 놓여 있었다. "파일 선택 / 선택된 파일 없음" 이라는 회색 위젯은 운영체제와
+ * 브라우저마다 생김새가 다르고, 무엇보다 이 화면에서 가장 눈에 띄는 것이 그것이
+ * 되어버렸다. 바꾸려는 것은 그림인데 눈은 위젯을 먼저 본다.
+ *
+ * 지금은 그림 위에 마우스를 올리면 "바꾸기" 가 덮이고, 누르면 파일 고르기가 열린다.
+ * 파일 입력은 그림 위에 투명하게 깔려 있어서 끌어다 놓는 것도 그대로 된다. */
+.icon-well {
+    position: relative;
     display: grid;
     place-items: center;
+    width: var(--icon-well-size, 96px);
+    height: var(--icon-well-size, 96px);
+    flex: 0 0 auto;
+    border-radius: var(--icon-well-radius, var(--radius));
     border: 1px solid var(--border);
-    border-radius: var(--radius-small);
     /* 투명한 PNG 가 흰 배경에 묻히는 것을 막는다. 격자 위에 놓으면 어디까지가
        그림이고 어디부터가 배경인지 보인다. */
     background-color: var(--bg);
@@ -1483,75 +1891,157 @@ textarea.input {
     background-size: 12px 12px;
     background-position: 0 0, 0 6px, 6px -6px, -6px 0;
     overflow: hidden;
+    cursor: pointer;
+    transition: border-color var(--ease), box-shadow var(--ease);
 }
 
-.branding-preview img {
+/* 앱 아이콘 자리. macOS 아이콘의 둥근 사각형에 맞춰 더 둥글고 크게 둔다.
+   Dock 에서 보게 될 모양과 화면에서 보는 모양이 달라지면 확인하는 뜻이 없다.
+
+   **여기서는 격자를 깔지 않는다.** 앱 아이콘은 이미 자기 모양대로 잘려 있고
+   둘레가 투명하다. 그 위에 격자를 깔면 아이콘 둘레에 체크무늬가 드러나서, Dock 에
+   놓였을 때와 전혀 다른 것을 보게 된다. 투명한 부분이 있는지 확인해야 하는 파비콘·
+   로고와 다른 점이다. */
+.icon-well-app {
+    --icon-well-size: 112px;
+    --icon-well-radius: var(--radius-icon);
+    background-image: none;
+    background-color: color-mix(in srgb, var(--bg) 60%, var(--surface));
+}
+
+.icon-well:hover,
+.icon-well:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.icon-well img {
     display: block;
-    width: 96px;
-    height: 96px;
+    width: 100%;
+    height: 100%;
     object-fit: contain;
 }
 
-.branding-empty {
-    font-size: var(--font-sm);
-    color: var(--text-muted);
-    /* 격자 위에 글자만 놓으면 읽기 어렵다. 바탕을 한 겹 깐다. */
+/* 아직 안 올렸을 때. 격자 위에 글자만 놓으면 읽기 어려워 바탕을 한 겹 깐다. */
+.icon-well-empty {
     padding: var(--space-1) var(--space-2);
     border-radius: var(--radius-small);
     background: var(--surface);
+    font-size: var(--font-sm);
+    color: var(--text-muted);
 }
 
-.branding-body {
+/* 마우스를 올렸을 때 덮이는 띠.
+ *
+ * 그림 전체를 덮지 않고 아래쪽만 가린다. 전부 덮으면 무엇을 바꾸는 중인지가
+ * 가려져서, 그림이 여럿일 때 엉뚱한 칸을 누른 것을 알아채지 못한다. */
+.icon-well-hint {
+    position: absolute;
+    inset: auto 0 0;
+    padding: var(--space-1) 0;
+    background: color-mix(in srgb, #000000 62%, transparent);
+    color: #ffffff;
+    font-size: var(--font-xs);
+    font-weight: 500;
+    text-align: center;
+    opacity: 0;
+    transition: opacity var(--ease);
+}
+
+.icon-well:hover .icon-well-hint,
+.icon-well:focus-within .icon-well-hint {
+    opacity: 1;
+}
+
+/* 파일 입력 자체. 그림 위에 투명하게 깔아서 누르기와 끌어다 놓기를 받는다.
+   `display: none` 으로 감추면 끌어다 놓기가 사라지고, 일부 브라우저에서 키보드
+   초점도 받지 못한다. */
+.icon-well-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+/* 올리는 중. 두 번 누르면 같은 폼이 두 번 나간다. */
+.icon-well-busy {
+    opacity: 0.55;
+    pointer-events: none;
+}
+
+/* 그림 옆에 붙는 설명과 버튼. */
+.icon-field {
+    display: flex;
+    gap: var(--space-4);
+    align-items: flex-start;
+}
+
+.icon-field-body {
     flex: 1 1 auto;
     min-width: 0;
+    display: grid;
+    gap: var(--space-1);
 }
 
-.branding-name {
+.icon-field-name {
     margin: 0;
-    font-size: var(--font-base);
+    font-size: var(--font-md);
     font-weight: 600;
 }
 
-.branding-summary {
-    margin: var(--space-1) 0 0;
+.icon-field-note {
+    margin: 0;
     font-size: var(--font-sm);
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
 }
 
-.branding-requirement {
-    margin: var(--space-2) 0 var(--space-3);
-    font-size: var(--font-sm);
-    color: var(--text-muted);
-}
-
-.branding-actions {
+.icon-field-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-3);
-    align-items: center;
-}
-
-.branding-actions form {
-    display: flex;
     gap: var(--space-2);
     align-items: center;
+    margin-top: var(--space-2);
+}
+
+.icon-field-actions form {
+    margin: 0;
+}
+
+/* 여러 칸을 나란히. 파비콘과 로고처럼 한 화면에서 함께 다루는 것들이다. */
+.icon-grid {
+    display: grid;
+    gap: var(--space-5);
+}
+
+@media (min-width: 46rem) {
+    .icon-grid-pair {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* 좁은 화면에서는 그림을 위로 올린다. 112px 를 옆에 두면 본문이 너무 좁아진다. */
+@media (max-width: 30rem) {
+    .icon-field {
+        flex-direction: column;
+    }
+}
+
+/* 스크립트가 돌면 고르는 순간 올라가므로 이 버튼은 필요 없다. 스크립트가 없을
+   때를 위해 마크업에는 남겨두고, `app.js` 가 켜지면서 감춘다. */
+.icon-well-submit {
+    margin-top: var(--space-2);
 }
 
 /* 파일 입력의 생김새는 브라우저마다 다르고 바꿀 수 없다(.dropzone 주석 참고).
-   여기서는 덮지 않고 크기와 글자만 화면에 맞춘다. 칸 하나에 그림 하나라
-   끌어다 놓을 넓은 자리가 필요 없다. */
+   여기서는 덮지 않고 크기와 글자만 화면에 맞춘다. 번들 zip 처럼 미리보기가 없는
+   파일에만 남아 있다. */
 .file {
-    max-width: 16rem;
+    max-width: 100%;
     font-size: var(--font-sm);
     color: var(--text-muted);
-}
-
-/* 좁은 화면에서는 미리보기를 위로 올린다. 96px 를 옆에 두면 본문이 너무 좁아진다. */
-@media (max-width: 30rem) {
-    .branding-slot {
-        flex-direction: column;
-    }
 }
 
 /* 칸 하나에 붙는 오류.

@@ -22,7 +22,7 @@
 
 <p class="notice notice-error" id="app-new-error" hidden></p>
 
-<form class="form" method="post" action="/apps/new" id="app-new-form"
+<form class="form form-sections" method="post" action="/apps/new" id="app-new-form"
       data-apps-url="#(appsPath)"
       data-version-root="#(versionRootPath)"
       data-bundle-id-prefix="#(bundleIDPrefix)"
@@ -31,8 +31,9 @@
     <!-- ── 1단계: 파일 ────────────────────────────────────────
          스크립트가 돌 때만 보인다. 없으면 2단계 폼이 그대로 드러나 있고, 그것을
          채워 `POST` 하면 앱만 등록된다 (ADR-0030, ADR-0031, ADR-0033). -->
-    <div id="step-file" hidden>
-        <p class="page-lead">올릴 앱 파일을 여기에 끌어다 놓으세요.</p>
+    <div class="section" id="step-file" hidden>
+        <h2 class="section-title">앱 파일</h2>
+        <p class="section-lead">zip 이나 dmg 를 놓으면 번들에서 읽은 값으로 다음 화면을 채웁니다.</p>
 
         <div class="dropzone" id="dropzone">
             <input class="dropzone-input" type="file" id="bundle-file"
@@ -51,23 +52,24 @@
         <p class="field-note" id="dropzone-status" hidden></p>
 
         <div class="form-actions">
-            <a class="button" href="/apps">취소</a>
-            <button class="button button-quiet" type="button" id="skip-file">
+            <a class="button button-quiet action-back" href="/apps">취소</a>
+            <button class="button" type="button" id="skip-file">
                 파일 없이 앱만 등록
             </button>
         </div>
     </div>
 
     <!-- ── 2단계: 정보 확인 ───────────────────────────────── -->
-    <div id="step-info">
-        <p class="page-lead" id="step-info-lead">
+    <div class="section" id="step-info">
+        <h2 class="section-title">앱 정보</h2>
+        <p class="section-lead" id="step-info-lead">
             번들 ID 는 등록 후 바꿀 수 없습니다. macOS 가 이 값으로 앱을 식별하기 때문입니다.
         </p>
 
-        <fieldset class="form-group" id="app-info-group">
-            <legend class="form-group-title">앱 정보</legend>
+        <fieldset class="form-group form-grid" id="app-info-group">
+            <legend class="visually-hidden">앱 정보</legend>
 
-            <label class="field" id="bundle-id-field">
+            <label class="field field-wide" id="bundle-id-field">
                 <span class="field-label">번들 ID</span>
                 <input class="input" type="text" name="bundleID" required
                        value="#(values.bundleID)"
@@ -92,7 +94,7 @@
                  값과 함께 고친다 (ADR-0033).
 
                  zip 은 읽은 값을 보여주는 것이 이 단계의 목적이라 드러낸다. -->
-            <div id="optional-fields">
+            <div class="field-wide form-group" id="optional-fields">
                 <label class="field">
                     <span class="field-label">이름</span>
                     <input class="input" type="text" name="name" required
@@ -118,7 +120,7 @@
 
         <!-- zip 을 골랐을 때만 보인다. dmg 는 값을 읽을 수 없어 감추고, 워커가
              보고한 값으로 서버가 채운다. -->
-        <fieldset class="form-group" id="first-version" hidden>
+        <fieldset class="form-group form-grid" id="first-version" hidden>
             <legend class="form-group-title">첫 버전</legend>
 
             <label class="field">
@@ -141,9 +143,11 @@
         </fieldset>
 
         <div class="form-actions">
-            <!-- 스크립트가 돌 때만 보인다. 없으면 1단계가 없으니 돌아갈 곳도 없다. -->
-            <a class="button" href="/apps" id="cancel-info">취소</a>
-            <button class="button" type="button" id="back-to-file" hidden>뒤로</button>
+            <!-- 되돌아가는 버튼은 왼쪽 끝으로 민다. 등록 옆에 붙여두면 진행과 후퇴가
+                 같은 무게로 보이고, 실제로 잘못 누른다.
+                 "뒤로" 는 스크립트가 돌 때만 보인다. 없으면 1단계가 없어 돌아갈 곳도 없다. -->
+            <a class="button button-quiet action-back" href="/apps" id="cancel-info">취소</a>
+            <button class="button action-back" type="button" id="back-to-file" hidden>뒤로</button>
             <button class="button button-primary" type="submit" id="app-new-submit">등록</button>
         </div>
     </div>

@@ -210,6 +210,40 @@ struct StoreSettingsPageTests {
         }
     }
 
+    /// **폼이 하나여야 한다.**
+    ///
+    /// 서버는 화면의 모든 값이 한 번에 온다고 보고 빠진 값을 "지우겠다" 로 읽는다
+    /// (`StoreSettingsFormValues.toRequest`). 그래서 화면을 구역별 폼으로 쪼개면
+    /// 각 저장 버튼이 다른 구역의 값을 지우거나, 지울 수 없다며 거절당한다.
+    /// 실제로 "이름과 겉모습" 의 저장 버튼이 허용 도메인을 비우려 한다며 400 으로
+    /// 떨어졌고, 눌러도 아무것도 저장되지 않았다.
+    ///
+    /// 구역을 나누고 싶어지는 화면이라 다시 쪼개기 쉽다. 그때 여기서 걸린다.
+    @Test("설정 화면의 저장 폼은 하나이고 모든 칸을 담는다")
+    func settingsFormCarriesEveryField() async throws {
+        try await withMigratedApp { app in
+            let (_, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
+
+            try await app.testing().test(
+                .GET, "/admin/settings", headers: .sessionCookie(token)
+            ) { response in
+                let body = response.body.string
+                let forms = body.components(separatedBy: #"action="/admin/settings""#).count - 1
+                #expect(forms == 1, "설정을 저장하는 폼은 하나여야 합니다. 지금 \(forms)개입니다.")
+
+                // `toRequest()` 가 읽는 칸 전부. 하나라도 폼에 없으면 저장할 때
+                // 그 값이 빈 값으로 덮인다.
+                for field in [
+                    "storeName", "logoURL", "accentColor", "allowedEmailDomains",
+                    "bundleIDPrefix", "enforceBundleIDPrefix", "allowsAnonymousFeedback",
+                    "confirmOpenToAnyDomain",
+                ] {
+                    #expect(body.contains(#"name="\#(field)""#), "\(field) 칸이 없습니다.")
+                }
+            }
+        }
+    }
+
     @Test("저장한 뒤 화면에 표시가 남는다")
     func showsSavedNotice() async throws {
         try await withMigratedApp { app in

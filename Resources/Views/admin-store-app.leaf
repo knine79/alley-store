@@ -1,9 +1,47 @@
 #extend("layout"):
 #export("content"):
-<h1 class="page-title">스토어 앱</h1>
+<!-- 화면 맨 위는 "지금 어떤 앱인가" 다. 아이콘을 여기 두는 이유는 그것이 조직
+     구성원이 Dock 에서 볼 얼굴이고, 이 화면에서 바꾸는 것 중 가장 눈에 띄는
+     것이기 때문이다. 설정 항목 하나로 화면 중간에 두면 그 사실이 가려진다. -->
+<div class="identity">
+    #if(icon):
+    <form class="icon-form" method="post" action="/admin/settings/branding/#(icon.kind)"
+          enctype="multipart/form-data">
+        <input type="hidden" name="returnPath" value="/admin/store-app">
+        <label class="icon-well icon-well-app" title="눌러서 앱 아이콘 고르기">
+            #if(icon.imageURL):
+            <img src="#(icon.imageURL)" alt="앱 아이콘">
+            #else:
+            <span class="icon-well-empty">아이콘 없음</span>
+            #endif
+            <span class="icon-well-hint" aria-hidden="true">바꾸기</span>
+            <input class="icon-well-input" type="file" name="image" accept="image/png" required
+                   data-image-rule="#(icon.rule)" data-image-label="#(icon.label)"
+                   data-auto-submit="1">
+        </label>
+        <!-- 스크립트가 돌면 고르는 순간 올라가므로 app.js 가 이 버튼을 감춘다.
+             스크립트가 없을 때는 이것이 유일한 올리는 길이다. -->
+        <button class="button button-small icon-well-submit" type="submit">올리기</button>
+    </form>
+    #endif
+
+    <div class="identity-body">
+        <h1 class="page-title">#(values.appName)</h1>
+        <p class="identity-meta">
+            <code>#(values.bundleID)</code>
+            #if(base.isPresent):
+            <span>베이스 번들 #(base.version)</span>
+            #endif
+            #if(icon):#if(icon.imageURL):
+            <span>아이콘 #(icon.summary)</span>
+            #endif#endif
+        </p>
+    </div>
+</div>
+
 <p class="page-lead">
     이 스토어가 내놓는 앱입니다. 여기서 정한 값으로 서버가 번들을 빌드해 서명 워커에
-    넘깁니다. 다른 앱과 달리 올릴 파일이 없습니다.
+    넘깁니다. 파비콘과 로고는 <a href="/admin/settings">스토어 설정</a> 에 있습니다.
 </p>
 
 #if(error):
@@ -20,182 +58,145 @@
 </p>
 #endif
 
-<form class="form" method="post" action="/admin/store-app/settings">
-    <fieldset class="form-group">
-        <legend class="form-group-title">번들에 박히는 값</legend>
+<section class="section">
+    <h2 class="section-title">번들에 박히는 값</h2>
+    <p class="section-lead">저장하면 다음 빌드부터 반영됩니다. 이미 내보낸 빌드는 그대로입니다.</p>
 
-        <label class="field">
-            <span class="field-label">앱 이름</span>
-            <input class="input" type="text" name="appName" required value="#(values.appName)">
-            <span class="field-note">
-                Finder 와 Dock 에 보이는 이름입니다. 번들 폴더 이름도 이것이 됩니다.
-            </span>
-        </label>
-
-        <label class="field">
-            <span class="field-label">번들 ID</span>
-            <input class="input" type="text" name="bundleID" required value="#(values.bundleID)"
-                   placeholder="com.example.alley.store"
-                   autocapitalize="off" autocorrect="off" spellcheck="false"
-                   #if(isLocked):readonly#endif>
-            #if(isLocked):
-            <span class="field-note">
-                이미 내보낸 앱이 있어 잠겨 있습니다. 아래 확인을 켜면 바꿀 수 있습니다.
-            </span>
-            #endif
-        </label>
-
-        <label class="field">
-            <span class="field-label">URL 스킴</span>
-            <input class="input" type="text" name="urlScheme" required value="#(values.urlScheme)"
-                   placeholder="alleystore"
-                   autocapitalize="off" autocorrect="off" spellcheck="false"
-                   #if(isLocked):readonly#endif>
-            <span class="field-note">로그인 콜백이 이 이름으로 돌아옵니다. 소문자와 숫자만 씁니다.</span>
-        </label>
-
-        <label class="field">
-            <span class="field-label">최소 macOS 버전</span>
-            <input class="input" type="text" name="minimumSystemVersion" required
-                   value="#(values.minimumSystemVersion)" placeholder="14.0"
-                   autocapitalize="off" autocorrect="off" spellcheck="false">
-        </label>
-
-        <div class="field">
-            <span class="field-label">붙을 스토어 주소</span>
-            <p class="body-text"><code>#(serverURL)</code></p>
-            <span class="field-note">
-                서버가 자기 주소를 번들에 박습니다. 받은 사람은 주소를 입력하지 않고 바로
-                로그인합니다. 이 값은 서버 설정(<code>PUBLIC_BASE_URL</code>)에서 옵니다.
-            </span>
-        </div>
-
-        #if(isLocked):
-        <label class="check check-attached">
-            <input type="checkbox" name="confirmIdentityChange" value="on">
-            <span>
-                <span class="check-name">번들 ID 나 URL 스킴을 바꾸겠습니다</span>
-                <span class="check-note">
-                    <strong>이미 깔린 앱은 업데이트를 받지 못합니다.</strong> macOS 는 번들
-                    ID 로 앱을 가리므로, 바꾸면 그것은 업데이트가 아니라 별개 앱이 됩니다.
-                    사용자 화면에 같은 이름의 앱이 둘 남고, 옛것은 영영 그대로입니다.
-                    스킴을 바꾸면 이미 깔린 앱의 로그인 콜백이 돌아오지 않습니다.
+    <form class="form" method="post" action="/admin/store-app/settings">
+        <div class="form-group form-grid">
+            <label class="field field-wide">
+                <span class="field-label">앱 이름</span>
+                <input class="input" type="text" name="appName" required value="#(values.appName)">
+                <span class="field-note">
+                    Finder 와 Dock 에 보이는 이름입니다. 번들 폴더 이름도 이것이 됩니다.
                 </span>
-            </span>
-        </label>
-        #endif
-    </fieldset>
+            </label>
 
-    <div class="form-actions">
-        <button class="button button-primary" type="submit">저장</button>
-    </div>
-</form>
-
-<section class="section">
-    <h2 class="section-title">앱 아이콘</h2>
-    <p class="section-lead">
-        빌드할 때 번들 안에 <code>AppIcon.icns</code> 로 들어갑니다. 파비콘과 로고는
-        <a href="/admin/settings">스토어 설정</a> 에 있습니다.
-    </p>
-
-    #if(icon):
-    <div class="branding-grid">
-        <div class="branding-slot">
-            <div class="branding-preview">
-                #if(icon.imageURL):
-                <img src="#(icon.imageURL)" alt="앱 아이콘 미리보기" width="96" height="96">
-                #else:
-                <span class="branding-empty">없음</span>
+            <label class="field field-wide">
+                <span class="field-label">번들 ID</span>
+                <input class="input" type="text" name="bundleID" required value="#(values.bundleID)"
+                       placeholder="com.example.alley.store"
+                       autocapitalize="off" autocorrect="off" spellcheck="false"
+                       #if(isLocked):readonly#endif>
+                #if(isLocked):
+                <span class="field-note">
+                    이미 내보낸 앱이 있어 잠겨 있습니다. 아래 확인을 켜면 바꿀 수 있습니다.
+                </span>
                 #endif
+            </label>
+
+            <label class="field">
+                <span class="field-label">URL 스킴</span>
+                <input class="input" type="text" name="urlScheme" required value="#(values.urlScheme)"
+                       placeholder="alleystore"
+                       autocapitalize="off" autocorrect="off" spellcheck="false"
+                       #if(isLocked):readonly#endif>
+                <span class="field-note">로그인 콜백이 이 이름으로 돌아옵니다. 소문자와 숫자만 씁니다.</span>
+            </label>
+
+            <label class="field">
+                <span class="field-label">최소 macOS 버전</span>
+                <input class="input" type="text" name="minimumSystemVersion" required
+                       value="#(values.minimumSystemVersion)" placeholder="14.0"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+                <span class="field-note">이 버전보다 낮은 맥에서는 열리지 않습니다.</span>
+            </label>
+
+            <div class="field field-wide">
+                <span class="field-label">붙을 스토어 주소</span>
+                <p class="readonly-value"><code>#(serverURL)</code></p>
+                <span class="field-note">
+                    서버가 자기 주소를 번들에 박습니다. 받은 사람은 주소를 입력하지 않고 바로
+                    로그인합니다. 이 값은 서버 설정(<code>PUBLIC_BASE_URL</code>)에서 옵니다.
+                </span>
             </div>
 
-            <div class="branding-body">
-                <h3 class="branding-name">#(icon.label)</h3>
-                #if(icon.summary):
-                <p class="branding-summary">#(icon.summary)</p>
-                #endif
-                <p class="branding-requirement">#(icon.requirement)</p>
-
-                <div class="branding-actions">
-                    <form method="post" action="/admin/settings/branding/#(icon.kind)"
-                          enctype="multipart/form-data">
-                        <input type="hidden" name="returnPath" value="/admin/store-app">
-                        <input class="file" type="file" name="image" accept="image/png" required
-                               data-image-rule="#(icon.rule)" data-image-label="#(icon.label)">
-                        <button class="button" type="submit">올리기</button>
-                    </form>
-
-                    #if(icon.imageURL):
-                    <form method="post" action="/admin/settings/branding/#(icon.kind)/remove">
-                        <input type="hidden" name="returnPath" value="/admin/store-app">
-                        <button class="button button-quiet" type="submit">지우기</button>
-                    </form>
-                    #endif
-                </div>
-            </div>
+            #if(isLocked):
+            <label class="check check-attached">
+                <input type="checkbox" name="confirmIdentityChange" value="on">
+                <span>
+                    <span class="check-name">번들 ID 나 URL 스킴을 바꾸겠습니다</span>
+                    <span class="check-note">
+                        <strong>이미 깔린 앱은 업데이트를 받지 못합니다.</strong> macOS 는 번들
+                        ID 로 앱을 가리므로, 바꾸면 그것은 업데이트가 아니라 별개 앱이 됩니다.
+                        사용자 화면에 같은 이름의 앱이 둘 남고, 옛것은 영영 그대로입니다.
+                        스킴을 바꾸면 이미 깔린 앱의 로그인 콜백이 돌아오지 않습니다.
+                    </span>
+                </span>
+            </label>
+            #endif
         </div>
-    </div>
-    #endif
-</section>
-
-<section class="section">
-    <h2 class="section-title">베이스 번들</h2>
-    <p class="section-lead">
-        CI 가 만든 브랜딩 없는 스토어 앱입니다. 제품 릴리스마다 한 번 올리면, 이름과
-        아이콘만 바꿔 다시 빌드하는 것은 여기서 버튼 하나입니다.
-    </p>
-
-    #if(base.isPresent):
-    <p class="body-text">
-        제품 버전 <strong>#(base.version)</strong>#if(base.summary): · #(base.summary)#endif
-    </p>
-    #else:
-    <p class="empty">
-        아직 올리지 않았습니다. 제품 릴리스의 <code>alley-store-app-unsigned.zip</code>
-        을 올려주세요. 서명하지 않은 번들이라 CI 가 그대로 내놓습니다 (ADR-0043).
-    </p>
-    #endif
-
-    <form class="form" method="post" action="/admin/store-app/base-bundle"
-          enctype="multipart/form-data">
-        <label class="field">
-            <span class="field-label">이 번들의 제품 버전</span>
-            <input class="input" type="text" name="version" required value="#(base.version)"
-                   placeholder="0.3.0"
-                   autocapitalize="off" autocorrect="off" spellcheck="false">
-            <span class="field-note">
-                <code>CFBundleShortVersionString</code> 으로 들어갑니다. 릴리스 태그에서
-                <code>v</code> 를 뗀 값입니다.
-            </span>
-        </label>
-
-        <label class="field">
-            <span class="field-label">번들 zip</span>
-            <input class="file" type="file" name="bundle" accept=".zip,application/zip" required>
-        </label>
 
         <div class="form-actions">
-            <button class="button" type="submit">올리기</button>
+            <button class="button button-primary" type="submit">저장</button>
         </div>
     </form>
 </section>
 
+<!-- 번들을 올리는 것과 빌드를 누르는 것은 한 흐름이다. 구역을 둘로 나눴더니 화면
+     절반이 버튼 하나를 위한 자리가 됐고, "올린 다음 무엇을 해야 하는가" 가
+     스크롤 아래로 밀렸다. -->
 <section class="section">
-    <h2 class="section-title">빌드해서 올리기</h2>
+    <h2 class="section-title">내보내기</h2>
     <p class="section-lead">
-        위 값으로 번들을 빌드해 새 버전으로 등록하고 서명 워커에 넘깁니다. 빌드 번호는
-        서버가 정해 번들과 스토어 양쪽에 같은 값을 씁니다.
+        CI 가 만든 브랜딩 없는 번들에 위 값과 아이콘을 입혀 새 버전으로 등록하고 서명
+        워커에 넘깁니다. 빌드 번호는 서버가 정해 번들과 스토어 양쪽에 같은 값을 씁니다.
     </p>
+
+    #if(base.isPresent):
+    <p class="fact-line">
+        <span class="fact-label">지금 올라온 베이스 번들</span>
+        <span class="fact-value">#(base.version)#if(base.summary): · #(base.summary)#endif</span>
+    </p>
+    #else:
+    <p class="empty">
+        베이스 번들이 없습니다. 운영 CI 가 돌면 저절로 올라가고, 그 전에는 제품 릴리스의
+        <code>alley-store-app-unsigned.zip</code> 을 아래에서 올리면 됩니다.
+    </p>
+    #endif
 
     #for(blocker in blockers):
     <p class="notice notice-warn">#(blocker)</p>
     #endfor
 
-    <form method="post" action="/admin/store-app/build">
-        <button class="button button-primary" type="submit" #if(!canBuild):disabled#endif>
-            빌드해서 올리기
-        </button>
-    </form>
+    <!-- 손으로 올리는 길은 접어둔다. 운영 CI 를 붙였으면 여는 일이 없고, 펴 두면
+         "이걸 매번 해야 하나" 로 읽힌다. -->
+    <details class="disclosure">
+        <summary class="disclosure-summary">베이스 번들 손으로 올리기</summary>
+
+        <div class="disclosure-body">
+            <form class="form card-form" method="post" action="/admin/store-app/base-bundle"
+                  enctype="multipart/form-data">
+                <div class="form-group form-grid">
+                    <label class="field">
+                        <span class="field-label">이 번들의 제품 버전</span>
+                        <input class="input" type="text" name="version" required value="#(base.version)"
+                               placeholder="0.3.0"
+                               autocapitalize="off" autocorrect="off" spellcheck="false">
+                        <span class="field-note">릴리스 태그에서 <code>v</code> 를 뗀 값입니다.</span>
+                    </label>
+
+                    <label class="field">
+                        <span class="field-label">번들 zip</span>
+                        <input class="file" type="file" name="bundle" accept=".zip,application/zip" required>
+                        <span class="field-note">서명하지 않은 번들이어야 합니다.</span>
+                    </label>
+                </div>
+
+                <div class="form-actions form-actions-inline">
+                    <button class="button" type="submit">올리기</button>
+                </div>
+            </form>
+        </div>
+    </details>
+
+    <div class="section-actions">
+        <form method="post" action="/admin/store-app/build">
+            <button class="button button-primary" type="submit" #if(!canBuild):disabled#endif>
+                빌드해서 올리기
+            </button>
+        </form>
+    </div>
 </section>
 
 <section class="section">
@@ -242,17 +243,17 @@
                     #if(build.isReleased):
                     <form class="row-form" method="post"
                           action="/apps/#(appID)/versions/#(build.id)/unrelease">
-                        <button class="button" type="submit">철회</button>
+                        <button class="button button-small" type="submit">철회</button>
                     </form>
                     #elseif(build.canRelease):
                     <form class="row-form" method="post"
                           action="/apps/#(appID)/versions/#(build.id)/release">
-                        <button class="button button-primary" type="submit">출시</button>
+                        <button class="button button-small button-primary" type="submit">출시</button>
                     </form>
                     #elseif(build.canRetry):
                     <form class="row-form" method="post"
                           action="/apps/#(appID)/versions/#(build.id)/retry">
-                        <button class="button" type="submit">다시 시도</button>
+                        <button class="button button-small" type="submit">다시 시도</button>
                     </form>
                     #endif
                 </td>
