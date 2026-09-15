@@ -100,6 +100,16 @@ public enum BrandingSizeRule: Sendable {
     case atLeast(Int)
     case exactly([Int])
 
+    /// 브라우저가 읽는 형태. 같은 규칙을 두 곳에서 따로 적으면 갈라진다.
+    public var scriptRule: String {
+        switch self {
+        case .atLeast(let minimum):
+            "atLeast:\(minimum)"
+        case .exactly(let allowed):
+            "exactly:\(allowed.sorted().map(String.init).joined(separator: ","))"
+        }
+    }
+
     /// 화면에 적는 요구 사항 한 줄.
     public var requirement: String {
         switch self {

@@ -1553,3 +1553,13 @@ textarea.input {
         flex-direction: column;
     }
 }
+
+/* 칸 하나에 붙는 오류.
+ *
+ * 화면 위쪽의 알림 줄이 아니라 그 입력 바로 아래에 둔다. 이미지 칸이 여럿이라
+ * 위쪽에 띄우면 어느 칸 이야기인지 알 수 없다. */
+.field-error {
+    margin: var(--space-2) 0 0;
+    font-size: var(--font-sm);
+    color: var(--danger);
+}
