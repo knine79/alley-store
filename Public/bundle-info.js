@@ -21,8 +21,12 @@
         "CFBundleName",
         "CFBundleShortVersionString",
         "CFBundleVersion",
-        "LSMinimumSystemVersion"
+        "LSMinimumSystemVersion",
+        "CFBundleIconFile"
     ];
+
+    /* 아이콘으로 받아줄 최대 크기. 이 이상은 올리지 않고 그냥 건너뛴다. */
+    var MAX_ICON_BYTES = 8 * 1024 * 1024;
 
     /*
      * 왜 못 읽었는지 부르는 쪽이 알아야 한다.
@@ -66,8 +70,104 @@
             name: plist.CFBundleDisplayName || plist.CFBundleName || null,
             shortVersion: plist.CFBundleShortVersionString || null,
             buildNumber: plist.CFBundleVersion || null,
-            minimumOSVersion: plist.LSMinimumSystemVersion || null
+            minimumOSVersion: plist.LSMinimumSystemVersion || null,
+            // 아이콘은 없어도 된다. 못 읽으면 null 이고 업로드는 그대로 간다.
+            icon: await readIcon(file, directory, entry.name, plist.CFBundleIconFile)
         };
+    }
+
+    // MARK: - 아이콘
+
+    /*
+     * 번들 안의 아이콘을 PNG 로 꺼낸다.
+     *
+     * **아이콘을 따로 올리게 하지 않는다.** 이미 번들 안에 있는 것을 사람이 다시
+     * 찾아 올리는 것은 할 일을 옮긴 것뿐이고, 옮긴 쪽은 잊는다. 실제로 지금 스토어의
+     * 앱 목록이 글자만 남아 있는 이유가 그것이다.
+     *
+     * `.icns` 는 그림 형식이 아니라 그릇이다. 안에 든 것이 그냥 PNG 여서
+     * (`docs/glossary.md`) 디코딩 없이 가장 큰 것을 골라내면 된다. 캔버스도
+     * 이미지 라이브러리도 필요 없다.
+     *
+     * 실패는 전부 조용하다. 아이콘이 없다고 업로드를 막을 이유가 없다.
+     */
+    async function readIcon(file, entries, plistName, iconFile) {
+        try {
+            var entry = pickIcon(entries, plistName, iconFile);
+            if (!entry || entry.size > MAX_ICON_BYTES) return null;
+
+            var png = largestPNG(await inflateEntry(file, entry));
+            if (!png) return null;
+            return new Blob([png], { type: "image/png" });
+        } catch (error) {
+            return null;
+        }
+    }
+
+    /*
+     * `Info.plist` 가 가리키는 `.icns` 를 찾는다.
+     *
+     * `CFBundleIconFile` 은 확장자를 빼고 적는 것이 관례라 붙여서도 찾는다.
+     * 그 키가 없는 번들도 있어서, 없으면 `Resources` 바로 아래의 `.icns` 하나를
+     * 쓴다. 여러 개면 고르지 않는다. 문서 아이콘을 앱 아이콘으로 넣는 것보다
+     * 아무것도 안 넣는 편이 낫다.
+     */
+    function pickIcon(entries, plistName, iconFile) {
+        var root = plistName.slice(0, plistName.indexOf("/Contents/Info.plist"));
+        var resources = root + "/Contents/Resources/";
+
+        if (iconFile) {
+            var named = iconFile.slice(-5) === ".icns" ? iconFile : iconFile + ".icns";
+            for (var i = 0; i < entries.length; i++) {
+                if (entries[i].name === resources + named) return entries[i];
+            }
+        }
+
+        var found = null;
+        for (var j = 0; j < entries.length; j++) {
+            var name = entries[j].name;
+            if (name.indexOf(resources) !== 0) continue;
+            if (name.slice(-5) !== ".icns") continue;
+            // 하위 폴더에 있는 것은 앱 아이콘이 아니다.
+            if (name.indexOf("/", resources.length) >= 0) continue;
+            if (found) return null;
+            found = entries[j];
+        }
+        return found;
+    }
+
+    /*
+     * `.icns` 안에서 가장 큰 PNG 를 꺼낸다.
+     *
+     *   'icns' | 전체 길이 | [ 종류 4바이트 | 길이 4바이트 | 내용 ] ...
+     *
+     * 길이는 그 8바이트를 포함한다. 내용이 PNG 시그니처로 시작하는 것만 본다.
+     * 예전 형식은 압축된 비트맵을 담는데 그것은 우리가 풀 수 없고, 요즘 번들에는
+     * PNG 가 함께 들어 있다.
+     */
+    function largestPNG(bytes) {
+        var SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+        if (bytes.length < 8 || String.fromCharCode.apply(null, bytes.subarray(0, 4)) !== "icns") {
+            return null;
+        }
+
+        var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        var total = Math.min(view.getUint32(4, false), bytes.length);
+        var best = null;
+        var at = 8;
+
+        while (at + 8 <= total) {
+            var length = view.getUint32(at + 4, false);
+            if (length < 8 || at + length > total) break;
+
+            var body = bytes.subarray(at + 8, at + length);
+            var isPNG = body.length > 8 && SIGNATURE.every(function (byte, index) {
+                return body[index] === byte;
+            });
+            if (isPNG && (!best || body.length > best.length)) best = body;
+            at += length;
+        }
+        return best;
     }
 
     // MARK: - zip

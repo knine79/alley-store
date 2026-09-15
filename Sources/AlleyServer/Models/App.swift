@@ -27,8 +27,16 @@ public final class App: Model, @unchecked Sendable {
     @OptionalField(key: "description")
     public var details: String?
 
+    /// 화면과 스토어 앱이 그리는 아이콘 주소.
+    ///
+    /// 우리가 받아 보관한 것이면 `/apps/<id>/icon.png?v=...` 이고, 예전처럼 사람이
+    /// 적은 외부 주소면 그 값이다. 보는 쪽은 구분할 필요가 없다.
     @OptionalField(key: "icon_url")
     public var iconURL: String?
+
+    /// 그 그림이 스토리지에 놓인 자리. 외부 주소만 적은 앱에는 없다.
+    @OptionalField(key: "icon_key")
+    public var iconStorageKey: String?
 
     @OptionalField(key: "category")
     public var category: String?
@@ -158,6 +166,26 @@ public struct AddAppBundleIDPending: AsyncMigration {
     public func revert(on database: any Database) async throws {
         try await database.schema(App.schema)
             .deleteField("bundle_id_pending")
+            .update()
+    }
+}
+
+/// 번들에서 꺼낸 아이콘을 보관할 자리 (ADR-0045 와 같은 방식).
+///
+/// `icon_url` 은 남긴다. 예전처럼 외부 주소를 적은 앱이 있고, 보는 쪽은 그 둘을
+/// 구분할 필요가 없다.
+public struct AddAppIconKey: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        try await database.schema(App.schema)
+            .field("icon_key", .string)
+            .update()
+    }
+
+    public func revert(on database: any Database) async throws {
+        try await database.schema(App.schema)
+            .deleteField("icon_key")
             .update()
     }
 }
