@@ -134,12 +134,12 @@ struct BrandingAssetPathTests {
     }
 }
 
-@Suite("브랜딩 이미지 캐시")
-struct BrandingAssetCacheTests {
+@Suite("이미지 캐시")
+struct StoredImageCacheTests {
     /// 파비콘은 화면을 그릴 때마다 요청된다. 그때마다 스토리지를 다녀오면 안 된다.
     @Test("같은 키는 한 번만 읽는다")
     func readsOnce() async throws {
-        let cache = BrandingAssetCache()
+        let cache = StoredImageCache()
         let counter = Counter()
 
         for _ in 0..<3 {
@@ -153,7 +153,7 @@ struct BrandingAssetCacheTests {
 
     @Test("키가 다르면 따로 읽는다")
     func separatesKeys() async throws {
-        let cache = BrandingAssetCache()
+        let cache = StoredImageCache()
         let counter = Counter()
 
         for key in ["branding/logo-a.png", "branding/logo-b.png"] {
@@ -169,7 +169,7 @@ struct BrandingAssetCacheTests {
     /// 내주기만 하고 들고 있지 않는다.
     @Test("너무 큰 그림은 들고 있지 않는다")
     func doesNotHoldHugeImages() async throws {
-        let cache = BrandingAssetCache()
+        let cache = StoredImageCache()
         let counter = Counter()
         let huge = Data(count: 31 * 1024 * 1024)
 

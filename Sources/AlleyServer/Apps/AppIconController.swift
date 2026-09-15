@@ -97,7 +97,7 @@ struct AppIconController: RouteCollection, Sendable {
             return response
         }
 
-        let data = try await request.application.brandingCache.data(forKey: key) {
+        let data = try await request.application.storedImages.data(forKey: key) {
             try await request.application.artifactStorage.get(key: key, limit: Self.maximumSize)
         }
 
