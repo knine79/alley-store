@@ -116,6 +116,15 @@ struct InstallStateTests {
         #expect(InstallState.compare(installed: nil, releasedBuild: 3) == .notInstalled)
     }
 
+    /// 개발자·관리자에게는 출시 전 앱도 목록에 내려간다 (`AppController.list`).
+    /// 그때 "설치되지 않음" 이라고 적으면 설치할 수 있는데 안 한 것처럼 읽히는데,
+    /// 정작 누를 버튼은 없다. 받을 것이 없다는 사실을 그대로 말해야 한다.
+    @Test("출시본이 없으면 설치되지 않음이 아니라 출시본 없음")
+    func notReleased() {
+        #expect(InstallState.compare(installed: nil, releasedBuild: nil) == .notReleased)
+        #expect(InstallState.notReleased.summary == "출시본 없음")
+    }
+
     @Test("빌드 번호가 낮으면 업데이트")
     func older() {
         #expect(InstallState.compare(installed: installed(build: 2), releasedBuild: 3)

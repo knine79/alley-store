@@ -2143,9 +2143,16 @@ textarea.input {
 
 .icon-field-note {
     margin: 0;
+    max-width: 62ch;
     font-size: var(--font-sm);
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
+}
+
+/* 카드 안에 홀로 선 그림 한 줄. 새 앱 화면의 "앱 아이콘" 이 그렇다.
+   나란히 놓이는 `.icon-grid` 안의 것들은 그쪽 `gap` 이 벌려주므로 건드리지 않는다. */
+.section > .icon-field {
+    margin-bottom: var(--space-5);
 }
 
 .icon-field-actions {

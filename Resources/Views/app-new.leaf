@@ -66,6 +66,29 @@
             번들 ID 는 등록 후 바꿀 수 없습니다. macOS 가 이 값으로 앱을 식별하기 때문입니다.
         </p>
 
+        <!-- **번들에서 꺼낸 아이콘. 여기서는 보여주기만 한다.**
+             아이콘은 앱을 빌드할 때 번들에 들어간 것이라, 스토어에서 다른 그림으로
+             갈아끼우면 Dock 에 뜨는 것과 목록에 뜨는 것이 달라진다. 바꾸려면 앱을
+             다시 빌드해서 올리는 것이 맞다.
+
+             그래도 올리기 전에 보여준다. 등록하고 목록에 가서야 "이 아이콘이 아닌데"
+             를 알면 되돌릴 방법이 번거롭다. zip 을 읽었을 때만 나온다 (`app-new.js`). -->
+        <div class="icon-field" id="bundle-icon-row" hidden>
+            <span class="identity-icon">
+                <img id="bundle-icon-image" alt="">
+            </span>
+            <div class="icon-field-body">
+                <h3 class="icon-field-name">앱 아이콘</h3>
+                <p class="icon-field-note">
+                    번들에서 꺼냈습니다. 등록할 때 함께 올라갑니다.
+                </p>
+                <p class="icon-field-note">
+                    바꾸려면 앱을 다시 빌드해서 올리세요. 여기서 갈아끼우면 Dock 에
+                    뜨는 아이콘과 목록에 뜨는 아이콘이 달라집니다.
+                </p>
+            </div>
+        </div>
+
         <fieldset class="form-group form-grid" id="app-info-group">
             <legend class="visually-hidden">앱 정보</legend>
 
