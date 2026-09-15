@@ -4,7 +4,7 @@ import Fluent
 import Foundation
 import Vapor
 
-/// 관리 화면에서 누른 "지어서 올리기" 가 하는 일 (ADR-0046).
+/// 관리 화면에서 누른 "빌드해서 올리기" 가 하는 일 (ADR-0046).
 ///
 /// ```
 /// CI 가 만든 브랜딩 없는 번들  ─┐
@@ -60,7 +60,7 @@ public enum StoreAppBuildService {
             throw Abort(.badRequest, reason: "zip 이 아닙니다. CI 의 '스토어 앱 번들' 산출물을 올려주세요.")
         }
 
-        // **여기서 열어본다.** 잘못된 zip 을 보관했다가 지을 때 알게 되면, 그때는
+        // **여기서 열어본다.** 잘못된 zip 을 보관했다가 빌드할 때 알게 되면, 그때는
         // 무엇이 문제인지 화면에서 멀다. 워커 릴리스가 같은 이유로 같은 검사를 한다.
         let entries = try ZipArchive.entries(in: data)
         _ = try StoreAppBundleRewriter.topLevelAppName(in: entries)
@@ -88,7 +88,7 @@ public enum StoreAppBuildService {
         return settings
     }
 
-    // MARK: - 짓기
+    // MARK: - 빌드
 
     /// 결과. 화면이 무엇이 생겼는지 말할 수 있어야 한다.
     public struct BuildResult: Sendable {
@@ -98,7 +98,7 @@ public enum StoreAppBuildService {
         public var buildNumber: Int
     }
 
-    /// 지금 설정으로 번들을 지어 버전 하나로 올린다.
+    /// 지금 설정으로 번들을 빌드해 버전 하나로 올린다.
     public static func build(
         settings: StoreAppSettings,
         icon: (png: Data, edge: Int)?,
@@ -111,7 +111,7 @@ public enum StoreAppBuildService {
         guard let baseKey = settings.baseBundleKey else {
             throw Abort(
                 .badRequest,
-                reason: "CI 가 만든 스토어 앱 번들을 먼저 올려주세요. 그것 없이는 지을 것이 없습니다."
+                reason: "CI 가 만든 스토어 앱 번들을 먼저 올려주세요. 그것 없이는 빌드할 것이 없습니다."
             )
         }
 
@@ -170,7 +170,7 @@ public enum StoreAppBuildService {
         let job = try await SigningJob.enqueue(versionID: versionID, on: database)
         logger.notice(
             """
-            스토어 앱을 지었습니다 \
+            스토어 앱을 빌드했습니다 \
             [\(settings.bundleID) \(shortVersion) (\(buildNumber)), 크기: \(bundle.count)바이트, \
             아이콘: \(icon == nil ? "없음" : "있음"), 서명 잡 시도: \(job.attempt)]
             """

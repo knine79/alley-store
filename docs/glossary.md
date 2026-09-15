@@ -183,14 +183,14 @@ try await App.query(on: db).filter(\.$bundleID == id).first()
 [ADR-0011](adr/0011-store-settings-in-database.md)에 있습니다.
 
 `store_app_settings` 도 같은 꼴의 행 하나지만 성격이 다릅니다. 여기 값은 **바꿔도
-아무 일이 일어나지 않고**, 스토어 앱을 다시 지어 올려야 반영됩니다. 그래서 화면도
+아무 일이 일어나지 않고**, 스토어 앱을 다시 빌드해 올려야 반영됩니다. 그래서 화면도
 따로 있습니다 (관리 > 스토어 앱).
 
 ---
 
-## 스토어 앱 짓기
+## 스토어 앱 빌드
 
-### 바탕 번들 (base bundle)
+### 베이스 번들 (base bundle)
 
 CI 가 만든 **브랜딩 없는 미서명 스토어 앱** zip 입니다. 이름은 기본값이고 아이콘도
 없습니다. 제품 릴리스에 `alley-store-app-unsigned.zip` 으로 붙습니다.

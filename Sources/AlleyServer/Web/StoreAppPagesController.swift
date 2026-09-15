@@ -5,7 +5,7 @@ import Vapor
 
 /// 관리 > 스토어 앱.
 ///
-/// 다른 앱과 다른 화면을 쓰는 이유는 스토어 앱만 **여기서 지어지기** 때문이다.
+/// 다른 앱과 다른 화면을 쓰는 이유는 스토어 앱만 **여기서 빌드되기** 때문이다.
 /// 나머지 앱은 누군가 만든 번들을 올리는 것이고, 스토어 앱은 이 화면이 설정을 들고
 /// 번들을 만든다 (ADR-0046).
 struct StoreAppPagesController: RouteCollection, Sendable {
@@ -184,7 +184,7 @@ struct StoreAppPagesController: RouteCollection, Sendable {
         return Self.back(error: nil, on: request)
     }
 
-    // MARK: - 짓기
+    // MARK: - 빌드
 
     @Sendable
     func build(request: Request) async throws -> Response {
@@ -350,7 +350,7 @@ struct StoreAppBuildRow: Encodable {
         self.state = version.state.rawValue
         self.stateLabel = version.state.displayName
         // 방금 지은 것이 목록에 뜨는 화면이라 시각까지 보여준다. 날짜만으로는
-        // 오늘 세 번 지었을 때 무엇이 방금 것인지 알 수 없다.
+        // 오늘 세 번 빌드했을 때 무엇이 방금 것인지 알 수 없다.
         self.createdAt = version.createdAt.map(DateStyle.minute.display(from:))
     }
 }
@@ -364,15 +364,15 @@ struct StoreAppPageContext: Encodable {
     var serverURL: String
     /// 이미 내보낸 적이 있어 번들 ID·스킴을 잠글지.
     var isLocked: Bool
-    /// 짓기 전에 사람이 알아야 할 것들.
+    /// 빌드하기 전에 사람이 알아야 할 것들.
     var blockers: [String]
     var canBuild: Bool
     var builds: [StoreAppBuildRow]
     var error: String?
     var saved: Bool
-    /// 방금 지은 버전. `0.4.0 (3)` 꼴.
+    /// 방금 빌드한 버전. `0.4.0 (3)` 꼴.
     var built: String?
-    /// 스토어 앱의 앱 화면. 아직 한 번도 안 지었으면 nil 이다.
+    /// 스토어 앱의 앱 화면. 아직 한 번도 빌드하지 않았으면 nil 이다.
     ///
     /// 출시·철회·서명 로그는 여기서 하지 않고 그 화면에서 한다. 스토어 앱도
     /// 다른 앱과 같은 길을 지나가므로 화면을 두 벌 만들 이유가 없다.

@@ -75,10 +75,10 @@ jobs:
       - name: 스토어 앱 번들 조립
         run: ./scripts/build-store-app.sh
 
-      # 이 zip 이 관리 화면의 "바탕 번들" 이다 (ADR-0046). 서버가 조직의 이름과
+      # 이 zip 이 관리 화면의 "베이스 번들" 이다 (ADR-0046). 서버가 조직의 이름과
       # 아이콘으로 다시 싸므로, 여기서는 브랜딩 없이 짓고 서명도 하지 않는다.
       # 서명된 산출물을 이 레포가 내놓지 않는 이유는 ADR-0043 에 있다.
-      - name: 바탕 번들 올리기
+      - name: 베이스 번들 올리기
         uses: actions/upload-artifact@v4
         with:
           name: alley-store-app-unsigned
