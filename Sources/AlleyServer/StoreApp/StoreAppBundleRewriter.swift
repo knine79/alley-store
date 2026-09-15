@@ -67,7 +67,8 @@ enum StoreAppBundleRewriter {
         // 원본의 실행 파일 이름은 원본 번들 이름과 같다(`CFBundleExecutable`).
         // 그 규칙 위에서 이름 하나만 갈아끼운다.
         let sourceExecutable = "\(source)/Contents/MacOS/\(String(source.dropLast(4)))"
-        let destinationExecutable = "\(destination)/Contents/MacOS/\(branding.appName)"
+        let destinationExecutable =
+            "\(destination)/Contents/MacOS/\(Self.executableName(for: branding.appName))"
 
         var output: [ZipArchive.Entry] = []
 
@@ -79,6 +80,7 @@ enum StoreAppBundleRewriter {
             // 우리가 새로 쓰는 것들. 원본 것은 버린다.
             if entry.name == "\(source)/Contents/Info.plist" { continue }
             if entry.name == "\(source)/Contents/Resources/AppIcon.icns" { continue }
+            if Self.isAppleDoubleJunk(entry.name) { continue }
 
             var moved = entry
             if entry.name == sourceExecutable {
@@ -124,6 +126,57 @@ enum StoreAppBundleRewriter {
         }
     }
 
+    /// 맥에서 zip 을 만들 때 딸려 들어오는 곁다리 파일인가.
+    ///
+    /// `ditto -c -k` 를 `--sequesterRsrc` 없이 돌리면 확장 속성이 `._이름` 파일로
+    /// 따라 들어온다. `zip`(1) 은 `__MACOSX/` 폴더에 같은 것을 넣는다.
+    ///
+    /// **그대로 옮기면 서명이 되지 않는다.** `codesign` 이 그것들을
+    /// `unsealed contents present in the bundle root` 로 거절하고, 그 실패는 서버가
+    /// 번들을 넘긴 뒤 워커에서 나온다. 우리 조립 스크립트는 `--sequesterRsrc` 를
+    /// 쓰지만, 바탕 번들을 다른 방법으로 싸서 올리는 사람이 있다.
+    static func isAppleDoubleJunk(_ name: String) -> Bool {
+        if name.hasPrefix("__MACOSX/") || name.contains("/__MACOSX/") { return true }
+        return name.split(separator: "/").last?.hasPrefix("._") ?? false
+    }
+
+    // MARK: - 실행 파일 이름
+
+    /// 번들 안 `Contents/MacOS/` 에 놓일 이름.
+    ///
+    /// **비ASCII 문자가 들어가면 `codesign --verify --deep --strict` 가 그 번들을
+    /// 거절한다.** `.app` 폴더 이름은 한글이어도 괜찮은데 실행 파일 이름만 그렇다.
+    /// 확인한 결과는 이렇다.
+    ///
+    /// | 폴더 | 실행 파일 | `--verify --deep --strict` |
+    /// | --- | --- | --- |
+    /// | `Our Store.app` | `Our Store` | 통과 |
+    /// | `우리스토어.app` | `AlleyStore` | 통과 |
+    /// | `AlleyStore.app` | `우리스토어` | **실패** |
+    ///
+    /// 실패 문구는 `a sealed resource is missing or invalid` 뿐이라 이름이 원인이라는
+    /// 것을 짐작할 수 없다. 그리고 **서명이 끝난 뒤에야 나온다.** 워커는 서명하고
+    /// 검증하는데, 그 검증이 여기서 걸리면 조직은 이름을 한글로 적었다는 이유만으로
+    /// 스토어 앱을 영영 내보내지 못한다.
+    ///
+    /// 그래서 화면에 보이는 이름과 실행 파일 이름을 나눈다. 폴더 이름과
+    /// `CFBundleName`·`CFBundleDisplayName` 은 적은 그대로 두고, 실행 파일만 ASCII 로
+    /// 만든다. `Contents/MacOS/` 안을 들여다보는 사람은 없다.
+    ///
+    /// ASCII 이름은 그대로 쓴다. 이미 그 이름으로 내보낸 조직의 번들 구조를 이유 없이
+    /// 바꾸지 않는다.
+    static func executableName(for appName: String) -> String {
+        let trimmed = appName.trimmingCharacters(in: .whitespaces)
+        if !trimmed.isEmpty, trimmed.allSatisfy({ $0.isASCII && !$0.isNewline }) {
+            return trimmed
+        }
+
+        // 한글 이름에서는 대개 아무것도 남지 않는다. 그때는 제품 이름을 쓴다. 조직
+        // 고유값이 아니라 이 소프트웨어의 이름이라 여기 박아도 된다 (ADR-0003).
+        let kept = trimmed.filter { $0.isASCII && ($0.isLetter || $0.isNumber) }
+        return kept.isEmpty ? "AlleyStore" : String(kept)
+    }
+
     // MARK: - Info.plist
 
     /// **`scripts/build-store-app.sh` 와 같은 키를 내야 한다.**
@@ -139,7 +192,7 @@ enum StoreAppBundleRewriter {
                 <key>CFBundleIdentifier</key>
                 <string>\(escaped(branding.bundleID))</string>
                 <key>CFBundleExecutable</key>
-                <string>\(escaped(branding.appName))</string>
+                <string>\(escaped(executableName(for: branding.appName)))</string>
                 <key>CFBundlePackageType</key>
                 <string>APPL</string>
                 <key>CFBundleShortVersionString</key>

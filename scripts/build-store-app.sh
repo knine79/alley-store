@@ -52,6 +52,28 @@ die() { printf '오류: %s\n' "$*" >&2; exit 1; }
 
 [ "$(uname -s)" = "Darwin" ] || die "스토어 앱은 macOS 에서만 만들 수 있습니다."
 
+# 실행 파일 이름에 비ASCII 문자가 들어가면 `codesign --verify --deep --strict` 가
+# 그 번들을 거절한다. `.app` 폴더 이름은 한글이어도 괜찮은데 실행 파일만 그렇다.
+#
+#   Our Store.app / Our Store    → 통과
+#   우리스토어.app / AlleyStore   → 통과
+#   AlleyStore.app / 우리스토어   → 실패 (a sealed resource is missing or invalid)
+#
+# 실패는 서명이 끝난 뒤에야 나오고, 문구만 보고 이름이 원인이라는 것을 짐작할 수
+# 없다. 설치 가이드가 `ALLEY_STORE_APP_NAME="우리 앱 스토어"` 를 예시로 들고 있어서
+# 이 길을 그대로 밟는 사람이 나온다.
+#
+# 그래서 화면에 보이는 이름과 실행 파일 이름을 나눈다. 서버가 짓는 경로도 같은
+# 규칙을 쓴다(`StoreAppBundleRewriter.executableName(for:)`). 둘이 갈라지면 어느
+# 경로로 지었느냐에 따라 번들 구조가 달라진다.
+case "$APP_NAME" in
+    *[!\ -~]*)
+        EXECUTABLE_NAME="$(printf '%s' "$APP_NAME" | LC_ALL=C tr -cd '[:alnum:]')"
+        [ -n "$EXECUTABLE_NAME" ] || EXECUTABLE_NAME="AlleyStore"
+        ;;
+    *) EXECUTABLE_NAME="$APP_NAME" ;;
+esac
+
 # 주소는 스킴까지 받는다. `store.example.com` 만 적으면 앱이 그것을 경로로 읽는다.
 #
 # 여기서 막지 않으면 서명·공증까지 다 끝난 뒤 사람 손에서 드러난다. 그때는 다시
@@ -78,6 +100,7 @@ fi
 info "$APP_NAME $VERSION ($BUILD)"
 echo "  번들 ID  $BUNDLE_ID"
 echo "  URL 스킴 $URL_SCHEME"
+[ "$EXECUTABLE_NAME" = "$APP_NAME" ] || echo "  실행 파일 $EXECUTABLE_NAME (이름에 비ASCII 문자가 있어 바꿨습니다)"
 echo "  스토어   ${SERVER_URL:-(빌드에 박지 않음. 받은 사람이 입력합니다)}"
 
 info "빌드합니다..."
@@ -90,8 +113,8 @@ rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 
 # 실행 파일 이름은 CFBundleExecutable 과 같아야 한다.
-cp "$BINARY" "$APP_DIR/Contents/MacOS/$APP_NAME"
-chmod 755 "$APP_DIR/Contents/MacOS/$APP_NAME"
+cp "$BINARY" "$APP_DIR/Contents/MacOS/$EXECUTABLE_NAME"
+chmod 755 "$APP_DIR/Contents/MacOS/$EXECUTABLE_NAME"
 
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST_EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -105,7 +128,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST_EOF
     <key>CFBundleIdentifier</key>
     <string>$BUNDLE_ID</string>
     <key>CFBundleExecutable</key>
-    <string>$APP_NAME</string>
+    <string>$EXECUTABLE_NAME</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
