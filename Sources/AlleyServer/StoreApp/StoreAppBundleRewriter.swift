@@ -134,7 +134,7 @@ enum StoreAppBundleRewriter {
     /// **그대로 옮기면 서명이 되지 않는다.** `codesign` 이 그것들을
     /// `unsealed contents present in the bundle root` 로 거절하고, 그 실패는 서버가
     /// 번들을 넘긴 뒤 워커에서 나온다. 우리 조립 스크립트는 `--sequesterRsrc` 를
-    /// 쓰지만, 바탕 번들을 다른 방법으로 싸서 올리는 사람이 있다.
+    /// 쓰지만, 베이스 번들을 다른 방법으로 싸서 올리는 사람이 있다.
     static func isAppleDoubleJunk(_ name: String) -> Bool {
         if name.hasPrefix("__MACOSX/") || name.contains("/__MACOSX/") { return true }
         return name.split(separator: "/").last?.hasPrefix("._") ?? false

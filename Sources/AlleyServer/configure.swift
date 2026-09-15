@@ -129,11 +129,14 @@ private func configureMigrations(_ app: Application) {
     // 관리자가 올리는 브랜딩 이미지 (ADR-0045).
     app.migrations.add(CreateBrandingAsset())
 
-    // 스토어 앱을 무엇으로 지을지 (ADR-0046).
+    // 스토어 앱을 무엇으로 빌드할지 (ADR-0046).
     app.migrations.add(CreateStoreAppSettings())
 
     // 로그인 공급자를 Google 에서 표준 OIDC 로 넓힌다 (ADR-0047).
     app.migrations.add(AddIssuerToUser())
+
+    // 번들에서 꺼낸 앱 아이콘.
+    app.migrations.add(AddAppIconKey())
 }
 
 /// 미들웨어 스택.

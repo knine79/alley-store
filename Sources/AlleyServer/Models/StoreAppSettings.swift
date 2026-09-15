@@ -3,7 +3,7 @@ import Fluent
 import Foundation
 import Vapor
 
-/// 스토어 앱 자신을 무엇으로 지을지 (ADR-0046).
+/// 스토어 앱 자신을 무엇으로 빌드할지 (ADR-0046).
 ///
 /// 행이 하나뿐인 표다. `StoreSettings` 와 같은 꼴이고 같은 이유다.
 ///
@@ -49,7 +49,7 @@ public final class StoreAppSettings: Model, @unchecked Sendable {
     @OptionalField(key: "base_bundle_key")
     public var baseBundleKey: String?
 
-    /// 그 번들이 담고 있는 제품 버전. 화면에 적고, 지을 때 `CFBundleShortVersionString`
+    /// 그 번들이 담고 있는 제품 버전. 화면에 적고, 빌드할 때 `CFBundleShortVersionString`
     /// 으로 쓴다.
     @OptionalField(key: "base_bundle_version")
     public var baseBundleVersion: String?
@@ -103,14 +103,14 @@ extension StoreAppSettings {
             .count() > 0
     }
 
-    /// 지을 준비가 됐는지. 안 됐으면 무엇이 모자란지 말한다.
+    /// 빌드할 준비가 됐는지. 안 됐으면 무엇이 모자란지 말한다.
     public func missingPieces(iconIsSet: Bool) -> [String] {
         var missing: [String] = []
         if baseBundleKey == nil {
             missing.append("CI 가 만든 스토어 앱 번들을 아직 안 올렸습니다.")
         }
         if !iconIsSet {
-            missing.append("앱 아이콘을 아직 안 올렸습니다. 아이콘 없이도 지을 수 있지만 Dock 에 기본 아이콘이 뜹니다.")
+            missing.append("앱 아이콘을 아직 안 올렸습니다. 아이콘 없이도 빌드할 수 있지만 Dock 에 기본 아이콘이 뜹니다.")
         }
         return missing
     }
