@@ -77,7 +77,7 @@ struct StoreAppPagesTests {
     }
 
     /// 베이스 번들이 없으면 빌드할 것이 없다. 버튼은 꺼져 있지만 요청이 직접 올 수 있다.
-    @Test("바탕 번들 없이 지으려 하면 무엇이 없는지 말한다")
+    @Test("베이스 번들 없이 빌드하려 하면 무엇이 없는지 말한다")
     func buildRequiresBaseBundle() async throws {
         try await withMigratedApp { app in
             let (_, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
@@ -98,7 +98,7 @@ struct StoreAppPagesTests {
         }
     }
 
-    @Test("zip 이 아닌 바탕 번들은 거절한다")
+    @Test("zip 이 아닌 베이스 번들은 거절한다")
     func rejectsNonZipBaseBundle() async throws {
         try await withMigratedApp { app in
             let (_, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
@@ -124,7 +124,7 @@ struct StoreAppPagesTests {
 
     /// 빌드 경로 전체가 한 번에 지나가는지 본다. 설정 → 베이스 번들 → 아이콘 → 빌드 →
     /// 버전·아티팩트·서명 잡까지다.
-    @Test("지으면 버전과 서명 잡이 생긴다")
+    @Test("빌드하면 버전과 서명 잡이 생긴다")
     func buildProducesVersionAndJob() async throws {
         try await withMigratedApp { app in
             let (admin, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
@@ -190,7 +190,7 @@ struct StoreAppPagesTests {
     /// **이슈 #18 이 여기서 막힌다.** 예전에는 번들의 CFBundleVersion 을 셸이,
     /// 스토어의 빌드 번호를 CLI 가 따로 정해서 두 번째 릴리스부터 "업데이트 있음" 이
     /// 풀리지 않았다. 이제 정하는 곳이 하나다.
-    @Test("두 번 지으면 빌드 번호가 오르고 번들도 같은 값을 갖는다")
+    @Test("두 번 빌드하면 빌드 번호가 오르고 번들도 같은 값을 갖는다")
     func buildNumberMatchesBundle() async throws {
         try await withMigratedApp { app in
             let (admin, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
@@ -300,6 +300,60 @@ struct StoreAppPagesTests {
                 try await StoreAppSettings.find(StoreAppSettings.singletonID, on: app.db)
             )
             #expect(reloaded.bundleID == "com.example.alley.newstore")
+        }
+    }
+
+    /// **확인 체크박스가 실제로 칸을 풀 수 있어야 한다.**
+    ///
+    /// 예전에는 서버가 `readonly` 를 박아 내보냈다. 그것을 풀어주는 쪽이 없어서
+    /// 확인을 켜도 칸이 잠긴 채였고, 바꿀 수 있는 것이 없으니 확인할 것도 없었다.
+    /// 체크박스는 눌러도 아무 일이 없는 장식이었고, 그 사실은 화면을 눌러봐야만
+    /// 드러난다.
+    ///
+    /// 잠그는 것은 이제 `Public/lock-fields.js` 다. 서버가 다시 `readonly` 를
+    /// 박으면 같은 일이 되풀이되므로 여기서 걸어둔다.
+    @Test("잠긴 칸을 확인으로 풀 수 있게 내보낸다")
+    func lockedFieldsCanBeUnlocked() async throws {
+        try await withMigratedApp { app in
+            let (admin, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            let settings = try await StoreAppSettings.loadOrSeed(
+                on: app.db, config: app.alleyConfig, logger: app.logger
+            )
+            settings.bundleID = "com.example.alley.store"
+            settings.appName = "우리 스토어"
+            try await settings.save(on: app.db)
+
+            let storage = app.useFakeStorage()
+            try await StoreAppBuildService.acceptBaseBundle(
+                version: "0.4.0",
+                data: StoreAppBundleRewriterTests.baseZip(),
+                settings: settings,
+                by: admin,
+                storage: storage,
+                on: app.db,
+                logger: app.logger
+            )
+            try await app.testing().test(
+                .POST, "/admin/store-app/build", headers: .form(cookie: token)
+            ) { #expect($0.status == .seeOther) }
+
+            try await app.testing().test(
+                .GET, "/admin/store-app", headers: .sessionCookie(token)
+            ) { response in
+                let body = response.body.string
+                let fields = body.components(separatedBy: #"data-lock-group="identity""#).count - 1
+                #expect(fields == 2, "번들 ID 와 URL 스킴 둘 다 잠금 대상이어야 합니다.")
+                #expect(body.contains(#"data-unlocks="identity""#), "확인이 칸과 이어져 있지 않습니다.")
+
+                // 서버가 잠그면 스크립트가 풀 수 없다. 잠금은 스크립트 몫이다.
+                let inputs = body.components(separatedBy: "<input").filter {
+                    $0.contains(#"name="bundleID""#) || $0.contains(#"name="urlScheme""#)
+                }
+                for input in inputs {
+                    let tag = input.prefix(while: { $0 != ">" })
+                    #expect(!tag.contains("readonly"), "서버가 칸을 잠그면 확인이 장식이 됩니다.")
+                }
+            }
         }
     }
 

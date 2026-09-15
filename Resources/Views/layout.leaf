@@ -47,5 +47,13 @@
     <!-- 고른 이미지가 조건에 맞는지 그 자리에서 알려준다. 없어도 서버가 같은 검사를
          하므로 올리는 데 지장이 없다. -->
     <script src="/image-check.js?v=#(page.assetVersion)" defer></script>
+    <!-- 되돌리기 어려운 칸을 확인 하나 뒤에 잠가둔다. 없어도 서버가 같은 확인을
+         요구하므로 실수로 바뀌지는 않는다. -->
+    <script src="/lock-fields.js?v=#(page.assetVersion)" defer></script>
+    <!-- 색을 눈으로 고르게 한다. 없어도 값을 손으로 적을 수 있다. -->
+    <script src="/color-field.js?v=#(page.assetVersion)" defer></script>
+    <!-- 한 번만 보여줄 표시를 주소에서 걷어낸다. 없으면 새로고침할 때마다
+         "저장했습니다" 가 다시 뜬다. -->
+    <script src="/flash.js?v=#(page.assetVersion)" defer></script>
 </body>
 </html>

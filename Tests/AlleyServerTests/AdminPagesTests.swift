@@ -231,10 +231,12 @@ struct StoreSettingsPageTests {
                 let forms = body.components(separatedBy: #"action="/admin/settings""#).count - 1
                 #expect(forms == 1, "설정을 저장하는 폼은 하나여야 합니다. 지금 \(forms)개입니다.")
 
-                // `toRequest()` 가 읽는 칸 전부. 하나라도 폼에 없으면 저장할 때
-                // 그 값이 빈 값으로 덮인다.
+                // 안 보내면 빈 값으로 덮이는 칸 전부 (`toRequest()`). 하나라도
+                // 폼에서 빠지면 저장할 때 그 값이 조용히 지워진다.
+                // `logoURL` 은 여기 없다. 화면에서 뺐고, 그래서 nil 을 그대로
+                // 넘겨 "그대로 둔다" 로 읽히게 해뒀다.
                 for field in [
-                    "storeName", "logoURL", "accentColor", "allowedEmailDomains",
+                    "storeName", "accentColor", "allowedEmailDomains",
                     "bundleIDPrefix", "enforceBundleIDPrefix", "allowsAnonymousFeedback",
                     "confirmOpenToAnyDomain",
                 ] {

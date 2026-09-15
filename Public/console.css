@@ -61,6 +61,14 @@
     /* 손이 닿는 것에만 붙인다. 길면 굼떠 보이고, 없으면 딱딱하다. */
     --ease: 0.14s ease;
 
+    /* 본문 속 링크 색.
+     *
+     * 강조색을 그대로 쓰지 않는다. 그 색은 **흰 글자를 얹는 바탕**으로 고른 것이라,
+     * 바탕 위의 글자로 쓰면 대비가 모자랄 수 있다. 글자색을 섞어 밝은 화면에서는
+     * 어둡게, 어두운 화면에서는 밝게 끌어온다. `--text` 가 테마마다 뒤집히므로
+     * 식 하나로 양쪽이 된다. */
+    --link: color-mix(in srgb, var(--accent) 65%, var(--text));
+
     /* 본문 폭. 목록과 표가 주 내용이라 넓게 두면 칸이 벌어져서 읽기 나빠진다. */
     --page-width: 880px;
 }
@@ -123,6 +131,23 @@ body {
     word-break: keep-all;
 }
 
+/* 본문 속 링크.
+ *
+ * 브라우저 기본값(파랑·자주)을 쓰지 않는다. 어두운 화면에서 `#0000EE` 와 `#551A8B`
+ * 는 바탕에 묻혀 거의 읽히지 않는다. 실제로 어두운 테마에서 한 번 눌러본 링크가
+ * 배경과 구분되지 않았다.
+ *
+ * 방문 여부로 색을 가르지도 않는다. 관리 화면의 링크는 "읽을 글" 이 아니라 "갈 곳"
+ * 이라, 가 본 곳과 안 가 본 곳이 색으로 갈리면 무엇이 다른 것인지 잘못 읽힌다.
+ * 링크라는 표시는 밑줄이 맡는다.
+ *
+ * 자기 색을 가진 것들(`.button`, `.tab`, `.card`, `.chrome-link`, `.breadcrumb a`)은
+ * 클래스 선택자라 이 규칙을 이긴다. */
+a,
+a:visited {
+    color: var(--link);
+}
+
 code {
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
     font-size: 0.9em;
@@ -131,8 +156,11 @@ code {
     border-radius: var(--radius-small);
     padding: 1px var(--space-1);
     /* 번들 ID·주소·환경변수 이름이 들어온다. 띄어쓰기가 없어서 `keep-all` 아래서는
-       끊을 데가 없고, 좁은 화면에서 카드를 밀고 나간다. 여기서만 되돌린다. */
-    word-break: break-all;
+       끊을 데가 없고, 좁은 화면에서 카드를 밀고 나간다. 여기서만 되돌린다.
+       `break-all` 이 아니라 `anywhere` 다. 전자는 자리가 남아 있어도 줄 끝에서
+       무조건 끊어서, 줄바꿈 직전에 나온 `#RRGGBBAA` 가 `#RR / GGBBAA` 로 갈라졌다.
+       후자는 한 줄에 못 들어갈 때만 끊는다. */
+    overflow-wrap: anywhere;
 }
 
 /* ── 상단 껍데기 ─────────────────────────────────────────── */
@@ -951,15 +979,102 @@ a.tab:hover {
     background: var(--surface);
 }
 
-/* 잠긴 칸. 고칠 수 없다는 것이 눌러보기 전에 보여야 한다. */
-.input[readonly] {
+/* 잠긴 칸. 고칠 수 없다는 것이 눌러보기 전에 보여야 한다.
+   `readonly` 는 "확인을 켜야 고칠 수 있다", `disabled` 는 "지금은 뜻이 없다" 다. */
+.input[readonly],
+.input:disabled {
     background: var(--bg);
     color: var(--text-muted);
     cursor: not-allowed;
 }
 
-.input[readonly]:hover {
+.input[readonly]:hover,
+.input:disabled:hover {
     border-color: var(--border);
+}
+
+/* 뜻을 잃은 칸은 한 겹 더 물린다. 잠긴 것(나중에 풀 수 있다)과 지금 해당 없는
+   것(확인을 끄기 전에는 볼 것이 없다)이 같아 보이면 안 된다. */
+.input:disabled {
+    opacity: 0.6;
+}
+
+/* ── 색 고르기 ───────────────────────────────────────────── */
+
+/* 고르개·글자 칸·팔레트가 한 덩어리다. 진짜 값은 늘 글자 칸에 있고 나머지는
+   그 칸에 값을 써넣는 도구다 (`color-field.js`). */
+.color-field {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: center;
+}
+
+.color-field .input {
+    /* 색 값은 아홉 글자를 넘지 않는다. 줄을 다 차지하면 옆의 고르개가 밀려난다. */
+    flex: 1 1 9rem;
+    min-width: 7rem;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+/* 브라우저가 그리는 색 고르개. 기본 모양은 운영체제마다 다르고 테두리도 제각각이라,
+   바깥 상자만 우리 칸과 같은 크기·모서리로 맞추고 안쪽은 여백 없이 색만 채운다. */
+.color-picker {
+    flex: 0 0 auto;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-small);
+    background: none;
+    cursor: pointer;
+}
+
+.color-picker::-webkit-color-swatch-wrapper {
+    padding: 2px;
+}
+
+.color-picker::-webkit-color-swatch {
+    border: none;
+    border-radius: 4px;
+}
+
+.color-picker::-moz-color-swatch {
+    border: none;
+    border-radius: 4px;
+}
+
+.color-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+}
+
+/* 미리 골라둔 색 하나. 흰 글자를 얹는 자리라 아무 색이나 두지 않는다 (템플릿 주석). */
+.color-swatch {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+    border-radius: 50%;
+    background: var(--swatch);
+    cursor: pointer;
+    transition: transform var(--ease), box-shadow var(--ease);
+}
+
+.color-swatch:hover {
+    transform: scale(1.12);
+}
+
+/* 지금 고른 색. 색만으로 표시하면 색을 구분하지 못하는 사람에게는 아무 표시도 없다.
+   테두리 고리를 둘러 형태로도 알린다. */
+.color-swatch[aria-pressed="true"] {
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text);
+}
+
+.color-swatch:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 textarea.input {
@@ -1034,10 +1149,24 @@ textarea.input {
        같은 화면에 반 폭 카드와 온 폭 카드가 섞인다. */
     max-width: none;
     gap: var(--space-4);
+    /* 폼 밖에 선 카드(브랜딩)와 첫 카드 사이. 카드끼리는 `.section` 의 위 여백이
+       벌려주는데, 폼은 자기 여백이 없어서 두 카드가 붙어 한 장처럼 보였다. */
+    margin-top: var(--space-6);
 }
 
 .form-sections > .section {
     margin-top: 0;
+}
+
+/* 카드 안에서 성격이 다른 두 덩어리를 나눈다.
+ *
+ * 브랜딩 카드가 그렇다. 위쪽 그림은 고르는 순간 올라가고 아래쪽 이름·색은 저장
+ * 버튼을 눌러야 한다. 제목을 하나 더 두면 카드가 둘로 쪼개져 보이므로 선 하나만
+ * 긋는다. 카드 좌우 패딩만큼 밖으로 빼서 선이 카드를 가로지른다. */
+.section-divider {
+    margin: var(--space-5) calc(var(--space-5) * -1);
+    border: 0;
+    border-top: 1px solid var(--border);
 }
 
 /* 지금 안 해도 되는 일을 접어둔다.
@@ -1234,6 +1363,18 @@ textarea.input {
     border-color: #d0525266;
     background: #d0525214;
     color: #b23c3c;
+}
+
+/* 잘 됐다는 줄이 물러나는 중. 자리는 마지막에 없앤다 (`flash.js`). */
+.notice-leaving {
+    opacity: 0;
+    transition: opacity 0.35s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .notice-leaving {
+        transition: none;
+    }
 }
 
 .notice-ok {
@@ -1577,8 +1718,17 @@ textarea.input {
  * `.check-attached` 는 체크박스에, 이쪽은 이름·설명이 붙은 보통 칸에 쓴다. 여백
  * 계산이 같아서 값을 맞춰 뒀다. 한쪽을 고치면 다른 쪽도 봐야 한다.
  *
- * 쓰는 자리: 버전 업로드 화면의 entitlements. 서명 상태가 "미서명" 일 때만 의미가
- * 있는데, 예전에는 그 라디오에서 세 칸 아래 떨어져 있어서 관계가 안 보였다. */
+ * 쓰는 자리: 스토어 설정의 허용 도메인·번들 ID 프리픽스. 바로 위 라디오에서 고른
+ * 것에 딸린 값이라, 떨어뜨려 두면 무엇에 쓰이는 값인지 다시 찾아 읽어야 한다.
+ *
+ * (규칙이 한동안 없었다. 쓰던 화면이 사라지면서 본문만 지워지고 이 주석이 남아
+ * 있었다. 쓰는 자리가 다시 생겨 되살렸다.) */
+.field-attached {
+    margin-top: calc(var(--space-2) - var(--space-4));
+    padding: var(--space-2) 0 var(--space-2) var(--space-3);
+    border-left: 2px solid var(--border);
+}
+
 /* ── 업로드 진행률 ───────────────────────────────────────── */
 
 .progress-row {
