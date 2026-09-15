@@ -215,7 +215,7 @@ entitlements 세 개를 그대로 유지한 채 통과했습니다.
 - [x] 제품 레포와 운영 레포를 나눈다. 운영 템플릿을 `templates/ops/` 에 동봉
       ([ADR-0043](adr/0043-product-and-operations-repositories.md))
 - [x] 운영 파이프라인용 토큰(`alleyo_`)과 워커 릴리스 업로드 API
-- [x] `alley` CLI 를 universal 로 짓고 서명한다 (`scripts/build-cli.sh`)
+- [x] `alley` CLI 를 universal 로 빌드하고 서명한다 (`scripts/build-cli.sh`)
 - [x] 버전 태그로 GitHub Release 를 만든다 (`.github/workflows/release.yml`)
 - [x] 첫 릴리스 태그 `v0.3.0`. 그 전에 CI 가 깨져 있던 것을 고쳤다 (리눅스에서
       SIGTERM 이 먹지 않아 외부 명령 타임아웃이 동작하지 않던 것 포함)

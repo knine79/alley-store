@@ -143,7 +143,7 @@ struct StoreAppBundleRealZipTests {
         // 실행 파일 이름에 비ASCII 문자가 있으면 `--verify --deep --strict` 가
         // `a sealed resource is missing or invalid` 로 거절한다. 그 실패는 서명이
         // 끝난 뒤에야 나오고 문구만으로는 이름이 원인이라는 것을 알 수 없다.
-        // 한글 이름으로 짓는 조직은 그 이유로 스토어 앱을 영영 내보내지 못한다.
+        // 한글 이름으로 빌드하는 조직은 그 이유로 스토어 앱을 영영 내보내지 못한다.
         try Self.run(
             "/usr/bin/codesign", ["--force", "--sign", "-", "--options", "runtime", app.path]
         )

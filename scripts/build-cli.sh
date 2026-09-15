@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 #
-# `alley` CLI 를 지어서 서명·공증한다 (ADR-0043).
+# `alley` CLI 를 빌드해 서명·공증한다 (ADR-0043).
 #
 # CI 러너 안에서만 쓰면 Gatekeeper 를 타지 않아 서명이 필요 없다. 그러나 사람이
 # 자기 맥에 두고 쓰는 일이 실제로 생기고, 그때 "확인되지 않은 개발자" 경고를 만난다.
 # 서명 절차가 이미 도는 자리에 하나 더 얹는 비용이 작다.
 #
 # 사용법:
-#   ./scripts/build-cli.sh                서명하지 않고 짓는다
+#   ./scripts/build-cli.sh                서명 없이 빌드만 한다
 #   ./scripts/build-cli.sh --sign         서명·공증까지 한다
 #
 # --sign 을 쓸 때 필요한 값:

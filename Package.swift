@@ -87,7 +87,7 @@ let package = Package(
 
 // 스토어 앱은 SwiftUI 와 AppKit 을 쓴다. Linux 에서는 컴파일조차 되지 않으므로
 // 그 플랫폼에서는 타깃 자체를 만들지 않는다. CI 의 리눅스 잡은 서버와 공유 코드만
-// 짓고, 앱은 macOS 잡이 짓는다.
+// 빌드하고, 앱은 macOS 잡이 빌드한다.
 #if os(macOS)
 package.products.append(.executable(name: "alley-store-app", targets: ["AlleyStore"]))
 package.targets.append(contentsOf: [

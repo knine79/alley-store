@@ -205,7 +205,7 @@ alley-store/
 ├── Public/                # 웹 콘솔 정적 파일 (CSS, 업로드 스크립트)
 ├── scripts/               # 워커·앱 번들 조립과 설치, 금칙어·자격증명 검사
 ├── docker-compose.yml          # 발행된 이미지를 받아 띄운다
-├── docker-compose.override.yml # 로컬에서는 소스로 짓는다 (ADR-0021)
+├── docker-compose.override.yml # 로컬에서는 소스로 빌드한다 (ADR-0021)
 ├── Dockerfile
 └── docs/
 ```
