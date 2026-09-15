@@ -12,12 +12,15 @@
 #   ./scripts/build-store-app.sh                 번들만 만든다
 #   ./scripts/build-store-app.sh --sign          서명·공증까지 한다
 #
-# 조직마다 다른 값은 환경변수로 넘긴다:
-#   ALLEY_APP_BUNDLE_ID     번들 ID       (기본값: com.example.alley.store)
-#   ALLEY_APP_NAME          앱 이름       (기본값: Alley Store)
-#   ALLEY_APP_URL_SCHEME    로그인 콜백 스킴 (기본값: alley)
-#   ALLEY_APP_VERSION       버전 문자열    (기본값: 0.1.0)
-#   ALLEY_APP_BUILD         빌드 번호      (기본값: 1)
+# 조직마다 다른 값은 환경변수로 넘긴다. 이름은 운영 레포 템플릿의
+# `config/store.env` 와 맞춘다. 워커의 ALLEY_WORKER_* 와 짝을 이룬다.
+#   ALLEY_STORE_APP_BUNDLE_ID    번들 ID       (기본값: com.example.alley.store)
+#   ALLEY_STORE_APP_NAME         앱 이름       (기본값: Alley Store)
+#   ALLEY_STORE_APP_URL_SCHEME   로그인 콜백 스킴 (기본값: alley)
+#   ALLEY_STORE_APP_VERSION      버전 문자열    (기본값: 0.1.0)
+#   ALLEY_STORE_APP_BUILD        빌드 번호      (기본값: 1)
+#
+# 옛 이름 `ALLEY_APP_*` 도 그대로 받는다. 새 이름이 있으면 그쪽이 이긴다.
 #
 # --sign 을 쓸 때 추가로 필요한 값:
 #   ALLEY_SIGNING_IDENTITY  Developer ID Application identity
@@ -25,11 +28,11 @@
 
 set -euo pipefail
 
-BUNDLE_ID="${ALLEY_APP_BUNDLE_ID:-com.example.alley.store}"
-APP_NAME="${ALLEY_APP_NAME:-Alley Store}"
-URL_SCHEME="${ALLEY_APP_URL_SCHEME:-alley}"
-VERSION="${ALLEY_APP_VERSION:-0.1.0}"
-BUILD="${ALLEY_APP_BUILD:-1}"
+BUNDLE_ID="${ALLEY_STORE_APP_BUNDLE_ID:-${ALLEY_APP_BUNDLE_ID:-com.example.alley.store}}"
+APP_NAME="${ALLEY_STORE_APP_NAME:-${ALLEY_APP_NAME:-Alley Store}}"
+URL_SCHEME="${ALLEY_STORE_APP_URL_SCHEME:-${ALLEY_APP_URL_SCHEME:-alley}}"
+VERSION="${ALLEY_STORE_APP_VERSION:-${ALLEY_APP_VERSION:-0.1.0}}"
+BUILD="${ALLEY_STORE_APP_BUILD:-${ALLEY_APP_BUILD:-1}}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUTPUT_DIR="$REPO_ROOT/.build/store-app"
@@ -42,6 +45,12 @@ die() { printf '오류: %s\n' "$*" >&2; exit 1; }
 . "$REPO_ROOT/scripts/lib/bundle.sh"
 
 [ "$(uname -s)" = "Darwin" ] || die "스토어 앱은 macOS 에서만 만들 수 있습니다."
+
+# 무엇으로 짓는지 먼저 찍는다. 값이 안 넘어와도 빌드는 성공하고 기본값으로 나가서,
+# 번들 ID 가 틀린 것을 한참 뒤에 설치 화면에서 알게 된다.
+info "$APP_NAME $VERSION ($BUILD)"
+echo "  번들 ID  $BUNDLE_ID"
+echo "  URL 스킴 $URL_SCHEME"
 
 info "빌드합니다..."
 (cd "$REPO_ROOT" && swift build -c release --product alley-store-app)

@@ -541,22 +541,34 @@ Developer ID 개인키를 CI 에 두어야 하는데, 그것은 위에 적은 �
 앱이 있어야 업데이트 알림을 받습니다.
 
 ```bash
-export ALLEY_APP_BUNDLE_ID="com.example.alley.store"
-export ALLEY_APP_NAME="우리 앱 스토어"
-export ALLEY_APP_URL_SCHEME="ourstore"
+export ALLEY_STORE_APP_BUNDLE_ID="com.example.alley.store"
+export ALLEY_STORE_APP_NAME="우리 앱 스토어"
+export ALLEY_STORE_APP_URL_SCHEME="ourstore"
+export ALLEY_STORE_APP_VERSION="0.3.0"
 export ALLEY_SIGNING_IDENTITY="Developer ID Application: Example Inc. (TEAMID)"
 export ALLEY_NOTARY_PROFILE="alley-notary"
 
 ./scripts/build-store-app.sh --sign
 ```
 
-`ALLEY_APP_URL_SCHEME` 은 서버의 `STORE_APP_URL_SCHEME` 과 같아야 합니다. 로그인
+**값을 안 넘기면 빌드는 그냥 성공하고 기본값으로 나갑니다.** 번들 ID 가 기본값이면
+스토어 앱이 "이 앱이 깔려 있나" 를 판단하지 못합니다. 스크립트가 시작할 때 무엇으로
+짓는지 찍으니 첫 줄을 확인하세요.
+
+`ALLEY_STORE_APP_URL_SCHEME` 은 서버의 `STORE_APP_URL_SCHEME` 과 같아야 합니다. 로그인
 콜백이 그 스킴으로 돌아옵니다. **이 값은 앱 `Info.plist` 에 박히므로 서버 혼자
 바꾸면 이미 깔린 앱의 로그인이 깨집니다.**
+
+> 옛 이름 `ALLEY_APP_*` 도 계속 받습니다. 새 이름이 있으면 그쪽을 씁니다.
 
 만들어진 zip 을 웹 콘솔에 올리면, 그다음부터는 스토어 앱이 자기 자신도 스토어에서
 업데이트합니다. 이미 서명·공증된 번들이라 워커가 알아보고 서명을 건너뜁니다.
 **첫 배포만 사람이 나눠줍니다.**
+
+**스토어 앱은 Sparkle 을 쓰지 않습니다.** 앱을 받아 검증하고 `/Applications` 에 놓는
+코드를 이미 갖고 있어서 자기 자신을 갈아끼우는 데도 그것을 씁니다
+([설계 5.5](design.md#55-앱-업데이트)). 스토어 앱을 올리려고
+[Sparkle 서명키](sparkle.md)를 먼저 만들 필요가 없습니다.
 
 ## 6. 첫 앱 올려보기
 

@@ -7,7 +7,9 @@ name: 제품 반영
 #
 # 올리고 나면 나머지는 저절로 퍼진다.
 #   - 워커는 일이 없을 때 스스로 갈아끼운다 (제품 ADR-0042)
-#   - 스토어 앱은 Sparkle 로 스스로 업데이트한다
+#   - 스토어 앱은 스토어에 올라온 자기 새 버전을 자기 설치 코드로 갈아끼운다.
+#     **Sparkle 이 아니다.** 스토어 앱에는 Sparkle 이 들어 있지 않아서 Sparkle
+#     서명키도 필요 없다 (제품 `docs/design.md` 5.5)
 #
 # 각 맥에 갈 일이 없다.
 on:
@@ -158,7 +160,19 @@ jobs:
       - name: 스토어 앱 빌드·서명
         if: ${{ !inputs.skip_store_app }}
         working-directory: product
-        run: ./scripts/build-store-app.sh --sign
+        env:
+          # 번들에 박히는 버전. 이것을 넘기지 않으면 스크립트 기본값(0.1.0)으로
+          # 빌드되고, 정작 업로드는 아래에서 lock 의 버전으로 올라간다. 둘이 어긋나도
+          # 빌드는 성공해서 알아채기 어렵다.
+          ALLEY_STORE_APP_VERSION: ${{ steps.lock.outputs.version }}
+        run: |
+          set -euo pipefail
+          # 값이 비면 기본값으로 조용히 빌드된다. 번들 ID 가 기본값이면 스토어 앱이
+          # "이 앱이 깔려 있나" 를 못 맞히고, URL 스킴이 다르면 로그인 콜백이 돌아오지
+          # 않는다. 둘 다 빌드 로그에는 아무 흔적이 없어서 여기서 먼저 막는다.
+          : "${ALLEY_STORE_APP_BUNDLE_ID:?config/store.env 에서 읽지 못했습니다.}"
+          : "${ALLEY_STORE_APP_URL_SCHEME:?config/store.env 에서 읽지 못했습니다.}"
+          ./scripts/build-store-app.sh --sign
 
       - name: CLI 빌드·서명
         working-directory: product
