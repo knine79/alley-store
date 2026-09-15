@@ -545,6 +545,7 @@ export ALLEY_STORE_APP_BUNDLE_ID="com.example.alley.store"
 export ALLEY_STORE_APP_NAME="우리 앱 스토어"
 export ALLEY_STORE_APP_URL_SCHEME="ourstore"
 export ALLEY_STORE_APP_VERSION="0.3.0"
+export ALLEY_STORE_APP_SERVER_URL="https://store.example.com"
 export ALLEY_SIGNING_IDENTITY="Developer ID Application: Example Inc. (TEAMID)"
 export ALLEY_NOTARY_PROFILE="alley-notary"
 
@@ -554,6 +555,15 @@ export ALLEY_NOTARY_PROFILE="alley-notary"
 **값을 안 넘기면 빌드는 그냥 성공하고 기본값으로 나갑니다.** 번들 ID 가 기본값이면
 스토어 앱이 "이 앱이 깔려 있나" 를 판단하지 못합니다. 스크립트가 시작할 때 무엇으로
 짓는지 찍으니 첫 줄을 확인하세요.
+
+`ALLEY_STORE_APP_SERVER_URL` 이 이 스토어의 주소입니다. **박아두면 받은 사람이 주소를
+입력하지 않고 바로 로그인합니다** ([ADR-0044](adr/0044-store-app-knows-its-server.md)).
+주지 않으면 앱이 첫 화면에서 묻습니다. 개발용 빌드나 아무 서버에나 붙는 빌드가
+필요할 때만 비워두세요.
+
+**주소를 옮길 계획이 있으면 먼저 읽으세요.** 이 값은 번들에 박히므로, 주소가 바뀌면
+앱을 다시 빌드해 올려야 합니다. 이미 깔린 앱들은 스스로 업데이트하며 따라오지만,
+옛 주소가 먼저 죽으면 그 업데이트도 받지 못합니다. 두 주소를 한동안 함께 살려두세요.
 
 `ALLEY_STORE_APP_URL_SCHEME` 은 서버의 `STORE_APP_URL_SCHEME` 과 같아야 합니다. 로그인
 콜백이 그 스킴으로 돌아옵니다. **이 값은 앱 `Info.plist` 에 박히므로 서버 혼자

@@ -34,6 +34,7 @@
 | 운영 개선 | 관리 화면: 폐기 이력 접기, 등록 폼 위치 | - | 완료 |
 | 운영 개선 | entitlements 안내: 붙일 자리와 본보기 plist | - | 완료 |
 | 운영 개선 | 스토어 앱 빌드 변수 이름을 운영 템플릿과 맞춤 | - | 완료 |
+| 운영 개선 | 스토어 앱에 서버 주소 박기 | - | 완료 |
 
 ## 지금 무엇을 먼저 하나
 
@@ -243,6 +244,8 @@ preflight 와 실제 `PUT` 양쪽에 헤더를 붙여줘서 [ADR-0009](adr/0009-
 - [x] SwiftPM 타깃 + 번들 조립 스크립트 (비샌드박스 + Hardened Runtime,
       [ADR-0014](adr/0014-store-app-without-xcode-project.md))
 - [x] 서버 주소 입력 온보딩 + `/meta` 브랜딩 적용
+- [x] 조직에 나눠줄 빌드는 주소를 번들에 박는다
+      ([ADR-0044](adr/0044-store-app-knows-its-server.md))
 - [x] `ASWebAuthenticationSession` 로그인
 - [x] 앱 목록/상세/다운로드/설치
 - [x] 설치 전 서명·Team ID·해시 검증

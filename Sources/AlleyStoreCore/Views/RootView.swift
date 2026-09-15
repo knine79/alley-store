@@ -14,7 +14,12 @@ struct RootView: View {
         Group {
             switch model.phase {
             case .needsServer:
-                ServerSetupView()
+                // 주소가 박힌 빌드는 물어볼 것이 없다. 붙는 것을 보여주기만 한다.
+                if let server = model.builtInServer {
+                    ConnectingView(server: server)
+                } else {
+                    ServerSetupView()
+                }
             case .signedOut(let meta):
                 SignInView(meta: meta)
             case .ready(let meta, let user):
@@ -38,10 +43,50 @@ struct RootView: View {
     }
 }
 
+/// 주소가 박힌 빌드의 첫 화면.
+///
+/// 조직이 나눠준 앱을 받은 사람에게 주소를 묻는 것은 물어볼 곳이 있는 사람에게만
+/// 통한다(ADR-0044). 그래서 여기서는 붙는 동안을 보여주고, 실패했을 때만 손댈
+/// 자리를 낸다.
+struct ConnectingView: View {
+    @Environment(StoreModel.self) private var model
+    let server: URL
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Spacer()
+
+            if model.isLoading {
+                ProgressView()
+                Text("연결하는 중입니다...")
+                    .foregroundStyle(.secondary)
+            } else {
+                // 여기 오는 경우는 서버가 내려갔거나 사내망 밖이다. 둘 다 사용자가
+                // 할 수 있는 일이 없어서, 무엇에 실패했는지만 정확히 보여준다.
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 36))
+                    .foregroundStyle(.secondary)
+                Text("스토어에 연결하지 못했습니다")
+                    .font(.title2.weight(.semibold))
+                Text(server.absoluteString)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Button("다시 시도") {
+                    Task { await model.restore() }
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+
+            Spacer()
+        }
+        .padding(40)
+    }
+}
+
 /// 첫 실행 화면. 서버 주소만 받는다.
 ///
-/// 여기에 조직 이름이 미리 적혀 있으면 안 된다(ADR-0003). 이 앱은 어느 조직의
-/// 서버에도 그대로 붙는다.
+/// 주소를 박지 않고 만든 빌드가 여기로 온다. 이 화면에 조직 이름이 미리 적혀 있으면
+/// 안 된다(ADR-0003). 그런 빌드는 어느 조직의 서버에도 그대로 붙는다.
 struct ServerSetupView: View {
     @Environment(StoreModel.self) private var model
     @State private var address = ""
@@ -118,8 +163,11 @@ struct SignInView: View {
 
             Spacer()
 
-            Button("다른 서버에 연결", action: model.forgetServer)
-                .buttonStyle(.link)
+            // 주소가 박힌 빌드는 갈 데가 없다.
+            if model.builtInServer == nil {
+                Button("다른 서버에 연결", action: model.forgetServer)
+                    .buttonStyle(.link)
+            }
         }
         .padding(40)
     }
