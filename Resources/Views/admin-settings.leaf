@@ -10,127 +10,21 @@
 <p class="notice notice-ok">저장했습니다.</p>
 #endif
 
-<!-- **폼은 하나다.** 예전에는 "이름과 겉모습" 과 "로그인 허용 범위" 가 각자 폼과
-     저장 버튼을 갖고 있었다. 그런데 서버는 화면의 모든 값이 한 번에 온다고 보고
-     빠진 값을 "지우겠다" 로 읽는다. 그래서 위쪽 저장을 누르면 허용 도메인을 비우려
-     한다며 거절당했고, 눌러도 아무것도 저장되지 않았다.
+<!-- **그림과 이름이 한 카드다.**
+     둘 다 "구성원이 보는 우리 스토어의 얼굴" 이라, 따로 두면 로고를 바꾸러 왔다가
+     이름은 다른 구역에서 고치게 된다.
 
-     구역마다 저장을 두려면 서버가 "안 보낸 값은 그대로 둔다" 를 알아야 하는데,
-     그러면 체크박스를 끄는 것과 안 보내는 것이 구분되지 않는다. 화면 하나에 저장
-     하나가 더 단순하고, 실제로 여기서 고치는 값들은 함께 보고 함께 정하는 것들이다.
+     다만 저장하는 방식이 다르다. 그림은 고르는 순간 올라가고, 이름과 색은 아래
+     저장 버튼을 눌러야 한다. 그래서 카드 안에서 선 하나로 나누고 각자 그렇게
+     적어둔다. 파일 입력을 설정 폼에 섞을 수는 없다. 섞이면 칸 하나를 고칠 때마다
+     폼 전체가 multipart 로 나가고, 그때 "이미지를 안 골랐다" 와 "지우겠다" 가
+     구분되지 않는다.
 
-     이미지는 이 폼 밖에 둔다. 파일 입력이 섞이면 설정 한 칸을 고칠 때마다 폼 전체가
-     multipart 로 나가고, 그때 "이미지를 안 골랐다" 와 "지우겠다" 가 구분되지 않는다. -->
-<form class="form form-sections" method="post" action="/admin/settings">
-    <section class="section">
-        <h2 class="section-title">이름과 겉모습</h2>
-
-        <div class="form-group form-grid">
-            <label class="field field-wide">
-                <span class="field-label">스토어 이름</span>
-                <input class="input" type="text" name="storeName" required value="#(values.storeName)">
-            </label>
-
-            <label class="field">
-                <span class="field-label">로고 주소 <span class="field-optional">선택</span></span>
-                <input class="input" type="url" name="logoURL" value="#(values.logoURL)"
-                       placeholder="https://example.com/logo.png"
-                       autocapitalize="off" autocorrect="off" spellcheck="false">
-                <span class="field-note">
-                    비우면 이름만 표시됩니다. 아래에서 로고 파일을 올렸다면 그쪽이 쓰입니다.
-                </span>
-            </label>
-
-            <label class="field">
-                <span class="field-label">강조색 <span class="field-optional">선택</span></span>
-                <input class="input" type="text" name="accentColor" value="#(values.accentColor)"
-                       placeholder="#3b6fd4"
-                       autocapitalize="off" autocorrect="off" spellcheck="false">
-                <span class="field-note"><code>#RGB</code>, <code>#RRGGBB</code>, <code>#RRGGBBAA</code> 형식입니다.</span>
-            </label>
-        </div>
-    </section>
-
-    <section class="section">
-        <h2 class="section-title">로그인 허용 범위</h2>
-
-        <div class="form-group">
-            <label class="field">
-                <span class="field-label">허용 도메인</span>
-                <input class="input" type="text" name="allowedEmailDomains"
-                       value="#(values.allowedEmailDomains)" placeholder="example.com, example.org"
-                       autocapitalize="off" autocorrect="off" spellcheck="false">
-                <span class="field-note">쉼표로 나눠 적습니다.</span>
-            </label>
-
-            <label class="check check-attached">
-                <input type="checkbox" name="confirmOpenToAnyDomain" value="on">
-                <span>
-                    <span class="check-name">위 칸을 비워 누구나 로그인할 수 있게 하겠습니다</span>
-                    <span class="check-note">
-                        비우면 로그인 공급자에 계정이 있는 사람은 누구나 들어옵니다. 그렇게
-                        두려면 이것을 켜야 저장됩니다.
-                    </span>
-                </span>
-            </label>
-        </div>
-    </section>
-
-    <section class="section">
-        <h2 class="section-title">앱 등록 규칙</h2>
-
-        <div class="form-group">
-            <label class="field">
-                <span class="field-label">번들 ID 프리픽스 <span class="field-optional">선택</span></span>
-                <input class="input" type="text" name="bundleIDPrefix" value="#(values.bundleIDPrefix)"
-                       placeholder="com.example"
-                       autocapitalize="off" autocorrect="off" spellcheck="false">
-            </label>
-
-            <label class="check check-attached">
-                <input type="checkbox" name="enforceBundleIDPrefix" value="on"
-                       #if(values.enforceBundleIDPrefix):checked#endif>
-                <span>
-                    <span class="check-name">위 프리픽스에 맞지 않는 앱은 등록을 막습니다</span>
-                    <span class="check-note">끄면 막지 않고 로그에만 남깁니다.</span>
-                </span>
-            </label>
-        </div>
-    </section>
-
-    <section class="section">
-        <h2 class="section-title">피드백</h2>
-
-        <div class="form-group">
-            <label class="check">
-                <input type="checkbox" name="allowsAnonymousFeedback" value="on"
-                       #if(values.allowsAnonymousFeedback):checked#endif>
-                <span>
-                    <span class="check-name">피드백을 익명으로 남길 수 있습니다</span>
-                    <span class="check-note">
-                        끄면 이름을 감춘 피드백이 거절됩니다. 이미 익명으로 남긴 글은 그대로
-                        익명으로 남습니다. 남길 때의 약속을 나중에 뒤집으면 그 사람이 쓴 것이
-                        다른 뜻이 됩니다.
-                    </span>
-                </span>
-            </label>
-        </div>
-    </section>
-
-    <!-- 구역이 넷이라 버튼이 어느 구역 것인지 헷갈리면 안 된다. 카드 밖의 띠 하나로
-         두어 "이 화면 전체를 저장한다" 를 자리로 말한다. -->
-    <div class="form-actions form-actions-bar">
-        <span class="form-actions-note action-back">위 네 구역을 함께 저장합니다.</span>
-        <button class="button button-primary" type="submit">저장</button>
-    </div>
-</form>
-
+     이름과 색 칸은 `form` 속성으로 아래 폼에 소속된다. 폼 안에 폼을 넣을 수 없어서
+     생긴 방법이고, 저장 버튼 하나가 화면 전체를 저장한다는 사실은 그대로다. -->
 <section class="section">
-    <h2 class="section-title">브랜딩 이미지</h2>
-    <p class="section-lead">
-        올리는 즉시 바뀝니다. 저장 버튼과 상관없습니다. 스토어 앱 아이콘은
-        <a href="/admin/store-app">스토어 앱</a> 화면에 있습니다.
-    </p>
+    <h2 class="section-title">브랜딩</h2>
+    <p class="section-lead">구성원이 보는 이름과 그림, 색입니다.</p>
 
     <div class="icon-grid icon-grid-pair">
         #for(slot in branding):
@@ -173,6 +67,195 @@
         </div>
         #endfor
     </div>
+
+    <p class="field-note">
+        그림은 고르는 순간 바뀝니다. 저장 버튼과 상관없습니다. 스토어 앱 아이콘은
+        <a href="/admin/store-app">스토어 앱</a> 화면에 있습니다.
+    </p>
+
+    <hr class="section-divider">
+
+    <div class="form-group form-grid">
+        <label class="field field-wide">
+            <span class="field-label">스토어 이름</span>
+            <input class="input" type="text" name="storeName" form="store-settings"
+                   required value="#(values.storeName)">
+        </label>
+
+        <!-- 로고 주소 칸은 뺐다. 위에서 로고를 올릴 수 있고, 올린 파일이 언제나
+             주소보다 우선한다. 같은 것을 정하는 자리가 둘이면 왜 한쪽이 안 먹는지를
+             화면에서 알 수 없다. 주소로 가리키고 싶은 조직은 `STORE_LOGO_URL` 로 넣는다. -->
+        <!-- 색은 눈으로 고른다. 글자 칸을 남겨두는 것은 서버가 받는 `#RRGGBBAA` 를
+             브라우저 고르개가 다루지 못하기 때문이다 (`color-field.js`).
+             `<label>` 이 아니라 `<div>` 다. 칸이 셋이라 라벨이 어느 것을 가리키는지
+             브라우저가 정할 수 없고, 누르면 엉뚱한 칸으로 초점이 간다. -->
+        <div class="field">
+            <label class="field-label" for="accentColor">
+                강조색 <span class="field-optional">선택</span>
+            </label>
+
+            <div class="color-field" data-color-for="accentColor">
+                <input class="color-picker" type="color" aria-label="색 고르기">
+                <input class="input" type="text" id="accentColor" name="accentColor"
+                       form="store-settings" value="#(values.accentColor)" placeholder="#3b6fd4"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+
+                <!-- 흰 글자를 얹는 색이라 아무 색이나 둘 수 없다. 여기 있는 것은
+                     흰 글자와의 대비가 4.5:1 을 넘는 것들이다. 조직 색은 여기 넣지
+                     않는다 (ADR-0003). 원하는 색은 고르개로 집으면 된다. -->
+                <div class="color-presets">
+                    <button class="color-swatch" type="button" data-color="#3b6fd4"
+                            style="--swatch: #3b6fd4" aria-pressed="false" title="파랑"></button>
+                    <button class="color-swatch" type="button" data-color="#5b4cc4"
+                            style="--swatch: #5b4cc4" aria-pressed="false" title="보라"></button>
+                    <button class="color-swatch" type="button" data-color="#0f766e"
+                            style="--swatch: #0f766e" aria-pressed="false" title="청록"></button>
+                    <button class="color-swatch" type="button" data-color="#15803d"
+                            style="--swatch: #15803d" aria-pressed="false" title="초록"></button>
+                    <button class="color-swatch" type="button" data-color="#b45309"
+                            style="--swatch: #b45309" aria-pressed="false" title="주황"></button>
+                    <button class="color-swatch" type="button" data-color="#be123c"
+                            style="--swatch: #be123c" aria-pressed="false" title="빨강"></button>
+                    <button class="color-swatch" type="button" data-color="#475569"
+                            style="--swatch: #475569" aria-pressed="false" title="회색"></button>
+                </div>
+            </div>
+
+            <span class="field-note">
+                비우면 기본값을 씁니다. 손으로 적을 때는 <code>#RGB</code>,
+                <code>#RRGGBB</code>, <code>#RRGGBBAA</code> 형식입니다.
+            </span>
+        </div>
+    </div>
 </section>
+
+<!-- **폼은 하나다.** 예전에는 구역마다 폼과 저장 버튼이 따로 있었다. 그런데 서버는
+     화면의 모든 값이 한 번에 온다고 보고 빠진 값을 "지우겠다" 로 읽는다. 그래서
+     위쪽 저장을 누르면 허용 도메인을 비우려 한다며 거절당했고, 눌러도 아무것도
+     저장되지 않았다.
+
+     구역마다 저장을 두려면 서버가 "안 보낸 값은 그대로 둔다" 를 알아야 하는데,
+     그러면 체크박스를 끄는 것과 안 보내는 것이 구분되지 않는다. 화면 하나에 저장
+     하나가 더 단순하고, 실제로 여기서 고치는 값들은 함께 보고 함께 정하는 것들이다. -->
+<form class="form form-sections" id="store-settings" method="post" action="/admin/settings">
+    <!-- **체크박스가 아니라 둘 중 하나 고르기다.**
+         예전에는 "누구나 로그인할 수 있게 하겠습니다" 체크박스 하나였다. 켜면 제한이
+         풀리고, 바로 아래 앱 등록 규칙의 체크박스는 켜면 제한이 걸렸다. 같은 모양의
+         네모가 한 화면에서 반대로 움직였고, 어느 쪽이 켜진 것이 더 빡빡한 상태인지
+         매번 문장을 읽어야 알 수 있었다.
+
+         고를 것을 둘 다 적어두면 읽을 것이 없다. 지금 어느 쪽인지가 점 하나로 보이고,
+         두 구역이 같은 순서(제한 → 개방)로 선다. -->
+    <section class="section">
+        <h2 class="section-title">로그인 허용 범위</h2>
+
+        <fieldset class="choice-group">
+            <legend class="visually-hidden">로그인 허용 범위</legend>
+
+            <label class="choice">
+                <input type="radio" name="confirmOpenToAnyDomain" value=""
+                       #if(!values.confirmOpenToAnyDomain):checked#endif>
+                <span>
+                    <span class="choice-name">정해둔 도메인의 계정만 로그인할 수 있습니다</span>
+                    <span class="choice-note">대부분의 조직이 이쪽입니다.</span>
+                </span>
+            </label>
+
+            <!-- **첫 번째 선택지 바로 밑에 둔다.** 두 선택지를 다 지나 맨 아래에
+                 두었더니, 왼쪽 세로선이 두 번째 선택지에서 이어져 나온 것처럼 보여서
+                 "누구나 로그인" 에 딸린 칸으로 읽혔다. 실제로는 그 반대다. -->
+            <label class="field field-attached">
+                <span class="field-label">허용 도메인</span>
+                <input class="input" type="text" name="allowedEmailDomains"
+                       value="#(values.allowedEmailDomains)" placeholder="example.com, example.org"
+                       autocapitalize="off" autocorrect="off" spellcheck="false"
+                       data-lock-group="domains">
+                <span class="field-note">쉼표로 나눠 적습니다.</span>
+            </label>
+
+            <label class="choice">
+                <!-- 이쪽을 고르면 위 칸은 볼 것이 없어진다. 고칠 수 있게 두면 적어
+                     넣게 되고, 적은 것은 저장되지 않는다. `lock-fields.js` 가 칸을
+                     비우고 끈다. 스크립트가 없어도 서버가 보는 것은 "비었나" 하나뿐
+                     이라 결과는 같다. -->
+                <input type="radio" name="confirmOpenToAnyDomain" value="on"
+                       data-disables="domains"
+                       #if(values.confirmOpenToAnyDomain):checked#endif>
+                <span>
+                    <span class="choice-name">누구나 로그인할 수 있습니다</span>
+                    <span class="choice-note">
+                        로그인 공급자에 계정이 있는 사람은 전부 들어옵니다.
+                    </span>
+                </span>
+            </label>
+        </fieldset>
+    </section>
+
+    <section class="section">
+        <h2 class="section-title">앱 등록 규칙</h2>
+
+        <fieldset class="choice-group">
+            <legend class="visually-hidden">앱 등록 규칙</legend>
+
+            <label class="choice">
+                <input type="radio" name="enforceBundleIDPrefix" value="on"
+                       #if(values.enforceBundleIDPrefix):checked#endif>
+                <span>
+                    <span class="choice-name">프리픽스에 맞지 않는 앱은 등록을 막습니다</span>
+                    <span class="choice-note">잘못된 번들 ID 로 올린 앱이 목록에 서지 않습니다.</span>
+                </span>
+            </label>
+
+            <label class="choice">
+                <input type="radio" name="enforceBundleIDPrefix" value=""
+                       #if(!values.enforceBundleIDPrefix):checked#endif>
+                <span>
+                    <span class="choice-name">맞지 않아도 등록하고 로그에만 남깁니다</span>
+                    <span class="choice-note">규칙을 정하는 중이거나 예외가 잦을 때 씁니다.</span>
+                </span>
+            </label>
+
+            <!-- **여기는 딸림 표시를 붙이지 않는다.** 허용 도메인과 달리 이 값은 어느
+                 쪽을 골라도 쓰인다. 막기로 하면 그 기준이 되고, 막지 않기로 해도 새 앱
+                 화면에 권장값으로 나간다. 한쪽에 붙여 두면 그 사실이 가려진다. -->
+            <label class="field">
+                <span class="field-label">번들 ID 프리픽스 <span class="field-optional">선택</span></span>
+                <input class="input" type="text" name="bundleIDPrefix" value="#(values.bundleIDPrefix)"
+                       placeholder="com.example"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+                <span class="field-note">
+                    어느 쪽을 골라도 이 값은 새 앱 화면에 권장값으로 보입니다. 비우면
+                    아무것도 보이지 않고 막지도 않습니다.
+                </span>
+            </label>
+        </fieldset>
+    </section>
+
+    <section class="section">
+        <h2 class="section-title">피드백</h2>
+
+        <div class="form-group">
+            <label class="check">
+                <input type="checkbox" name="allowsAnonymousFeedback" value="on"
+                       #if(values.allowsAnonymousFeedback):checked#endif>
+                <span>
+                    <span class="check-name">피드백을 익명으로 남길 수 있습니다</span>
+                    <span class="check-note">
+                        끄면 이름을 감춘 피드백이 거절됩니다. 이미 익명으로 남긴 글은 그대로
+                        익명으로 남습니다. 남길 때의 약속을 나중에 뒤집으면 그 사람이 쓴 것이
+                        다른 뜻이 됩니다.
+                    </span>
+                </span>
+            </label>
+        </div>
+    </section>
+
+    <!-- 구역이 넷이라 버튼이 어느 구역 것인지 헷갈리면 안 된다. 카드 밖의 띠 하나로
+         두어 "이 화면 전체를 저장한다" 를 자리로 말한다. -->
+    <div class="form-actions form-actions-bar">
+        <span class="form-actions-note action-back">그림을 뺀 나머지를 함께 저장합니다.</span>
+        <button class="button button-primary" type="submit">저장</button>
+    </div>
+</form>
 #endexport
 #endextend

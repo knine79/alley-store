@@ -30,7 +30,7 @@
         <p class="identity-meta">
             <code>#(values.bundleID)</code>
             #if(base.isPresent):
-            <span>베이스 번들 #(base.version)</span>
+            <span>번들 #(base.version)</span>
             #endif
             #if(icon):#if(icon.imageURL):
             <span>아이콘 #(icon.summary)</span>
@@ -72,12 +72,16 @@
                 </span>
             </label>
 
+            <!-- `readonly` 를 서버가 박지 않는다. 그렇게 했더니 그것을 풀어주는 쪽이
+                 없어서 아래 확인을 켜도 칸이 잠긴 채였고, 체크박스가 눌러도 아무 일이
+                 없는 장식이 됐다. 잠그는 것은 `lock-fields.js` 다. 스크립트가 없으면
+                 칸은 처음부터 고칠 수 있고, 확인 없이 바꾼 것은 서버가 거절한다. -->
             <label class="field field-wide">
                 <span class="field-label">번들 ID</span>
                 <input class="input" type="text" name="bundleID" required value="#(values.bundleID)"
                        placeholder="com.example.alley.store"
                        autocapitalize="off" autocorrect="off" spellcheck="false"
-                       #if(isLocked):readonly#endif>
+                       #if(isLocked):data-lock-group="identity"#endif>
                 #if(isLocked):
                 <span class="field-note">
                     이미 내보낸 앱이 있어 잠겨 있습니다. 아래 확인을 켜면 바꿀 수 있습니다.
@@ -90,8 +94,10 @@
                 <input class="input" type="text" name="urlScheme" required value="#(values.urlScheme)"
                        placeholder="alleystore"
                        autocapitalize="off" autocorrect="off" spellcheck="false"
-                       #if(isLocked):readonly#endif>
-                <span class="field-note">로그인 콜백이 이 이름으로 돌아옵니다. 소문자와 숫자만 씁니다.</span>
+                       #if(isLocked):data-lock-group="identity"#endif>
+                <span class="field-note">
+                    로그인 콜백이 이 이름으로 돌아옵니다. 소문자와 숫자만 씁니다.#if(isLocked): 이것도 함께 잠겨 있습니다.#endif
+                </span>
             </label>
 
             <label class="field">
@@ -113,7 +119,9 @@
 
             #if(isLocked):
             <label class="check check-attached">
-                <input type="checkbox" name="confirmIdentityChange" value="on">
+                <input type="checkbox" name="confirmIdentityChange" value="on"
+                       data-unlocks="identity"
+                       #if(values.confirmIdentityChange):checked#endif>
                 <span>
                     <span class="check-name">번들 ID 나 URL 스킴을 바꾸겠습니다</span>
                     <span class="check-note">
@@ -145,12 +153,12 @@
 
     #if(base.isPresent):
     <p class="fact-line">
-        <span class="fact-label">지금 올라온 베이스 번들</span>
+        <span class="fact-label">배포된 번들</span>
         <span class="fact-value">#(base.version)#if(base.summary): · #(base.summary)#endif</span>
     </p>
     #else:
     <p class="empty">
-        베이스 번들이 없습니다. 운영 CI 가 돌면 저절로 올라가고, 그 전에는 제품 릴리스의
+        번들이 없습니다. 운영 CI 가 돌면 저절로 올라가고, 그 전에는 제품 릴리스의
         <code>alley-store-app-unsigned.zip</code> 을 아래에서 올리면 됩니다.
     </p>
     #endif
@@ -162,7 +170,7 @@
     <!-- 손으로 올리는 길은 접어둔다. 운영 CI 를 붙였으면 여는 일이 없고, 펴 두면
          "이걸 매번 해야 하나" 로 읽힌다. -->
     <details class="disclosure">
-        <summary class="disclosure-summary">베이스 번들 손으로 올리기</summary>
+        <summary class="disclosure-summary">베이스 번들 직접 올리기</summary>
 
         <div class="disclosure-body">
             <form class="form card-form" method="post" action="/admin/store-app/base-bundle"

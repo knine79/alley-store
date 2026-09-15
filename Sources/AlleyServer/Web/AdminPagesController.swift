@@ -596,7 +596,8 @@ struct StoreSettingsFormValues: Codable {
     var accentColor: String?
     var allowedEmailDomains: String?
     var bundleIDPrefix: String?
-    /// 체크박스는 꺼져 있으면 아예 전송되지 않는다. 그래서 옵셔널이고 nil 이 곧 꺼짐이다.
+    /// 꺼짐을 나타내는 방법이 둘이다. 체크박스는 꺼져 있으면 아예 안 보내고(nil),
+    /// 라디오는 "안 하겠다" 쪽을 골라도 보낸다(`""`). 둘 다 꺼짐이므로 `isOn` 으로 읽는다.
     var enforceBundleIDPrefix: String?
     var allowsAnonymousFeedback: String?
     var confirmOpenToAnyDomain: String?
@@ -609,20 +610,42 @@ struct StoreSettingsFormValues: Codable {
         self.bundleIDPrefix = settings.bundleIDPrefix
         self.enforceBundleIDPrefix = settings.enforceBundleIDPrefix ? "on" : nil
         self.allowsAnonymousFeedback = settings.allowsAnonymousFeedback ? "on" : nil
-        self.confirmOpenToAnyDomain = nil
+        // **지금 상태를 그대로 그린다.** 예전에는 늘 nil 이었다. 확인 체크박스일
+        // 때는 그것이 맞았다. 저장할 때마다 다시 확인하게 하는 것이 목적이었으니까.
+        //
+        // 지금은 "도메인만 / 누구나" 둘 중 하나를 고르는 자리다. 여기서 nil 을 두면
+        // 이미 누구나 열어둔 스토어가 화면에서는 제한된 것처럼 보이고, 아무것도 안
+        // 고치고 저장만 눌러도 "도메인을 비우려면 확인이 필요합니다" 로 거절당한다.
+        //
+        // 실수로 여는 것은 여전히 막힌다. 도메인 칸을 잘못 비우면 고른 쪽은 "도메인만"
+        // 이라 서버가 거절하고, 열려면 라디오를 직접 옮겨야 한다.
+        self.confirmOpenToAnyDomain = settings.allowedEmailDomains.isEmpty ? "on" : nil
+    }
+
+    /// 폼이 보낸 값이 "켜짐" 인가.
+    ///
+    /// 체크박스(안 보냄/`on`)와 라디오(`""`/`on`)를 같은 자리에서 읽는다.
+    private func isOn(_ value: String?) -> Bool {
+        value?.isEmpty == false
     }
 
     func toRequest() -> UpdateStoreSettingsRequest {
         UpdateStoreSettingsRequest(
             storeName: storeName ?? "",
-            logoURL: logoURL ?? "",
+            // 로고 주소는 화면에 칸이 없다. `?? ""` 로 두면 저장할 때마다
+            // `STORE_LOGO_URL` 로 넣어둔 값이 조용히 지워진다. nil 은 "그대로 둔다" 다.
+            logoURL: logoURL,
             accentColor: accentColor ?? "",
             allowedEmailDomains: (allowedEmailDomains ?? "").split(separator: ",").map(String.init),
             bundleIDPrefix: bundleIDPrefix ?? "",
-            // 폼은 화면에 있는 모든 항목을 한 번에 보낸다. 체크가 없으면 껐다는 뜻이다.
-            enforceBundleIDPrefix: enforceBundleIDPrefix != nil,
-            allowsAnonymousFeedback: allowsAnonymousFeedback != nil,
-            confirmOpenToAnyDomain: confirmOpenToAnyDomain != nil
+            // 폼은 화면에 있는 모든 항목을 한 번에 보낸다. 값이 없으면 껐다는 뜻이다.
+            //
+            // **`!= nil` 로는 모자란다.** 체크박스는 꺼져 있으면 아예 안 보내지만,
+            // 라디오는 어느 쪽을 골랐든 늘 보낸다. "제한하지 않겠다" 쪽은 빈 문자열을
+            // 보내는데 그것도 nil 이 아니어서, 끄려고 고른 것이 켠 것으로 읽혔다.
+            enforceBundleIDPrefix: isOn(enforceBundleIDPrefix),
+            allowsAnonymousFeedback: isOn(allowsAnonymousFeedback),
+            confirmOpenToAnyDomain: isOn(confirmOpenToAnyDomain)
         )
     }
 }
