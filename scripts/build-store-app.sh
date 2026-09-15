@@ -18,6 +18,11 @@
 #   ALLEY_APP_URL_SCHEME    로그인 콜백 스킴 (기본값: alley)
 #   ALLEY_APP_VERSION       버전 문자열    (기본값: 0.1.0)
 #   ALLEY_APP_BUILD         빌드 번호      (기본값: 1)
+#   ALLEY_STORE_APP_SERVER_URL  스토어 주소 (기본값: 없음, 앱이 사람에게 묻는다)
+#
+# 주소를 주면 그것이 Info.plist 에 박히고, 받은 사람은 주소를 입력하지 않는다
+# (ADR-0044). 조직에 나눠줄 빌드에는 주면 되고, 아무 서버에나 붙는 빌드가 필요하면
+# 주지 않으면 된다.
 #
 # --sign 을 쓸 때 추가로 필요한 값:
 #   ALLEY_SIGNING_IDENTITY  Developer ID Application identity
@@ -30,6 +35,9 @@ APP_NAME="${ALLEY_APP_NAME:-Alley Store}"
 URL_SCHEME="${ALLEY_APP_URL_SCHEME:-alley}"
 VERSION="${ALLEY_APP_VERSION:-0.1.0}"
 BUILD="${ALLEY_APP_BUILD:-1}"
+# 다른 값들과 이름 규칙을 맞춘다. 짧은 이름도 받아 두는 것은 이 값이 생기기 전부터
+# 쓰이던 표기가 스크립트 곳곳에 남아 있어서다.
+SERVER_URL="${ALLEY_STORE_APP_SERVER_URL:-${ALLEY_APP_SERVER_URL:-}}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUTPUT_DIR="$REPO_ROOT/.build/store-app"
@@ -42,6 +50,27 @@ die() { printf '오류: %s\n' "$*" >&2; exit 1; }
 . "$REPO_ROOT/scripts/lib/bundle.sh"
 
 [ "$(uname -s)" = "Darwin" ] || die "스토어 앱은 macOS 에서만 만들 수 있습니다."
+
+# 주소는 스킴까지 받는다. `store.example.com` 만 적으면 앱이 그것을 경로로 읽는다.
+#
+# 여기서 막지 않으면 서명·공증까지 다 끝난 뒤 사람 손에서 드러난다. 그때는 다시
+# 만드는 데 공증 대기만큼이 더 든다.
+SERVER_ENTRY=""
+if [ -n "$SERVER_URL" ]; then
+    case "$SERVER_URL" in
+        https://*) ;;
+        http://*)
+            echo "경고: 평문 http 주소입니다. 사내망이 아니면 다시 보세요: $SERVER_URL" >&2
+            ;;
+        *) die "스토어 주소는 https:// 로 시작해야 합니다: $SERVER_URL" ;;
+    esac
+    case "$SERVER_URL" in
+        */) die "스토어 주소 끝의 슬래시를 빼세요: $SERVER_URL" ;;
+    esac
+    SERVER_ENTRY="    <!-- 이 빌드가 붙는 스토어. 없으면 앱이 사람에게 묻는다(ADR-0044). -->
+    <key>AlleyServerURL</key>
+    <string>$SERVER_URL</string>"
+fi
 
 info "빌드합니다..."
 (cd "$REPO_ROOT" && swift build -c release --product alley-store-app)
@@ -77,6 +106,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST_EOF
     <string>$BUILD</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
+$SERVER_ENTRY
     <!-- 메뉴 막대에 뜨는 보통의 앱이다. -->
     <key>LSUIElement</key>
     <false/>
@@ -99,6 +129,11 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST_EOF
 PLIST_EOF
 
 info "번들을 만들었습니다: $APP_DIR"
+if [ -n "$SERVER_URL" ]; then
+    echo "붙을 스토어: $SERVER_URL"
+else
+    echo "스토어 주소는 받은 사람이 입력합니다. ALLEY_STORE_APP_SERVER_URL 을 주면 박힙니다."
+fi
 
 if [ "${1:-}" != "--sign" ]; then
     bundle_seal_adhoc "$APP_DIR"

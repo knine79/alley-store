@@ -10,7 +10,7 @@
 | --- | --- | --- | --- |
 | [0001](0001-swift-fullstack-monorepo.md) | Swift 풀스택 모노레포로 간다 | 수락됨 | 2026-08-12 |
 | [0002](0002-pull-based-signing-worker.md) | 서명을 별도 macOS 워커에 pull 방식으로 분리한다 | 수락됨 | 2026-08-12 |
-| [0003](0003-organization-neutral-by-construction.md) | 조직 고유값을 코드에서 완전히 몰아낸다 | 수락됨 | 2026-08-12 |
+| [0003](0003-organization-neutral-by-construction.md) | 조직 고유값을 코드에서 완전히 몰아낸다 | 일부 대체됨(ADR-0044) | 2026-08-12 |
 | [0004](0004-docker-selfhosting-s3-abstraction.md) | Docker 셀프호스팅을 기본 배포 단위로 삼는다 | 수락됨 | 2026-08-12 |
 | [0005](0005-bundle-id-and-app-id-policy.md) | 번들 ID는 고유하게, 포털 App ID는 와일드카드로 묶는다 | 수락됨 | 2026-08-12 |
 | [0006](0006-dual-path-app-updates.md) | 앱 업데이트를 스토어 앱과 Sparkle 두 경로로 지원한다 | 수락됨 | 2026-08-13 |
@@ -51,6 +51,7 @@
 | [0041](0041-remove-any-app-with-a-real-guard.md) | 어떤 앱이든 지울 수 있게 하되, 문턱을 서버에 둔다 | 수락됨 | 2026-09-11 |
 | [0042](0042-worker-self-update.md) | 워커가 스스로를 갈아끼운다 | 수락됨 | 2026-09-11 |
 | [0043](0043-product-and-operations-repositories.md) | 제품 레포와 운영 레포를 나눈다 | 수락됨 | 2026-09-11 |
+| [0044](0044-store-app-knows-its-server.md) | 스토어 앱에 서버 주소를 빌드할 때 넣는다 | 수락됨 | 2026-09-15 |
 
 ## 언제 쓰나
 

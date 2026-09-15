@@ -36,13 +36,26 @@ final class StoreModel {
     /// 방금 무엇을 했는지 알리는 한 줄. 설치가 끝났다는 것 정도.
     var statusMessage: String?
 
+    /// 이 빌드에 박혀 나온 서버 주소. 없으면 사람이 넣는다.
+    let builtInServer: URL?
+
     private let credentials = Credentials()
     private var client: StoreClient?
+
+    init(builtInServer: URL? = BuiltInServer.url) {
+        self.builtInServer = builtInServer
+    }
 
     // MARK: - 시작
 
     /// 저장된 서버와 토큰으로 되돌아간다.
     func restore() async {
+        if let builtInServer {
+            // 박힌 주소가 저장된 주소를 이긴다. 조직이 주소를 옮기면 새 빌드가 퍼지며
+            // 따라가야 하는데, 저장된 값을 먼저 보면 옛 주소에 계속 붙는다.
+            await connect(to: builtInServer, remember: false)
+            return
+        }
         guard let server = credentials.serverURL else { return }
         await connect(to: server, remember: false)
     }
@@ -74,7 +87,12 @@ final class StoreModel {
     }
 
     /// 저장된 서버 주소를 지우고 처음으로 돌아간다.
+    ///
+    /// 주소가 박힌 빌드에서는 돌아갈 "처음" 이 없다. 화면도 그 버튼을 감추지만,
+    /// 여기서 한 번 더 막아 주소 입력 화면에 갇히는 상태를 만들지 않는다.
     func forgetServer() {
+        guard builtInServer == nil else { return }
+
         if let server = credentials.serverURL {
             credentials.setToken(nil, for: server)
         }
