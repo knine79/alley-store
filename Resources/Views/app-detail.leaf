@@ -129,6 +129,11 @@
                         <pre class="log-body">#(version.log)</pre>
                     </details>
                     #endif
+                    #if(version.downloadPath):
+                    <span class="table-note">
+                        <a href="#(version.downloadPath)">이 버전 받기</a>
+                    </span>
+                    #endif
                 </td>
                 #if(canUpload):
                 <td class="table-tight">
