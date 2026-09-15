@@ -94,7 +94,18 @@ public enum StoreAppBuildService {
     /// 어느 경로로 빌드했느냐에 따라 아이콘이 달라진다.
     public static func appIcon(on request: Request) async throws -> (png: Data, edge: Int)? {
         guard let asset = try await BrandingAssetService.find(kind: .appIcon, on: request.db) else {
-            return nil
+            // 안 올렸으면 제품에 딸려 오는 기본 아이콘으로 빌드한다. 아이콘 없이 나간
+            // 스토어 앱은 Dock 에서 흰 종이로 보이고, 그것을 본 사람은 앱이 잘못
+            // 깔렸다고 생각한다 (`DefaultBranding`).
+            guard let png = DefaultBranding.data(
+                for: .appIcon, in: request.application.directory
+            ) else { return nil }
+            // 크기는 파일에서 읽는다. 여기 숫자를 적어두면 그림을 갈 때 같이 고쳐야
+            // 하고, 안 고치면 `.icns` 안의 자리와 실제 크기가 어긋난다.
+            let size = try PNGInspection.validate(
+                png, rule: BrandingAssetKind.appIcon.sizeRule, label: "기본 앱 아이콘"
+            )
+            return (png, size.width)
         }
         let png = try await request.application.storedImages.data(forKey: asset.storageKey) {
             try await request.application.artifactStorage.get(

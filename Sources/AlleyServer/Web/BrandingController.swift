@@ -21,8 +21,9 @@ struct BrandingController: RouteCollection, Sendable {
             throw Abort(.notFound)
         }
         guard let asset = try await BrandingAssetService.find(kind: kind, on: request.db) else {
-            // 안 올린 것과 없는 주소는 다르지만, 브라우저에게는 둘 다 "그림이 없다" 다.
-            throw Abort(.notFound)
+            // 안 올렸으면 제품에 딸려 오는 기본 그림을 준다. 새로 세운 스토어가 빈
+            // 탭과 글자만 있는 머리로 시작하지 않게 한다 (`DefaultBranding`).
+            return try Self.serveDefault(kind: kind, on: request)
         }
 
         // 키에 UUID 가 들어 있어 내용이 바뀌면 키도 바뀐다. 그래서 키 자체가
@@ -44,6 +45,34 @@ struct BrandingController: RouteCollection, Sendable {
         let response = Response(status: .ok)
         response.headers.contentType = HTTPMediaType(type: "image", subType: "png")
         Self.applyCacheHeaders(to: response, etag: etag)
+        response.body = .init(data: data)
+        return response
+    }
+
+    /// 제품에 딸려 오는 기본 그림을 내준다.
+    ///
+    /// ETag 는 종류 이름 하나로 족하다. 올린 그림과 달리 이 파일은 배포 사이에
+    /// 바뀌지 않는다. 판이 바뀌는 것은 새 이미지를 올릴 때뿐이고, 그때는 파일이
+    /// 달라지니 길이도 함께 넣어 구분한다.
+    private static func serveDefault(kind: BrandingAssetKind, on request: Request) throws -> Response {
+        guard let data = DefaultBranding.data(
+            for: kind, in: request.application.directory
+        ) else {
+            // 기본 그림조차 없는 배포다. 안 올린 것과 없는 주소는 다르지만,
+            // 브라우저에게는 둘 다 "그림이 없다" 다.
+            throw Abort(.notFound)
+        }
+
+        let etag = "\"default-\(kind.rawValue)-\(data.count)\""
+        if request.headers.first(name: .ifNoneMatch) == etag {
+            let response = Response(status: .notModified)
+            applyCacheHeaders(to: response, etag: etag)
+            return response
+        }
+
+        let response = Response(status: .ok)
+        response.headers.contentType = HTTPMediaType(type: "image", subType: "png")
+        applyCacheHeaders(to: response, etag: etag)
         response.body = .init(data: data)
         return response
     }

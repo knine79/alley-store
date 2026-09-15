@@ -677,8 +677,13 @@ struct BrandingUploadForm: Content {
 struct BrandingSlot: Encodable {
     var kind: String
     var label: String
-    /// 지금 올라와 있는 그림의 주소. 없으면 nil 이고 템플릿이 빈 자리를 그린다.
+    /// 화면에 그릴 그림의 주소.
+    ///
+    /// 올린 것이 없으면 제품 기본 그림을 가리킨다. 서버가 그 주소로 기본 그림을
+    /// 내주므로(`DefaultBranding`) "없음" 이라고 적어두면 화면과 실제가 어긋난다.
     var imageURL: String?
+    /// 지금 보이는 것이 제품 기본 그림인가. 그때는 지울 것이 없다.
+    var isDefault: Bool
     /// `1024×1024 · 240KB` 처럼 한 줄로 적은 지금 상태.
     var summary: String?
     /// `1024×1024 PNG 를 권합니다` 처럼 무엇을 올려야 하는지.
@@ -696,10 +701,11 @@ struct BrandingSlot: Encodable {
             return BrandingSlot(
                 kind: kind.rawValue,
                 label: kind.label,
-                imageURL: asset?.versionedPath,
+                imageURL: asset?.versionedPath ?? DefaultBranding.path(for: kind),
+                isDefault: asset == nil,
                 summary: asset.map {
                     "\($0.width)×\($0.height) · \(Self.readableSize($0.byteCount))"
-                },
+                } ?? "제품 기본 그림",
                 requirement: "정사각형 PNG · \(kind.sizeRule.requirement)",
                 rule: kind.sizeRule.scriptRule
             )

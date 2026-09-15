@@ -111,8 +111,10 @@ extension StoreSettings {
 
         return StoreMeta(
             storeName: storeName,
-            logoURL: absolute(assets[.logo]) ?? logoURL,
-            appIconURL: absolute(assets[.appIcon]),
+            logoURL: absolute(assets[.logo]) ?? logoURL
+                ?? base + DefaultBranding.path(for: .logo),
+            appIconURL: absolute(assets[.appIcon])
+                ?? base + DefaultBranding.path(for: .appIcon),
             accentColor: accentColor,
             allowedEmailDomains: allowedEmailDomains,
             callbackURLScheme: callbackURLScheme,

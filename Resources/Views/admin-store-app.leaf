@@ -9,11 +9,7 @@
           enctype="multipart/form-data">
         <input type="hidden" name="returnPath" value="/admin/store-app">
         <label class="icon-well icon-well-app" title="눌러서 앱 아이콘 고르기">
-            #if(icon.imageURL):
             <img src="#(icon.imageURL)" alt="앱 아이콘">
-            #else:
-            <span class="icon-well-empty">아이콘 없음</span>
-            #endif
             <span class="icon-well-hint" aria-hidden="true">바꾸기</span>
             <input class="icon-well-input" type="file" name="image" accept="image/png" required
                    data-image-rule="#(icon.rule)" data-image-label="#(icon.label)"
@@ -32,9 +28,9 @@
             #if(base.isPresent):
             <span>번들 #(base.version)</span>
             #endif
-            #if(icon):#if(icon.imageURL):
+            #if(icon):
             <span>아이콘 #(icon.summary)</span>
-            #endif#endif
+            #endif
         </p>
     </div>
 </div>

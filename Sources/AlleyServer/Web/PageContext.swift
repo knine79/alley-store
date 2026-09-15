@@ -46,8 +46,13 @@ extension StoreSettings {
     func toChrome(assets: [BrandingAssetKind: BrandingAsset]) -> StoreChrome {
         StoreChrome(
             name: storeName,
-            logoURL: assets[.logo]?.versionedPath ?? logoURL,
-            faviconURL: assets[.favicon]?.versionedPath,
+            // 올린 것 → 주소로 적은 것 → 제품 기본값 순서다. 마지막 자리가 생기면서
+            // 이 둘은 이제 대개 nil 이 아니다. 그래도 옵셔널로 두는 것은 기본 그림
+            // 파일이 없는 배포가 있을 수 있기 때문이다 (`DefaultBranding`).
+            logoURL: assets[.logo]?.versionedPath ?? logoURL
+                ?? DefaultBranding.path(for: .logo),
+            faviconURL: assets[.favicon]?.versionedPath
+                ?? DefaultBranding.path(for: .favicon),
             accentColor: accentColor
         )
     }

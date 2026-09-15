@@ -35,11 +35,7 @@
                   enctype="multipart/form-data">
                 <input type="hidden" name="returnPath" value="/admin/settings">
                 <label class="icon-well" title="눌러서 #(slot.label) 고르기">
-                    #if(slot.imageURL):
                     <img src="#(slot.imageURL)" alt="#(slot.label)">
-                    #else:
-                    <span class="icon-well-empty">없음</span>
-                    #endif
                     <span class="icon-well-hint" aria-hidden="true">바꾸기</span>
                     <input class="icon-well-input" type="file" name="image" accept="image/png"
                            required data-image-rule="#(slot.rule)" data-image-label="#(slot.label)"
@@ -55,7 +51,7 @@
                 #endif
                 <p class="icon-field-note">#(slot.requirement)</p>
 
-                #if(slot.imageURL):
+                #if(!slot.isDefault):
                 <div class="icon-field-actions">
                     <form method="post" action="/admin/settings/branding/#(slot.kind)/remove">
                         <input type="hidden" name="returnPath" value="/admin/settings">
