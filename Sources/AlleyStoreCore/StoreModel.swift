@@ -248,18 +248,37 @@ final class StoreModel {
         apps.filter { state(of: $0) == .updateAvailable }.count
     }
 
-    /// 목록에 보여줄 앱들. **스토어 앱 자신은 뺀다.**
+    /// 목록에 보여줄 앱들.
     ///
-    /// 자기 자신을 남겨두면 "설치됨" 으로 늘 한 칸을 차지하고, 새 버전이 있을 때는
-    /// 받기 버튼이 목록 안에 생긴다. 그런데 자기를 갈아끼우는 것은 다른 앱을 받는
-    /// 것과 달라서 - 앱이 종료되고 다시 뜬다 - 같은 자리에 같은 모양으로 두면 안
-    /// 된다. 그 일은 위쪽 배너가 맡는다(`selfUpdate`, `SelfUpdateBanner`).
+    /// 두 가지를 뺀다.
     ///
-    /// 번들 밖에서 실행할 때(`swift run`)는 번들 ID 가 없어 아무것도 빠지지 않는다.
-    /// 개발 중에는 그 편이 낫다.
+    /// **출시본이 없는 앱.** 서버는 개발자와 관리자에게 준비 중인 앱까지 내려준다.
+    /// 웹 콘솔은 그것을 보여줘야 하지만(올린 사람이 상태를 봐야 한다) 여기는 앱을
+    /// **받는** 자리다. 받을 수 없는 줄이 서 있으면 눌러도 아무 일이 없고, 목록이
+    /// 무엇을 하는 곳인지 흐려진다.
+    ///
+    /// **스토어 앱 자신.** 남겨두면 "설치됨" 으로 늘 한 칸을 차지하고, 새 버전이
+    /// 있을 때는 받기 버튼이 목록 안에 생긴다. 그런데 자기를 갈아끼우는 것은 다른
+    /// 앱을 받는 것과 달라서 - 앱이 종료되고 다시 뜬다 - 같은 자리에 같은 모양으로
+    /// 두면 안 된다. 그 일은 위쪽 배너가 맡는다(`selfUpdate`, `SelfUpdateBanner`).
     var catalog: [AppDTO] {
-        guard let bundleID = Bundle.main.bundleIdentifier else { return apps }
-        return apps.filter { $0.bundleID != bundleID }
+        apps.filter { $0.latestReleasedVersion != nil && !isSelf($0) }
+    }
+
+    /// 이 앱이 나 자신인가.
+    ///
+    /// **서버가 말해주는 것을 먼저 믿는다.** 번들 ID 로 견주는 것은 관리자가 스토어
+    /// 앱의 번들 ID 를 바꾸는 순간 어긋난다. 이미 깔린 스토어 앱들은 자기를 못
+    /// 알아보고 새 스토어 앱을 목록에 세운다. 로컬에서 만든 빌드를 다른 서버에
+    /// 붙일 때도 그렇다 (`AppDTO.isStoreApp`).
+    ///
+    /// 그 표시를 모르는 예전 서버에는 번들 ID 로 견준다. 번들 밖에서 실행할
+    /// 때(`swift run`)는 번들 ID 가 없어 아무것도 빠지지 않는다. 개발 중에는 그
+    /// 편이 낫다.
+    func isSelf(_ app: AppDTO) -> Bool {
+        if let flag = app.isStoreApp { return flag }
+        guard let bundleID = Bundle.main.bundleIdentifier else { return false }
+        return app.bundleID == bundleID
     }
 
     /// 스토어 앱 자신의 새 버전. 없으면 nil.
@@ -267,18 +286,41 @@ final class StoreModel {
     /// 자기 자신도 이 스토어로 배포한다(설계 문서 §5.4). 다른 앱과 같은 방식으로
     /// 찾되, 설치는 실행 중인 자기를 갈아끼우는 일이라 경로가 다르다.
     var selfUpdate: AppDTO? {
-        guard let bundleID = Bundle.main.bundleIdentifier else { return nil }
-        guard let entry = apps.first(where: { $0.bundleID == bundleID }) else { return nil }
+        guard let entry = apps.first(where: isSelf) else { return nil }
         return state(of: entry) == .updateAvailable ? entry : nil
     }
 
-    /// 창이 열려 있는 동안 주기적으로 목록을 다시 읽는다.
+    /// 창이 열려 있는 동안 주기적으로 목록을 다시 읽고, 자기 새 버전이 있으면 스스로
+    /// 갈아끼운다.
+    ///
+    /// **자기 업데이트는 묻지 않는다.** 스토어 앱이 낡으면 다른 앱을 받는 길 자체가
+    /// 낡는다. 받는 사람은 그 사실을 알 방법이 없고, 배너를 띄워둬도 "나중에" 가
+    /// 쌓인다. 다른 앱은 사람이 골라 받는 것이라 그대로 두고, 스토어 앱만 그렇게 한다.
+    ///
+    /// 다만 **다른 일이 돌고 있으면 건드리지 않는다.** 앱을 받는 중에 스토어가 스스로
+    /// 종료하면 받던 것이 사라진다. 그때는 다음 차례로 미룬다.
     func watchForUpdates() async {
         while !Task.isCancelled {
             try? await Task.sleep(for: Self.refreshInterval)
             guard !Task.isCancelled else { return }
             await refresh()
+            await applySelfUpdateIfIdle()
         }
+    }
+
+    /// 사람이 "업데이트 확인" 을 눌렀을 때. 지금 바로 읽고, 있으면 갈아끼운다.
+    ///
+    /// 주기를 기다리지 않고 확인할 길이 있어야 한다. 새 버전이 나온 것을 다른 데서
+    /// 듣고 온 사람에게 "30분 뒤에 뜹니다" 는 답이 아니다.
+    func checkForUpdatesNow() async {
+        await refresh()
+        await applySelfUpdateIfIdle()
+    }
+
+    /// 다른 일이 없을 때만 자기를 갈아끼운다.
+    private func applySelfUpdateIfIdle() async {
+        guard progress.isEmpty, let update = selfUpdate else { return }
+        await updateSelf(update)
     }
 
     /// 스토어 앱 자신을 새 버전으로 갈아끼운다.

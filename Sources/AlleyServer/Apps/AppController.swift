@@ -43,12 +43,19 @@ public struct AppController: RouteCollection, Sendable {
             ofApps: apps.map { try $0.requireID() },
             on: request.db
         )
+        // 어느 앱이 스토어 앱인지는 서버만 안다. 클라이언트가 번들 ID 로 견주면
+        // 번들 ID 를 바꾼 뒤에 어긋난다 (`AppDTO.isStoreApp`).
+        let storeAppID = try await request.storeAppSettings().$app.id
 
         return try apps.compactMap { app in
             let appID = try app.requireID()
             let released = latest[appID]
             guard released != nil || user.role.canPublish else { return nil }
-            return try app.toDTO(latestReleased: released, rating: ratings[appID])
+            return try app.toDTO(
+                latestReleased: released,
+                rating: ratings[appID],
+                isStoreApp: appID == storeAppID
+            )
         }
     }
 

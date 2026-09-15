@@ -77,6 +77,12 @@ enum InstalledApps {
 /// 설치된 것과 출시된 것을 견준 결과.
 enum InstallState: Equatable {
     case notInstalled
+    /// 아직 출시본이 없어서 받을 것이 없다.
+    ///
+    /// 개발자와 관리자에게만 보이는 상태다. 일반 사용자에게는 출시본이 있는 앱만
+    /// 내려간다 (`AppController.list`). 그런데 그 화면에서도 "설치되지 않음" 이라고
+    /// 적혀 있어서, 설치할 수 있는데 안 한 것처럼 읽혔다. 정작 누를 버튼은 없다.
+    case notReleased
     case upToDate
     case updateAvailable
     /// 깔려 있는 것이 스토어의 출시본보다 새롭다. 개발자가 직접 넣은 빌드일 수 있다.
@@ -88,6 +94,9 @@ enum InstallState: Equatable {
         switch self {
         case .notInstalled: return "설치"
         case .updateAvailable: return "업데이트"
+        // 버튼 자체가 안 그려지는 상태다. `InstallButton` 이 출시본이 없으면
+        // 아무것도 내놓지 않는다. 여기서는 자리만 채운다.
+        case .notReleased: return "설치"
         case .upToDate, .ahead, .unknown: return "다시 설치"
         }
     }
@@ -95,6 +104,7 @@ enum InstallState: Equatable {
     var summary: String {
         switch self {
         case .notInstalled: return "설치되지 않음"
+        case .notReleased: return "출시본 없음"
         case .upToDate: return "최신"
         case .updateAvailable: return "업데이트 있음"
         case .ahead: return "설치된 것이 더 최신"
@@ -110,7 +120,11 @@ extension InstallState {
     /// 경우도 있다. 빌드 번호는 같은 앱 안에서 유일하고 단조 증가한다는 것을 서버가
     /// 보장하므로(`versions` 의 유일 제약) 이쪽이 믿을 수 있다.
     static func compare(installed: InstalledApp?, releasedBuild: Int?) -> InstallState {
-        guard let installed else { return .notInstalled }
+        // 깔려 있지도 않고 출시본도 없으면 받을 것이 없다. 이것을 "설치되지 않음"
+        // 으로 뭉뚱그리면 목록은 설치할 수 있다고 말하는데 버튼은 없는 화면이 된다.
+        guard let installed else {
+            return releasedBuild == nil ? .notReleased : .notInstalled
+        }
         guard let releasedBuild, let current = installed.buildNumber else { return .unknown }
 
         if current < releasedBuild { return .updateAvailable }

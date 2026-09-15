@@ -184,6 +184,7 @@
         var hasFile = !!input.files[0];
 
         pendingIcon = (info && info.icon) || null;
+        showIcon(pendingIcon);
 
         if (info) {
             fill(info);
@@ -418,6 +419,36 @@
         // 번들을 열어 보고할 때까지 기다렸다가 무엇을 올린 것인지 보여준다.
         window.location.href =
             "/apps/" + app.id + "/versions/" + ticket.version.id + "/confirm";
+    }
+
+    /*
+     * 꺼낸 아이콘을 2단계에 보여준다.
+     *
+     * 등록하고 목록에 가서야 "이 아이콘이 아닌데" 를 알면 되돌리기 번거롭다.
+     * 고칠 수는 없다. 번들 안에 있는 것을 스토어에서 갈아끼우면 Dock 에 뜨는 것과
+     * 목록에 뜨는 것이 달라진다.
+     */
+    function showIcon(blob) {
+        var row = document.getElementById("bundle-icon-row");
+        var image = document.getElementById("bundle-icon-image");
+        if (!row || !image) return;
+
+        // 앞서 만든 주소를 놓아준다. 파일을 여러 번 바꿔 고르면 그때마다 쌓인다.
+        if (image.dataset.objectUrl) {
+            URL.revokeObjectURL(image.dataset.objectUrl);
+            delete image.dataset.objectUrl;
+        }
+
+        if (!blob) {
+            image.removeAttribute("src");
+            row.hidden = true;
+            return;
+        }
+
+        var url = URL.createObjectURL(blob);
+        image.dataset.objectUrl = url;
+        image.src = url;
+        row.hidden = false;
     }
 
     /*

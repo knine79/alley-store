@@ -42,11 +42,33 @@ final class WebSignIn: NSObject {
             throw SignInError.failed("서버 주소가 올바르지 않습니다.")
         }
 
+        // 끝나면 놓아준다. 안 놓으면 로그인 창을 여러 번 여는 동안 앞의 세션이
+        // 계속 살아 있고, 마지막 하나만 정리된다.
+        defer { session = nil }
+
         let callback: URL = try await withCheckedThrowingContinuation { continuation in
             let session = ASWebAuthenticationSession(
                 url: url,
                 callbackURLScheme: callbackScheme
-            ) { callbackURL, error in
+            ) { @Sendable callbackURL, error in
+                // **`@Sendable` 이 있어야 한다.**
+                //
+                // 이 클로저는 `@MainActor` 인 이 타입 안에서 만들어진다. 표시를 안
+                // 달면 컴파일러가 메인 액터 격리를 물려주고, 클로저 앞에 "지금 정말
+                // 메인 액터인가" 를 확인하는 코드를 넣는다. 그런데 이것을 부르는
+                // 쪽은 AuthenticationServices 의 XPC 응답 큐다. 그 확인이 실패하면
+                // 경고 하나 없이 빌드된 앱이 로그인 첫 단계에서 그대로 죽는다.
+                //
+                //   Thread 3 Crashed:: Dispatch queue:
+                //     com.apple.NSXPCConnection.m-user.com.apple.SafariLaunchAgent
+                //   _dispatch_assert_queue_fail
+                //   _swift_task_checkIsolatedSwift
+                //   closure #1 in closure #1 in WebSignIn.authorize(server:callbackScheme:)
+                //
+                // `@Sendable` 클로저에는 물려받을 액터가 없어서 그 확인이 아예 들어가지
+                // 않는다. 여기서 하는 일은 이어가기를 깨우는 것뿐이고 그것은 어느
+                // 스레드에서 불러도 안전하다. 대신 `self` 를 건드릴 수 없게 되는데,
+                // 그것이 맞다. 메인 액터 상태를 이 큐에서 만질 이유가 없다.
                 if let error {
                     let cancelled = (error as? ASWebAuthenticationSessionError)?.code
                         == .canceledLogin

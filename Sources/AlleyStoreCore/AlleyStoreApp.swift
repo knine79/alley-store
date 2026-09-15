@@ -21,6 +21,16 @@ public struct AlleyStoreApp: App {
         .commands {
             // 새 창을 여러 개 띄울 이유가 없다. 상태가 하나뿐이라 창만 늘어난다.
             CommandGroup(replacing: .newItem) {}
+
+            // 맥 앱이 자기를 갱신하는 자리는 앱 메뉴다. 사람들이 거기서 찾는다.
+            // 목록 위의 배너는 새 버전이 있을 때만 나오므로, 없을 때 "지금 최신인가"
+            // 를 확인할 길이 그것 말고는 없었다.
+            CommandGroup(after: .appInfo) {
+                Button("업데이트 확인") {
+                    Task { await model.checkForUpdatesNow() }
+                }
+                .disabled(model.isLoading)
+            }
         }
     }
 }

@@ -67,6 +67,20 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
     public var latestReleasedVersion: VersionDTO?
     /// 별점 요약. 목록에서도 보여주므로 앱과 함께 내려준다.
     public var rating: RatingSummary?
+    /// 이 앱이 스토어 앱 자신인가.
+    ///
+    /// **스토어 앱은 자기를 목록에 세우지 않는다.** 자기를 갈아끼우는 것은 다른 앱을
+    /// 받는 것과 달라서(앱이 종료되고 다시 뜬다) 목록의 한 줄로 두면 안 되고, 그 일은
+    /// 위쪽 배너가 맡는다.
+    ///
+    /// 그것을 번들 ID 로 견주면 어긋날 때가 있다. 관리자가 번들 ID 를 바꾸면 이미
+    /// 깔린 스토어 앱들은 자기를 못 알아보고 새 스토어 앱을 목록에 세운다. 로컬에서
+    /// 만든 빌드를 다른 서버에 붙일 때도 그렇다. 어느 앱이 스토어 앱인지는 서버가
+    /// 알고 있으므로(ADR-0046) 서버가 말해준다.
+    ///
+    /// 옵셔널이라 이 필드를 모르는 예전 서버에도 그대로 붙는다. 그때는 클라이언트가
+    /// 번들 ID 로 견준다.
+    public var isStoreApp: Bool?
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -82,6 +96,7 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
         ownerID: UUID,
         latestReleasedVersion: VersionDTO? = nil,
         rating: RatingSummary? = nil,
+        isStoreApp: Bool? = nil,
         createdAt: Date,
         updatedAt: Date
     ) {
@@ -96,6 +111,7 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
         self.ownerID = ownerID
         self.latestReleasedVersion = latestReleasedVersion
         self.rating = rating
+        self.isStoreApp = isStoreApp
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
