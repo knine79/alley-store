@@ -2,12 +2,27 @@
 #export("content"):
 <nav class="breadcrumb"><a href="/apps">앱</a></nav>
 
-<div class="title-row">
-    <h1 class="page-title">#(app.name)</h1>
-    <code class="title-id">#(app.bundleID)</code>
-    #if(app.ratingAverage):
-    <span class="rating-summary">★ #(app.ratingAverage) <span class="rating-count">(#(app.ratingCount))</span></span>
-    #endif
+<!-- 목록에서 아이콘으로 찾아 들어왔는데 상세에 아이콘이 없으면 같은 앱인지
+     한 번 더 확인하게 된다. 아이콘은 여기서 올리지 않는다. 번들을 올릴 때
+     자동으로 뽑는다 (AppIconController). -->
+<div class="identity">
+    <span class="identity-icon" aria-hidden="true">
+        #if(app.iconURL):
+        <img src="#(app.iconURL)" alt="">
+        #else:
+        <span class="card-icon-letter">#(app.initial)</span>
+        #endif
+    </span>
+
+    <div class="identity-body">
+        <h1 class="page-title">#(app.name)</h1>
+        <p class="identity-meta">
+            <code>#(app.bundleID)</code>
+            #if(app.ratingAverage):
+            <span class="rating-summary">★ #(app.ratingAverage) <span class="rating-count">(#(app.ratingCount))</span></span>
+            #endif
+        </p>
+    </div>
 </div>
 
 #if(app.isPending):

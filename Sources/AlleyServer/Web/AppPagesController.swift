@@ -682,6 +682,17 @@ struct AppRow: Encodable {
     var ratingCount: Int
     /// 번들 ID 가 아직 정해지지 않았나. 이때만 지울 수 있다 (ADR-0039).
     var isPending: Bool
+    /// 번들에서 뽑아둔 앱 아이콘. 안 올렸으면 nil 이고 목록이 `initial` 을 그린다.
+    ///
+    /// 스토어 앱 목록에는 아이콘이 있는데 웹 목록에는 없었다. 같은 앱을 두 곳에서
+    /// 보는데 한쪽만 얼굴이 있으면 같은 것으로 안 읽힌다.
+    var iconURL: String?
+    /// 아이콘이 없을 때 그 자리에 그릴 이름 첫 글자.
+    ///
+    /// CSS 로 자르지 않는다. 한글은 한 글자가 두 칸 너비라 `width: 1ch` 로 자르면
+    /// 글자가 세로로 반 잘린다. 실제로 "가드" 가 "가|" 로 나왔다. 어디서 끊어야
+    /// 하는지는 문자를 아는 쪽만 안다.
+    var initial: String
 
     init(app: App, latestReleased: Version?, rating: RatingSummary? = nil) throws {
         self.id = try app.requireID().uuidString
@@ -698,6 +709,8 @@ struct AppRow: Encodable {
         self.ratingAverage = rating?.displayAverage
         self.ratingCount = rating?.count ?? 0
         self.isPending = app.bundleIDPending
+        self.iconURL = app.iconURL
+        self.initial = app.name.first.map(String.init) ?? "?"
     }
 }
 
