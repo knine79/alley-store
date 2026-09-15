@@ -276,6 +276,8 @@ SwiftUI 스토어 앱이 그대로 임포트해야 하기 때문입니다. HTTP 
 | ---------------- | ---------------------------------------------------------- |
 | `users`          | google_sub, email, name, avatar_url, role                  |
 | `store_settings` | 스토어 이름, 로고, 강조색, 허용 도메인, 번들 ID 프리픽스 (singleton, [ADR-0011](adr/0011-store-settings-in-database.md)) |
+| `branding_assets` | 종류(파비콘·로고·앱 아이콘), 스토리지 키, 크기 ([ADR-0045](adr/0045-branding-assets-in-storage.md)) |
+| `store_app_settings` | 스토어 앱의 번들 ID·이름·URL 스킴·바탕 번들 (singleton, [ADR-0046](adr/0046-server-assembles-store-app.md)) |
 | `apps`           | bundle_id, 이름, 아이콘, 설명, 카테고리, owner_id                     |
 | `app_members`    | app_id, user_id (앱별 업로드 권한)                                |
 | `versions`       | app_id, short_version, build_number, 릴리즈 노트, min_macos, 상태, entitlements ([ADR-0020](adr/0020-uploader-provides-entitlements.md)) |
@@ -404,6 +406,43 @@ Framework가 있는데 이 권한이 없으면 서명하기 전에 실패시킵�
 - 주소 없이 만든 빌드만 주소를 입력받습니다. 개발과 셀프호스팅 시연이 그 빌드를 씁니다
 - 로그인 → 앱 목록/검색/상세 → presigned URL 다운로드 → 설치
 - 스토어 앱 자체의 첫 배포는 웹 콘솔에서 직접 다운로드합니다 (부트스트랩)
+
+**웹 다운로드는 스토어 앱에만 엽니다.** 다른 앱에 열면 스토어 앱이 하는 검증을
+건너뛰는 기본 경로가 됩니다. 그중 "이미 깔린 같은 앱과 서명한 팀이 같은가" 는 로컬에
+무엇이 깔렸는지 알아야만 판단할 수 있어서 브라우저에서는 재현할 수 없습니다. 예외는
+올릴 권한이 있는 사람입니다. 그 사람들은 어차피 올린 파일을 갖고 있고 서명 결과를
+확인할 이유가 있습니다.
+
+#### 스토어 앱은 서버가 조립한다
+
+조직마다 다른 것(이름, 번들 ID, URL 스킴, 아이콘)을 **관리 화면에서 정하고 서버가
+번들에 넣습니다** ([ADR-0046](adr/0046-server-assembles-store-app.md)).
+
+```mermaid
+flowchart LR
+    ci["CI<br/>브랜딩 없는 미서명 번들"]
+    admin["관리 &gt; 스토어 앱<br/>이름 · 아이콘 · 버전"]
+    server["서버<br/>Info.plist · AppIcon.icns<br/>이름 갈아끼우기"]
+    worker["서명 워커<br/>codesign · notarytool"]
+    store["스토어에 출시"]
+
+    ci -->|바탕 번들 zip| admin
+    admin --> server
+    server -->|버전 + 서명 잡| worker
+    worker --> store
+```
+
+서버가 맥이 아닌데도 할 수 있는 것은 **바꿀 것이 전부 파일 몇 개**여서입니다. 압축을
+풀지 않고, 손대지 않는 항목은 압축된 바이트 그대로 옮깁니다. 워커는 이것이 스토어
+앱인지 모르고 다른 앱과 같게 처리합니다.
+
+빌드 번호는 서버가 정해 번들의 `CFBundleVersion` 과 스토어의 빌드 번호에 **같은 값**을
+씁니다. 정하는 곳이 둘이면 설치된 앱이 자기를 최신이라고 말합니다.
+
+**실행 파일 이름은 ASCII 로 만듭니다.** 비ASCII 문자가 들어가면
+`codesign --verify --deep --strict` 가 번들을 거절하는데, 그 실패는 서명이 끝난 뒤에
+`a sealed resource is missing or invalid` 한 줄로만 나옵니다. `.app` 폴더 이름과 화면에
+보이는 이름은 적은 그대로 둡니다.
 
 #### 샌드박스를 쓰지 않는다
 

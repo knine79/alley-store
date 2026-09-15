@@ -75,6 +75,16 @@ jobs:
       - name: 스토어 앱 번들 조립
         run: ./scripts/build-store-app.sh
 
+      # 이 zip 이 관리 화면의 "바탕 번들" 이다 (ADR-0046). 서버가 조직의 이름과
+      # 아이콘으로 다시 싸므로, 여기서는 브랜딩 없이 짓고 서명도 하지 않는다.
+      # 서명된 산출물을 이 레포가 내놓지 않는 이유는 ADR-0043 에 있다.
+      - name: 바탕 번들 올리기
+        uses: actions/upload-artifact@v4
+        with:
+          name: alley-store-app-unsigned
+          path: .build/store-app/alley-store-app-unsigned.zip
+          if-no-files-found: error
+
       # 워커도 번들로 배포하므로(ADR-0022) 조립까지 여기서 돌린다. 번들을 조립하는
       # 경로는 사람이 릴리스를 만들 때만 지나가서, 깨져 있어도 한동안 아무도 모른다.
       # 실제로 애플 실리콘 링커가 붙이는 ad-hoc 서명 때문에 번들이 검증을 통과하지

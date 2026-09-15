@@ -52,6 +52,8 @@
 | [0042](0042-worker-self-update.md) | 워커가 스스로를 갈아끼운다 | 수락됨 | 2026-09-11 |
 | [0043](0043-product-and-operations-repositories.md) | 제품 레포와 운영 레포를 나눈다 | 수락됨 | 2026-09-11 |
 | [0044](0044-store-app-knows-its-server.md) | 스토어 앱에 서버 주소를 빌드할 때 넣는다 | 수락됨 | 2026-09-15 |
+| [0045](0045-branding-assets-in-storage.md) | 브랜딩 이미지를 서버가 받아 보관한다 | 수락됨 | 2026-09-15 |
+| [0046](0046-server-assembles-store-app.md) | 스토어 앱 번들은 서버가 조립하고 워커가 서명한다 | 수락됨 | 2026-09-15 |
 
 ## 언제 쓰나
 
