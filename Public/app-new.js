@@ -166,6 +166,15 @@
         return await window.AlleyBundleInfo.read(file);
     }
 
+    /*
+     * 번들에서 꺼낸 아이콘. 2단계에서 읽어두고 등록이 끝난 뒤에 올린다.
+     *
+     * 등록 요청에 함께 싣지 않는 이유는 그 요청이 JSON 이기 때문이다. 그림을
+     * 실으려면 base64 로 부풀리거나 multipart 로 바꿔야 하는데, 둘 다 등록 경로를
+     * 아이콘 때문에 바꾸는 일이다. 아이콘은 없어도 되는 값이라 뒤에 따로 보낸다.
+     */
+    var pendingIcon = null;
+
     // MARK: - 2단계
 
     /*
@@ -173,6 +182,8 @@
      */
     function go(info, whyNotRead, isDiskImage) {
         var hasFile = !!input.files[0];
+
+        pendingIcon = (info && info.icon) || null;
 
         if (info) {
             fill(info);
@@ -400,10 +411,37 @@
             );
         }
 
+        // 아이콘은 없어도 되는 값이다. 실패해도 업로드를 되돌리지 않는다.
+        await sendIcon(app.id);
+
         // 앱 화면이 아니라 확인 화면으로 간다. dmg 는 버전을 아직 모르고, 워커가
         // 번들을 열어 보고할 때까지 기다렸다가 무엇을 올린 것인지 보여준다.
         window.location.href =
             "/apps/" + app.id + "/versions/" + ticket.version.id + "/confirm";
+    }
+
+    /*
+     * 번들에서 꺼낸 아이콘을 올린다.
+     *
+     * **실패를 삼킨다.** 여기까지 왔으면 앱과 버전은 이미 올라갔다. 아이콘 하나
+     * 때문에 그 성공을 실패로 보여줄 이유가 없고, 나중에 앱 화면에서 다시 올릴 수
+     * 있다. 콘솔에는 남겨서 개발할 때 보이게 한다.
+     */
+    async function sendIcon(appID) {
+        if (!pendingIcon) return;
+        try {
+            var response = await fetch(form.dataset.appsUrl + "/" + appID + "/icon", {
+                method: "POST",
+                headers: { "Content-Type": "image/png" },
+                body: pendingIcon,
+                credentials: "same-origin"
+            });
+            if (!response.ok) {
+                console.warn("앱 아이콘을 올리지 못했습니다:", response.status);
+            }
+        } catch (error) {
+            console.warn("앱 아이콘을 올리지 못했습니다:", error);
+        }
     }
 
     async function createApp() {
