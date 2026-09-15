@@ -19,8 +19,13 @@
 #   ALLEY_STORE_APP_URL_SCHEME   로그인 콜백 스킴 (기본값: alley)
 #   ALLEY_STORE_APP_VERSION      버전 문자열    (기본값: 0.1.0)
 #   ALLEY_STORE_APP_BUILD        빌드 번호      (기본값: 1)
+#   ALLEY_STORE_APP_SERVER_URL   스토어 주소    (기본값: 없음, 앱이 사람에게 묻는다)
 #
 # 옛 이름 `ALLEY_APP_*` 도 그대로 받는다. 새 이름이 있으면 그쪽이 이긴다.
+#
+# 주소를 주면 그것이 Info.plist 에 박히고, 받은 사람은 주소를 입력하지 않는다
+# (ADR-0044). 조직에 나눠줄 빌드에는 주면 되고, 아무 서버에나 붙는 빌드가 필요하면
+# 주지 않으면 된다.
 #
 # --sign 을 쓸 때 추가로 필요한 값:
 #   ALLEY_SIGNING_IDENTITY  Developer ID Application identity
@@ -33,6 +38,7 @@ APP_NAME="${ALLEY_STORE_APP_NAME:-${ALLEY_APP_NAME:-Alley Store}}"
 URL_SCHEME="${ALLEY_STORE_APP_URL_SCHEME:-${ALLEY_APP_URL_SCHEME:-alley}}"
 VERSION="${ALLEY_STORE_APP_VERSION:-${ALLEY_APP_VERSION:-0.1.0}}"
 BUILD="${ALLEY_STORE_APP_BUILD:-${ALLEY_APP_BUILD:-1}}"
+SERVER_URL="${ALLEY_STORE_APP_SERVER_URL:-${ALLEY_APP_SERVER_URL:-}}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUTPUT_DIR="$REPO_ROOT/.build/store-app"
@@ -46,11 +52,33 @@ die() { printf '오류: %s\n' "$*" >&2; exit 1; }
 
 [ "$(uname -s)" = "Darwin" ] || die "스토어 앱은 macOS 에서만 만들 수 있습니다."
 
+# 주소는 스킴까지 받는다. `store.example.com` 만 적으면 앱이 그것을 경로로 읽는다.
+#
+# 여기서 막지 않으면 서명·공증까지 다 끝난 뒤 사람 손에서 드러난다. 그때는 다시
+# 만드는 데 공증 대기만큼이 더 든다.
+SERVER_ENTRY=""
+if [ -n "$SERVER_URL" ]; then
+    case "$SERVER_URL" in
+        https://*) ;;
+        http://*)
+            echo "경고: 평문 http 주소입니다. 사내망이 아니면 다시 보세요: $SERVER_URL" >&2
+            ;;
+        *) die "스토어 주소는 https:// 로 시작해야 합니다: $SERVER_URL" ;;
+    esac
+    case "$SERVER_URL" in
+        */) die "스토어 주소 끝의 슬래시를 빼세요: $SERVER_URL" ;;
+    esac
+    SERVER_ENTRY="    <!-- 이 빌드가 붙는 스토어. 없으면 앱이 사람에게 묻는다(ADR-0044). -->
+    <key>AlleyServerURL</key>
+    <string>$SERVER_URL</string>"
+fi
+
 # 무엇으로 짓는지 먼저 찍는다. 값이 안 넘어와도 빌드는 성공하고 기본값으로 나가서,
 # 번들 ID 가 틀린 것을 한참 뒤에 설치 화면에서 알게 된다.
 info "$APP_NAME $VERSION ($BUILD)"
 echo "  번들 ID  $BUNDLE_ID"
 echo "  URL 스킴 $URL_SCHEME"
+echo "  스토어   ${SERVER_URL:-(빌드에 박지 않음. 받은 사람이 입력합니다)}"
 
 info "빌드합니다..."
 (cd "$REPO_ROOT" && swift build -c release --product alley-store-app)
@@ -86,6 +114,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST_EOF
     <string>$BUILD</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
+$SERVER_ENTRY
     <!-- 메뉴 막대에 뜨는 보통의 앱이다. -->
     <key>LSUIElement</key>
     <false/>
