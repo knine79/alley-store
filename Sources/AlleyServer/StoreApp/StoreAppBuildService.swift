@@ -88,6 +88,23 @@ public enum StoreAppBuildService {
         return settings
     }
 
+    /// 빌드에 넣을 앱 아이콘. 안 올렸으면 nil 이고 아이콘 없이 나간다.
+    ///
+    /// 화면과 운영 CI 가 같은 것을 써야 해서 여기 둔다. 두 곳에서 따로 읽으면
+    /// 어느 경로로 빌드했느냐에 따라 아이콘이 달라진다.
+    public static func appIcon(on request: Request) async throws -> (png: Data, edge: Int)? {
+        guard let asset = try await BrandingAssetService.find(kind: .appIcon, on: request.db) else {
+            return nil
+        }
+        let png = try await request.application.storedImages.data(forKey: asset.storageKey) {
+            try await request.application.artifactStorage.get(
+                key: asset.storageKey,
+                limit: BrandingAssetService.maximumUploadSize
+            )
+        }
+        return (png, asset.width)
+    }
+
     // MARK: - 빌드
 
     /// 결과. 화면이 무엇이 생겼는지 말할 수 있어야 한다.
