@@ -136,4 +136,10 @@ public enum APIPath {
     public static let operatorRoot = "\(apiRoot)/ops"
     /// 워커 릴리스를 올리는 자리.
     public static let operatorWorkerReleases = "\(operatorRoot)/worker-releases"
+    /// 스토어 앱에 지금 무엇이 올라가 있는지. CI 가 "이미 했나" 를 여기서 본다.
+    public static let operatorStoreApp = "\(operatorRoot)/store-app"
+    /// 운영 CI 가 스토어 앱의 베이스 번들을 올리는 자리 (ADR-0046).
+    public static let operatorStoreAppBaseBundle = "\(operatorStoreApp)/base-bundle"
+    /// 그 번들로 새 버전을 빌드시키는 자리.
+    public static let operatorStoreAppBuild = "\(operatorStoreApp)/build"
 }

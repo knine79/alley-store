@@ -7,7 +7,7 @@
 | --- | --- | --- | --- | --- |
 | Developer ID Application | 서명 맥의 로그인 키체인 | 20XX-XX-XX | | 서명·배포 전부 멈춤 |
 | 공증 자격증명 (notarytool 프로필) | 서명 맥의 data-protection 키체인 | API 키 만료일 | | 공증 멈춤 |
-| 운영 토큰 (`alleyo_…`) | 이 레포 시크릿 `ALLEY_OPERATOR_TOKEN` | 없음 | | 워커 릴리스 업로드 멈춤 |
+| 운영 토큰 (`alleyo_…`) | 이 레포 시크릿 `ALLEY_OPERATOR_TOKEN` | 없음 | | 워커 릴리스·스토어 앱 자동 빌드 멈춤 |
 | 워커 토큰 | 각 워커 맥의 설정 파일 | 없음 | | 그 워커만 멈춤 |
 | 서버 환경변수 | 배포 플랫폼 시크릿 | | | 서버가 안 뜸 |
 

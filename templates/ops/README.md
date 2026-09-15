@@ -61,7 +61,7 @@ self-hosted, macos, alley-signing
 | 이름 | 무엇 |
 | --- | --- |
 | `ALLEY_SERVER_URL` | 스토어 서버 주소 |
-| `ALLEY_OPERATOR_TOKEN` | 관리 > 서명 워커 화면에서 발급한 운영 토큰 (`alleyo_…`) |
+| `ALLEY_OPERATOR_TOKEN` | 관리 > 서명 워커 화면에서 발급한 운영 토큰 (`alleyo_…`). 워커 릴리스와 스토어 앱 빌드에 함께 씁니다 |
 | `ALLEY_REGISTRY_USER` | (선택) 서버 이미지를 받을 레지스트리 사용자 |
 | `ALLEY_REGISTRY_TOKEN` | (선택) 그 레지스트리 토큰 |
 

@@ -194,18 +194,7 @@ struct StoreAppPagesController: RouteCollection, Sendable {
         let admin = try request.requireAdmin()
         let settings = try await request.storeAppSettings()
 
-        let icon: (png: Data, edge: Int)?
-        if let asset = try await BrandingAssetService.find(kind: .appIcon, on: request.db) {
-            let png = try await request.application.storedImages.data(forKey: asset.storageKey) {
-                try await request.application.artifactStorage.get(
-                    key: asset.storageKey,
-                    limit: BrandingAssetService.maximumUploadSize
-                )
-            }
-            icon = (png, asset.width)
-        } else {
-            icon = nil
-        }
+        let icon = try await StoreAppBuildService.appIcon(on: request)
 
         do {
             let result = try await StoreAppBuildService.build(

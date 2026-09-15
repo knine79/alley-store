@@ -52,3 +52,4 @@ struct HealthResponse: Content {
 // AlleyShared 는 Vapor 에 의존하지 않는다. SwiftUI 스토어 앱도 같은 타입을 쓰기 때문이다.
 // 그래서 HTTP 직렬화 능력은 서버 쪽에서 덧붙인다.
 extension StoreMeta: Content {}
+extension StoreAppStatusDTO: Content {}
