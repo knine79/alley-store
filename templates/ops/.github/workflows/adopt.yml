@@ -224,6 +224,37 @@ jobs:
       #
       # 이 단계는 잡의 마지막입니다. 여기서만 실패하면 빌드·서명·공증·업로드는
       # 이미 끝난 것이라, 이미지를 손으로 굴리면 그 릴리스는 그대로 유효합니다.
+      # 제품 CI 가 이미지를 다 올렸는지 먼저 본다.
+      #
+      # **릴리스와 이미지는 따로 끝납니다.** 태그를 밀면 릴리스 워크플로와 이미지
+      # 빌드가 같이 시작하는데, 릴리스는 1분대에 끝나고 이미지는 몇 분 더 걸립니다.
+      # 하루에 한 번 도는 감시가 PR 을 열 때는 그 사이가 이미 지나 있어서 문제가
+      # 없지만, 릴리스 직후에 손으로 감시를 돌려 바로 머지하면 여기가 먼저 도착해
+      # `not found` 로 떨어집니다. 실제로 그렇게 두 번 걸렸습니다.
+      #
+      # 기다리는 편이 맞습니다. 여기서 실패하면 빌드·서명·공증·업로드는 이미 끝난
+      # 뒤라, 사람이 로그를 보고 "이미지가 없다" 를 이해한 다음 이 단계만 다시
+      # 돌려야 합니다. 그 왕복을 없앱니다.
+      - name: 서버 이미지 기다리기
+        if: ${{ hashFiles('scripts/rollout-server.sh') != '' }}
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/knine79/alley-store:${{ steps.lock.outputs.version }}"
+
+          # 10분. 이미지 빌드는 보통 5분 안쪽이고, 그보다 오래 걸리면 기다릴 것이
+          # 아니라 그쪽 로그를 봐야 합니다.
+          for attempt in $(seq 1 40); do
+            if docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
+              echo "$IMAGE 가 올라왔습니다."
+              exit 0
+            fi
+            echo "[$attempt/40] $IMAGE 를 아직 못 찾았습니다. 15초 뒤에 다시 봅니다."
+            sleep 15
+          done
+
+          echo "::error::$IMAGE 가 10분 안에 올라오지 않았습니다. 제품 레포의 CI 를 보세요." >&2
+          exit 1
+
       - name: 서버 롤아웃
         if: ${{ hashFiles('scripts/rollout-server.sh') != '' }}
         env:
