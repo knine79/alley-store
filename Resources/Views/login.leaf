@@ -1,6 +1,9 @@
 #extend("layout"):
 #export("content"):
 <section class="hero">
+    #if(page.store.logoURL):
+    <img class="hero-logo" src="#(page.store.logoURL)" alt="">
+    #endif
     <h1 class="hero-title">#(page.store.name)</h1>
     <p class="hero-lead">
         조직 구성원에게 배포되는 macOS 앱을 등록하고 내려받는 곳입니다.

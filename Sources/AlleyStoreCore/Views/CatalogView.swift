@@ -14,8 +14,8 @@ struct CatalogView: View {
     @State private var search = ""
 
     private var visible: [AppDTO] {
-        guard !search.isEmpty else { return model.apps }
-        return model.apps.filter {
+        guard !search.isEmpty else { return model.catalog }
+        return model.catalog.filter {
             $0.name.localizedCaseInsensitiveContains(search)
                 || $0.bundleID.localizedCaseInsensitiveContains(search)
         }
@@ -30,7 +30,7 @@ struct CatalogView: View {
             .searchable(text: $search, prompt: "앱 검색")
             .navigationSplitViewColumnWidth(min: 260, ideal: 300)
             .overlay {
-                if model.apps.isEmpty, !model.isLoading {
+                if model.catalog.isEmpty, !model.isLoading {
                     ContentUnavailableView(
                         "받을 수 있는 앱이 없습니다",
                         systemImage: "shippingbox",
@@ -89,11 +89,14 @@ struct CatalogView: View {
                 SelfUpdateBanner(app: update)
             }
         }
-        .onChange(of: model.apps) { _, apps in
+        .onChange(of: model.apps) { _, _ in
             // 목록이 있는데 오른쪽이 비어 있으면 화면이 절반만 채워진 것처럼 보인다.
             // 사용자가 고르기 전에도 볼 것이 있게 첫 앱을 미리 편다.
+            //
+            // 목록에 없는 것(스토어 앱 자신)을 고르면 안 된다. 왼쪽에 표시되지 않는
+            // 줄이 오른쪽에 펼쳐진다.
             if selection == nil {
-                selection = apps.first?.id
+                selection = model.catalog.first?.id
             }
         }
     }
@@ -106,6 +109,7 @@ struct AppRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
+            AppIcon(app: app, size: 32)
             VStack(alignment: .leading, spacing: 2) {
                 Text(app.name)
                     .font(.body.weight(.medium))
@@ -238,7 +242,8 @@ struct AppDetailView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .top, spacing: 16) {
+            AppIcon(app: app, size: 64)
             VStack(alignment: .leading, spacing: 4) {
                 Text(app.name).font(.largeTitle.weight(.semibold))
                 HStack(spacing: 8) {
@@ -256,6 +261,59 @@ struct AppDetailView: View {
                 InstallButton(app: app)
                     .controlSize(.large)
             }
+        }
+    }
+}
+
+/// 앱 아이콘.
+///
+/// **아이콘이 없으면 목록이 글자만 남는다.** 그러면 찾는 앱을 이름으로 읽어야 하고,
+/// 아이콘으로 알아보던 습관이 통하지 않는다. 그래서 없을 때도 빈자리를 두지 않고
+/// 이름 첫 글자로 자리를 채운다. 회색 상자 하나보다 앱마다 달라 보이는 편이 낫다.
+struct AppIcon: View {
+    let app: AppDTO
+    let size: CGFloat
+
+    /// 아이콘이 없을 때 쓸 글자. 한글도 이모지도 한 글자면 된다.
+    private var initial: String {
+        app.name.trimmingCharacters(in: .whitespaces).first.map(String.init) ?? "?"
+    }
+
+    /// 이름에서 뽑은 색.
+    ///
+    /// 무작위로 고르면 목록을 다시 그릴 때마다 색이 바뀐다. 이름에서 뽑으면 같은
+    /// 앱은 언제나 같은 색이라 눈이 기억한다.
+    private var tint: Color {
+        Color(hue: Double(abs(app.bundleID.hashValue) % 360) / 360, saturation: 0.45, brightness: 0.75)
+    }
+
+    var body: some View {
+        Group {
+            if let url = app.iconURL.flatMap(URL.init(string:)) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFit()
+                    default:
+                        // 받는 동안과 실패했을 때가 같다. 둘 다 "그림이 없다" 이고,
+                        // 자리가 비어 있으면 줄 높이가 흔들린다.
+                        placeholder
+                    }
+                }
+            } else {
+                placeholder
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+    }
+
+    private var placeholder: some View {
+        ZStack {
+            tint
+            Text(initial)
+                .font(.system(size: size * 0.5, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white)
         }
     }
 }
