@@ -165,13 +165,29 @@ public struct OIDCMetadata: Codable, Sendable, Equatable {
         guard expected == actual else {
             throw OIDCError.issuerMismatch(expected: expected, actual: actual)
         }
-        guard authorizationEndpoint.hasPrefix("https://"),
-              tokenEndpoint.hasPrefix("https://"),
-              jwksURI.hasPrefix("https://")
+        guard Self.isSafe(authorizationEndpoint),
+              Self.isSafe(tokenEndpoint),
+              Self.isSafe(jwksURI)
         else {
             throw OIDCError.insecureEndpoint
         }
         return self
+    }
+}
+
+extension OIDCMetadata {
+    /// 이 주소로 토큰과 공개키를 주고받아도 되는가.
+    ///
+    /// https 면 된다. 예외는 loopback 인데, 거기로 가는 트래픽은 이 기계를 벗어나지
+    /// 않기 때문이다. 브라우저도 `http://localhost` 를 보안 컨텍스트로 친다.
+    ///
+    /// **이 예외가 없으면 로컬에 공급자를 띄워 시험할 수 없다.** 그러면 이 경로를
+    /// 확인할 길이 진짜 조직 계정뿐이고, 그건 기여자에게 요구할 수 없는 것이다.
+    /// `PUBLIC_BASE_URL` 도 같은 이유로 같은 예외를 갖고 있다(ADR-0027).
+    static func isSafe(_ endpoint: String) -> Bool {
+        if endpoint.hasPrefix("https://") { return true }
+        guard let host = URLComponents(string: endpoint)?.host?.lowercased() else { return false }
+        return ["localhost", "127.0.0.1", "::1", "[::1]"].contains(host)
     }
 }
 
@@ -278,7 +294,11 @@ public enum OIDCError: Error, CustomStringConvertible {
                 여러 조직이 함께 쓰는 주소입니다(\(requested)). 이 스토어는 한 조직의                 것이라 조직 하나를 가리키는 주소가 필요합니다. 공급자가 알려준 형태는                 \(template) 이니, 가운데를 조직의 테넌트 ID 로 바꿔 OIDC_ISSUER 에                 넣으세요.
                 """
         case .insecureEndpoint:
-            return "로그인 공급자가 https 가 아닌 주소를 알려줬습니다."
+            return """
+                로그인 공급자가 https 가 아닌 주소를 알려줬습니다. \
+                평문으로는 토큰이 오가는 것을 누구든 볼 수 있습니다. \
+                (로컬에서 시험할 때 쓰는 localhost 만 예외입니다.)
+                """
         case .audienceMismatch:
             return "이 스토어에 발급된 토큰이 아닙니다."
         case .missingEmail:

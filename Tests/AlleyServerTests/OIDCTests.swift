@@ -91,6 +91,41 @@ struct OIDCMetadataTests {
             try document.validated(against: "https://login.example.com")
         }
     }
+
+    /// **이 예외가 없으면 로컬에 공급자를 띄워 시험할 수 없다.** 그러면 이 경로를
+    /// 확인할 길이 진짜 조직 계정뿐이고, 그건 기여자에게 요구할 수 없는 것이다.
+    /// `docker-compose.dev-oidc.yml` 의 Keycloak 이 이 길로 지나간다.
+    @Test("loopback 은 http 여도 받는다")
+    func acceptsLoopbackOverHTTP() throws {
+        let document = OIDCMetadata(
+            issuer: "http://localhost:8081/realms/alley",
+            authorizationEndpoint: "http://localhost:8081/realms/alley/protocol/openid-connect/auth",
+            tokenEndpoint: "http://localhost:8081/realms/alley/protocol/openid-connect/token",
+            jwksURI: "http://localhost:8081/realms/alley/protocol/openid-connect/certs"
+        )
+        _ = try document.validated(against: "http://localhost:8081/realms/alley")
+    }
+
+    @Test(
+        "loopback 이 아닌 http 는 막는다",
+        arguments: [
+            "http://login.example.com/auth",
+            // 문서용으로 비워둔 대역(RFC 5737). loopback 목록에 없으므로 막힌다.
+            "http://192.0.2.10/auth",
+            // 접두사로만 보면 통과하는 이름이다. 호스트를 파싱해서 본다.
+            "http://localhost.evil.example.com/auth",
+        ]
+    )
+    func rejectsNonLoopbackHTTP(_ endpoint: String) {
+        #expect(!OIDCMetadata.isSafe(endpoint))
+    }
+
+    @Test("loopback 주소들을 알아본다", arguments: [
+        "http://localhost:8081/x", "http://127.0.0.1:8081/x", "http://[::1]:8081/x",
+    ])
+    func recognizesLoopback(_ endpoint: String) {
+        #expect(OIDCMetadata.isSafe(endpoint))
+    }
 }
 
 @Suite("OIDC 로그인 주소")
