@@ -6,8 +6,11 @@ import Vapor
 /// 로그인 관련 경로.
 ///
 /// 웹 콘솔과 스토어 앱이 **같은 경로**를 쓴다. 앱은 `ASWebAuthenticationSession` 으로
-/// 이 서버의 로그인 주소를 열 뿐이고, Google 과의 왕복은 서버가 처리한다.
-/// 그래서 앱 바이너리에는 Google 클라이언트 정보가 들어가지 않는다.
+/// 이 서버의 로그인 주소를 열 뿐이고, 공급자와의 왕복은 서버가 처리한다.
+/// 그래서 앱 바이너리에는 공급자 클라이언트 정보가 들어가지 않는다.
+///
+/// 공급자는 표준 OIDC 를 말하는 곳이면 무엇이든 된다 (ADR-0047). Google, Microsoft
+/// Entra ID, Okta, Keycloak 이 같은 길로 지나간다.
 public struct AuthController: RouteCollection, Sendable {
     public init() {}
 
@@ -22,7 +25,7 @@ public struct AuthController: RouteCollection, Sendable {
 
     // MARK: - 로그인 시작
 
-    /// Google 로그인 화면으로 보낸다.
+    /// 공급자의 로그인 화면으로 보낸다.
     ///
     /// `?client=app` 으로 부르면 인증 후 커스텀 URL 스킴으로 돌려보낸다.
     /// 스토어 앱이 이 형태로 부른다.
@@ -34,11 +37,15 @@ public struct AuthController: RouteCollection, Sendable {
             ? .app : .web
 
         let state = try await request.jwt.sign(OAuthStateToken(target: target))
-        let url = GoogleOAuth(config: config.oauth).authorizationURL(state: state)
+        let metadata = try await request.application.oidcDirectory.metadata(
+            using: request.client, logger: request.logger
+        )
+        let url = OIDCProvider(config: config.oauth, metadata: metadata)
+            .authorizationURL(state: state)
         return request.redirect(to: url)
     }
 
-    // MARK: - Google 콜백
+    // MARK: - 공급자 콜백
 
     @Sendable
     func callback(request: Request) async throws -> Response {
@@ -62,24 +69,37 @@ public struct AuthController: RouteCollection, Sendable {
             throw Abort(.badRequest, reason: "로그인 요청이 만료되었거나 유효하지 않습니다. 다시 시도해주세요.")
         }
 
-        let tokens = try await GoogleOAuth(config: config.oauth)
+        let directory = request.application.oidcDirectory
+        let metadata = try await directory.metadata(using: request.client, logger: request.logger)
+        let tokens = try await OIDCProvider(config: config.oauth, metadata: metadata)
             .exchange(code: code, client: request.client)
 
-        // ID 토큰은 Google 의 공개키로 서명을 검증하고 audience 가 우리 클라이언트인지 확인한다.
-        // 도메인 검증은 여러 도메인을 허용해야 해서 아래에서 직접 한다.
-        let identity = try await request.jwt.google.verify(
-            tokens.idToken,
-            applicationIdentifier: config.oauth.clientID
+        // ID 토큰은 공급자의 공개키로 서명을 검증한다. `kid` 를 함께 넘기는 것은
+        // 공급자가 방금 키를 바꿨을 때 그 자리에서 다시 받아오게 하기 위해서다.
+        let identity = try await directory.verify(
+            idToken: tokens.idToken,
+            keyID: JWTHeaderPeek.keyID(of: tokens.idToken),
+            using: request.client,
+            logger: request.logger
         )
+        // 서명이 맞는 것만으로는 부족하다. 누가 누구에게 발급한 토큰인지를 본다.
+        // 도메인 검증은 여러 도메인을 허용해야 해서 아래에서 따로 한다.
+        try identity.check(issuer: config.oauth.issuer, audience: config.oauth.clientID)
+
+        guard let claimedEmail = identity.email else {
+            throw Abort(.forbidden, reason: OIDCError.missingEmail.description)
+        }
 
         let settings = try await request.storeSettings()
         let policy = EmailDomainPolicy(allowedDomains: settings.allowedEmailDomains)
         let email: String
         do {
             email = try policy.admit(
-                email: identity.email,
-                emailVerified: identity.emailVerified?.value,
-                hostedDomain: identity.hostedDomain?.value
+                email: claimedEmail,
+                emailVerified: identity.emailVerified,
+                // `hd` 는 Google 고유다. 다른 공급자에는 없고 그때는 이메일
+                // 도메인만 본다.
+                hostedDomain: identity.hostedDomain
             )
         } catch {
             request.logger.notice("로그인 거부: \(error)")
@@ -88,7 +108,8 @@ public struct AuthController: RouteCollection, Sendable {
 
         let user = try await upsertUser(
             request: request,
-            googleSubject: identity.subject.value,
+            issuer: config.oauth.issuer,
+            subject: identity.subject.value,
             email: email,
             name: identity.name ?? email,
             avatarURL: identity.picture
@@ -182,9 +203,11 @@ public struct AuthController: RouteCollection, Sendable {
     /// 로그인한 계정을 저장하거나 갱신한다.
     ///
     /// 조회 기준은 이메일이 아니라 `sub` 다. 이메일은 조직 안에서 바뀔 수 있다.
+    /// **`sub` 는 공급자 안에서만 유일하므로** issuer 와 함께 본다.
     private func upsertUser(
         request: Request,
-        googleSubject: String,
+        issuer: String,
+        subject: String,
         email: String,
         name: String,
         avatarURL: String?
@@ -192,7 +215,8 @@ public struct AuthController: RouteCollection, Sendable {
         let config = request.application.alleyConfig
 
         if let existing = try await User.query(on: request.db)
-            .filter(\.$googleSubject == googleSubject)
+            .filter(\.$issuer == issuer)
+            .filter(\.$subject == subject)
             .first()
         {
             existing.email = email
@@ -203,10 +227,33 @@ public struct AuthController: RouteCollection, Sendable {
             return existing
         }
 
+        // **공급자를 바꾼 조직이 여기로 온다.** 같은 사람인데 `sub` 가 달라진다.
+        // 이메일로 다시 이어준다. 그러지 않으면 계정이 둘로 갈라지고, 올린 앱과
+        // 역할이 옛 계정에 남는다.
+        //
+        // 이메일을 신뢰하는 자리라 조심스럽지만, 여기까지 온 이메일은 이미
+        // `email_verified` 와 허용 도메인 검사를 지났다.
+        if let rebound = try await User.query(on: request.db)
+            .filter(\.$email == email)
+            .first()
+        {
+            request.logger.notice(
+                "로그인 공급자가 바뀐 계정을 잇습니다 [\(email), \(rebound.issuer) → \(issuer)]"
+            )
+            rebound.issuer = issuer
+            rebound.subject = subject
+            rebound.name = name
+            rebound.avatarURL = avatarURL
+            rebound.lastLoginAt = Date()
+            try await rebound.save(on: request.db)
+            return rebound
+        }
+
         // 최초 로그인. 설정에 적힌 계정만 관리자로 시작하고 나머지는 일반 사용자다.
         let isInitialAdmin = config.store.initialAdminEmails.contains(email)
         let user = User(
-            googleSubject: googleSubject,
+            issuer: issuer,
+            subject: subject,
             email: email,
             name: name,
             avatarURL: avatarURL,

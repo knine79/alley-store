@@ -111,10 +111,32 @@ public struct AppConfig: Sendable {
     }
 
     public struct OAuthConfig: Sendable {
+        /// OIDC 공급자의 issuer. 엔드포인트는 여기서 discovery 로 알아낸다 (ADR-0047).
+        ///
+        /// 기본값이 Google 인 것은 그 전에 이 제품이 Google 만 쓸 수 있었기 때문이다.
+        /// 이미 돌고 있는 스토어가 설정을 바꾸지 않아도 그대로 돌아간다.
+        public var issuer: String
         public var clientID: String
         public var clientSecret: String
         /// 공급자에 등록한 리다이렉트 URI.
         public var redirectURI: String
+
+        public init(
+            issuer: String = OAuthConfig.googleIssuer,
+            clientID: String,
+            clientSecret: String,
+            redirectURI: String
+        ) {
+            self.issuer = issuer
+            self.clientID = clientID
+            self.clientSecret = clientSecret
+            self.redirectURI = redirectURI
+        }
+
+        public static let googleIssuer = "https://accounts.google.com"
+
+        /// Google 을 쓰고 있는가. 화면 문구와 설정 안내에만 쓴다.
+        public var isGoogle: Bool { issuer == Self.googleIssuer }
     }
 
     /// App Store Connect API 키.
@@ -175,6 +197,15 @@ extension AppConfig {
 
         func optional(_ key: String) -> String? {
             guard let value = environment[key], !value.isEmpty else { return nil }
+            return value
+        }
+
+        /// 새 이름을 먼저 보고 없으면 옛 이름을 본다. 둘 다 없으면 **새 이름으로**
+        /// 실패한다. 없는 값을 찾아 넣을 사람에게 알려줄 이름은 새것이다.
+        func requiredEither(_ key: String, _ legacyKey: String) throws -> String {
+            guard let value = optional(key) ?? optional(legacyKey) else {
+                throw LoadError.missing(key: key)
+            }
             return value
         }
 
@@ -339,9 +370,12 @@ extension AppConfig {
                 usePathStyle: boolean("S3_USE_PATH_STYLE", default: true),
                 presignedURLTTL: try integer("S3_PRESIGNED_URL_TTL", default: 3600)
             ),
+            // 옛 이름 `GOOGLE_*` 도 그대로 받는다. 이미 돌고 있는 스토어의 설정을
+            // 깨뜨리지 않는다 (ADR-0047).
             oauth: OAuthConfig(
-                clientID: try required("GOOGLE_CLIENT_ID"),
-                clientSecret: try required("GOOGLE_CLIENT_SECRET"),
+                issuer: optional("OIDC_ISSUER") ?? OAuthConfig.googleIssuer,
+                clientID: try requiredEither("OIDC_CLIENT_ID", "GOOGLE_CLIENT_ID"),
+                clientSecret: try requiredEither("OIDC_CLIENT_SECRET", "GOOGLE_CLIENT_SECRET"),
                 redirectURI: try required("OAUTH_REDIRECT_URI")
             ),
             security: SecurityConfig(

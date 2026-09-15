@@ -14,7 +14,7 @@ struct MigrationHarnessTests {
     func migrationsCreateUsableSchema() async throws {
         try await withMigratedApp { app in
             let user = User(
-                googleSubject: "sub-harness",
+                subject: "sub-harness",
                 email: "harness@example.com",
                 name: "하네스",
                 role: .user
@@ -34,7 +34,7 @@ struct MigrationHarnessTests {
         // 최종 방어선이 데이터베이스에 실제로 있는지 확인한다.
         try await withMigratedApp { app in
             try await User(
-                googleSubject: "sub-a",
+                subject: "sub-a",
                 email: "dup@example.com",
                 name: "먼저",
                 role: .user
@@ -42,7 +42,7 @@ struct MigrationHarnessTests {
 
             await #expect(throws: (any Error).self) {
                 try await User(
-                    googleSubject: "sub-b",
+                    subject: "sub-b",
                     email: "dup@example.com",
                     name: "나중",
                     role: .user
@@ -55,7 +55,7 @@ struct MigrationHarnessTests {
     func revertCleansUp() async throws {
         try await withMigratedApp { app in
             try await User(
-                googleSubject: "sub-leftover",
+                subject: "sub-leftover",
                 email: "leftover@example.com",
                 name: "잔재",
                 role: .user

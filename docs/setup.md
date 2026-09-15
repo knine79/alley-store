@@ -10,7 +10,7 @@ Alley 를 조직에 처음 올리는 절차입니다. 끝까지 따라가면 개
 
 | 단계 | 무엇을 하나 | 필요한 것 | 대략 |
 | --- | --- | --- | --- |
-| [1](#1-google-oauth-클라이언트-발급) | Google OAuth 클라이언트 발급 | Google Workspace 관리 권한 | 15분 |
+| [1](#1-로그인-공급자-클라이언트-발급) | 로그인 공급자 클라이언트 발급 | 조직 계정 시스템의 관리 권한 | 15분 |
 | [2](#2-https-붙이기) | 도메인에 HTTPS 붙이기 | 도메인, 서버의 80·443 포트 | 30분 |
 | [3](#3-서버-띄우기) | 서버·데이터베이스·스토리지 띄우기 | Docker 돌아가는 서버 한 대 | 30분 |
 | [4](#4-서명-워커-설치) | 서명 워커 설치 | 늘 켜져 있는 맥, Apple Developer Program | 1\~2시간 |
@@ -30,7 +30,7 @@ Alley 를 조직에 처음 올리는 절차입니다. 끝까지 따라가면 개
 | --- | --- | --- |
 | 서버 한 대 (Docker) | 서버·데이터베이스·스토리지가 여기 뜹니다 | 시작할 수 없습니다 |
 | 도메인 | 로그인 콜백과 스토어 앱이 붙을 주소 | 로컬에서만 씁니다 |
-| Google Workspace 계정 | 로그인에 씁니다 | 로그인할 수 없습니다 |
+| OIDC 를 말하는 계정 시스템 | 로그인에 씁니다. Google Workspace, Microsoft Entra ID, Okta, Keycloak 등 (ADR-0047) | 로그인할 수 없습니다 |
 | macOS 머신 한 대 | 서명 워커가 여기서 돕니다 | 미서명 업로드가 서명되지 않습니다 |
 | Apple Developer Program | Developer ID Application 인증서 | 서명·공증을 할 수 없습니다 |
 
@@ -40,10 +40,38 @@ TLS 인증서는 따로 준비하지 않아도 됩니다. [2번](#2-https-붙이
 서명 워커를 돌릴 맥은 **전용 머신일 필요는 없지만 늘 켜져 있어야** 합니다. 잡을
 기다리는 것이 그 프로세스의 일이라, 꺼져 있으면 큐가 쌓입니다.
 
-## 1. Google OAuth 클라이언트 발급
+## 1. 로그인 공급자 클라이언트 발급
 
-OAuth(Open Authorization)는 "이 사람이 우리 조직 구성원이 맞다" 를 Google 에게
+OIDC(OpenID Connect)는 "이 사람이 우리 조직 구성원이 맞다" 를 조직의 계정 시스템에
 물어보는 방식입니다. Alley 는 자체 비밀번호를 두지 않고 이것만 씁니다.
+
+**공급자는 조직이 고릅니다** ([ADR-0047](adr/0047-any-oidc-provider.md)). 표준 OIDC 를
+말하는 곳이면 됩니다.
+
+| 공급자 | `OIDC_ISSUER` |
+| --- | --- |
+| Google Workspace | `https://accounts.google.com` (비워두면 이 값) |
+| Microsoft Entra ID | `https://login.microsoftonline.com/<테넌트 ID>/v2.0` |
+| Okta | `https://<조직>.okta.com` |
+| Keycloak | `https://<호스트>/realms/<realm>` |
+| Authentik | `https://<호스트>/application/o/<슬러그>/` |
+
+어느 쪽이든 **웹 애플리케이션(confidential client)** 으로 만들고, 리디렉션 URI 에
+아래 주소를 넣고, 클라이언트 ID 와 보안 비밀을 받아 3번에서 `.env` 에 넣습니다.
+
+```
+https://store.example.com/auth/google/callback   (운영)
+http://localhost:8080/auth/google/callback       (로컬 개발)
+```
+
+> 경로에 `google` 이 남아 있는 것은 이미 배포된 스토어의 설정을 깨뜨리지 않으려는
+> 것입니다. 공급자와 무관하게 이 경로를 씁니다.
+
+**여러 조직이 함께 쓰는 주소는 쓸 수 없습니다.** Microsoft 의 `common` 이 그렇습니다.
+그 주소로 열면 그 공급자에 계정이 있는 사람은 누구나 로그인을 시도할 수 있게 됩니다.
+서버가 기동 후 첫 로그인에서 거절하며 무엇을 넣어야 하는지 알려줍니다.
+
+### Google Workspace 를 쓴다면
 
 Google Cloud Console 에서:
 
@@ -59,10 +87,10 @@ Google Cloud Console 에서:
 단계에서 HTTPS 로 열게 됩니다.
 
 발급받은 **클라이언트 ID 와 클라이언트 보안 비밀번호**를 적어두세요. 3번에서
-`.env` 에 넣습니다.
+`.env` 에 넣습니다. `OIDC_ISSUER` 는 비워두면 됩니다.
 
 동의 화면을 Internal 로 두어도 **서버가 이메일 도메인을 한 번 더 검사합니다.**
-Google 설정 하나에 로그인 문을 전부 맡기지 않습니다.
+공급자 설정 하나에 로그인 문을 전부 맡기지 않습니다.
 
 ## 2. HTTPS 붙이기
 
@@ -262,7 +290,8 @@ curl -fsSL -o .env https://raw.githubusercontent.com/<소유자>/<레포>/main/.
 
 | 변수 | 값 |
 | --- | --- |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | 1번에서 발급한 것 |
+| `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | 1번에서 발급한 것. 옛 이름 `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` 도 그대로 받습니다 |
+| `OIDC_ISSUER` | 공급자의 issuer. 비우면 Google 입니다 |
 | `OAUTH_REDIRECT_URI` | 승인된 리디렉션 URI 와 **글자 하나까지** 같아야 합니다 |
 | `JWT_SECRET` | `openssl rand -base64 48` (32 바이트보다 짧으면 서버가 뜨지 않습니다) |
 | `PUBLIC_BASE_URL` | 밖에서 보이는 주소 (2번 참조) |

@@ -31,7 +31,7 @@ Mac App Store를 쓰면 이 문제가 해결되지만, 조직 내부에서만 �
 | 배포 형태    | Docker 셀프호스팅. 서버 이미지는 CI 가 발행하고 운영은 그것을 받아 씀 (ADR-0021)      |
 | 서명 파이프라인 | 서버 + macOS 서명 워커(pull 방식). 서명 키는 워커 머신에만                 |
 | 기술 스택    | Swift 풀스택 (Vapor 서버 + Swift 워커 + SwiftUI 앱 + 공유 DTO 패키지) |
-| 인증       | Google OAuth (OIDC). 허용 도메인은 서버 설정. 다운로드도 로그인 필수         |
+| 인증       | 표준 OIDC. 공급자는 설정으로 정한다 (ADR-0047). 허용 도메인은 서버 설정. 다운로드도 로그인 필수 |
 | MVP 범위   | 코어 배포 루프 (로그인 → 업로드 → 자동 서명·공증 → 다운로드/설치)                |
 
 
@@ -239,9 +239,15 @@ SwiftUI 스토어 앱이 그대로 임포트해야 하기 때문입니다. HTTP 
 ### 5.1 인증
 
 - 표준 OIDC Authorization Code 플로우. 서버가 콜백을 받아 자체 세션 토큰(JWT) 발급
-- ID 토큰의 `hd`(hosted domain) claim과 이메일 도메인을 **서버 측에서** 허용 도메인
-설정과 대조합니다. 클라이언트 검증만으로는 우회할 수 있으므로 반드시 서버에서 봅니다.
-`email_verified`도 확인합니다
+- **공급자는 조직이 정합니다** (ADR-0047). `OIDC_ISSUER` 하나만 주면 나머지 주소는
+서버가 `{issuer}/.well-known/openid-configuration` 에서 읽어옵니다. Google Workspace,
+Microsoft Entra ID, Okta, Keycloak 이 같은 길로 지나갑니다. 비워두면 Google 입니다
+- ID 토큰은 공급자의 JWKS 로 서명을 검증하고 `iss` 와 `aud` 를 확인합니다
+- 이메일 도메인을 **서버 측에서** 허용 도메인 설정과 대조합니다. 클라이언트 검증만으로는
+우회할 수 있으므로 반드시 서버에서 봅니다. `email_verified`도 확인합니다.
+Google 에서는 `hd`(hosted domain) claim 까지 함께 봅니다. 그 claim 은 Google 고유라
+다른 공급자에서는 이메일 도메인만 남습니다
+- 사용자 식별자는 `issuer` + `sub` 입니다. `sub` 는 공급자 안에서만 유일합니다
 - 스토어 앱은 `ASWebAuthenticationSession`으로 같은 서버 플로우를 태웁니다
 (커스텀 URL 스킴 콜백)
 - 역할: `admin` / `developer` / `user`

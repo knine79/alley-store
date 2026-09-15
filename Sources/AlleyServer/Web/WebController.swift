@@ -37,7 +37,10 @@ public struct WebController: RouteCollection, Sendable {
             LoginContext(
                 page: try await request.pageContext(title: "로그인"),
                 allowedEmailDomains: settings.allowedEmailDomains,
-                authorizationPath: APIPath.googleAuthorize
+                authorizationPath: APIPath.googleAuthorize,
+                // 공급자가 Google 이 아닐 수 있다 (ADR-0047). 버튼에 "Google" 이
+                // 적혀 있는데 다른 곳으로 가면 사용자가 잘못 누른 줄 안다.
+                isGoogle: request.application.alleyConfig.oauth.isGoogle
             )
         ).get()
 
@@ -68,6 +71,12 @@ struct LoginContext: Encodable {
     var page: PageContext
     var allowedEmailDomains: [String]
     var authorizationPath: String
+    /// 로그인 버튼에 공급자 이름을 적을지.
+    ///
+    /// Google 만 이름을 적는다. 그 버튼은 사람들이 눈으로 찾는 것이고, 다른
+    /// 공급자는 조직마다 부르는 이름이 달라서(회사 계정, SSO, Okta…) 우리가
+    /// 정해줄 수 없다.
+    var isGoogle: Bool
 }
 
 extension HTTPCookies.Value {

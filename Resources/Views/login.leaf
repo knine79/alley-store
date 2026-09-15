@@ -7,7 +7,7 @@
     </p>
 
     <a class="button button-primary button-large" href="#(authorizationPath)">
-        Google 계정으로 로그인
+        #if(isGoogle):Google 계정으로 로그인#else:조직 계정으로 로그인#endif
     </a>
 
     #if(count(allowedEmailDomains) > 0):
