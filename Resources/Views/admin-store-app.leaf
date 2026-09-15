@@ -2,7 +2,7 @@
 #export("content"):
 <h1 class="page-title">스토어 앱</h1>
 <p class="page-lead">
-    이 스토어가 내놓는 앱입니다. 여기서 정한 값으로 서버가 번들을 지어 서명 워커에
+    이 스토어가 내놓는 앱입니다. 여기서 정한 값으로 서버가 번들을 빌드해 서명 워커에
     넘깁니다. 다른 앱과 달리 올릴 파일이 없습니다.
 </p>
 
@@ -14,7 +14,7 @@
 #endif
 #if(built):
 <p class="notice notice-ok">
-    <strong>#(built)</strong> 을 지어 서명 대기열에 넣었습니다. 서명·공증이 끝나면
+    <strong>#(built)</strong> 을 빌드해 서명 대기열에 넣었습니다. 서명·공증이 끝나면
     아래 표의 상태가 <code>배포 준비됨</code> 으로 바뀝니다. 그때 출시하면 사용자에게
     보입니다.
 </p>
@@ -94,7 +94,7 @@
 <section class="section">
     <h2 class="section-title">앱 아이콘</h2>
     <p class="section-lead">
-        지을 때 번들 안에 <code>AppIcon.icns</code> 로 들어갑니다. 파비콘과 로고는
+        빌드할 때 번들 안에 <code>AppIcon.icns</code> 로 들어갑니다. 파비콘과 로고는
         <a href="/admin/settings">스토어 설정</a> 에 있습니다.
     </p>
 
@@ -120,7 +120,8 @@
                     <form method="post" action="/admin/settings/branding/#(icon.kind)"
                           enctype="multipart/form-data">
                         <input type="hidden" name="returnPath" value="/admin/store-app">
-                        <input class="file" type="file" name="image" accept="image/png" required>
+                        <input class="file" type="file" name="image" accept="image/png" required
+                               data-image-rule="#(icon.rule)" data-image-label="#(icon.label)">
                         <button class="button" type="submit">올리기</button>
                     </form>
 
@@ -138,10 +139,10 @@
 </section>
 
 <section class="section">
-    <h2 class="section-title">바탕 번들</h2>
+    <h2 class="section-title">베이스 번들</h2>
     <p class="section-lead">
         CI 가 만든 브랜딩 없는 스토어 앱입니다. 제품 릴리스마다 한 번 올리면, 이름과
-        아이콘만 바꿔 다시 짓는 것은 여기서 버튼 하나입니다.
+        아이콘만 바꿔 다시 빌드하는 것은 여기서 버튼 하나입니다.
     </p>
 
     #if(base.isPresent):
@@ -180,9 +181,9 @@
 </section>
 
 <section class="section">
-    <h2 class="section-title">지어서 올리기</h2>
+    <h2 class="section-title">빌드해서 올리기</h2>
     <p class="section-lead">
-        위 값으로 번들을 지어 새 버전으로 등록하고 서명 워커에 넘깁니다. 빌드 번호는
+        위 값으로 번들을 빌드해 새 버전으로 등록하고 서명 워커에 넘깁니다. 빌드 번호는
         서버가 정해 번들과 스토어 양쪽에 같은 값을 씁니다.
     </p>
 
@@ -192,7 +193,7 @@
 
     <form method="post" action="/admin/store-app/build">
         <button class="button button-primary" type="submit" #if(!canBuild):disabled#endif>
-            지어서 올리기
+            빌드해서 올리기
         </button>
     </form>
 </section>
@@ -206,7 +207,7 @@
             <tr>
                 <th class="table-tight">버전</th>
                 <th class="table-tight">빌드</th>
-                <th class="table-tight">지은 때</th>
+                <th class="table-tight">빌드한 때</th>
                 <th class="table-fill">상태</th>
             </tr>
         </thead>
@@ -235,7 +236,7 @@
     </p>
     #endif
     #else:
-    <p class="empty">아직 지은 적이 없습니다.</p>
+    <p class="empty">아직 빌드한 적이 없습니다.</p>
     #endif
 </section>
 #endexport

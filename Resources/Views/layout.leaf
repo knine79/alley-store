@@ -44,5 +44,8 @@
 
     <!-- 날짜를 보는 사람의 타임존으로 다시 그린다. 없어도 서버가 쓴 값이 남는다. -->
     <script src="/local-time.js?v=#(page.assetVersion)" defer></script>
+    <!-- 고른 이미지가 조건에 맞는지 그 자리에서 알려준다. 없어도 서버가 같은 검사를
+         하므로 올리는 데 지장이 없다. -->
+    <script src="/image-check.js?v=#(page.assetVersion)" defer></script>
 </body>
 </html>

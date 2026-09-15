@@ -660,6 +660,9 @@ struct BrandingSlot: Encodable {
     var summary: String?
     /// `1024×1024 PNG 를 권합니다` 처럼 무엇을 올려야 하는지.
     var requirement: String
+    /// 브라우저가 고른 순간 검사할 수 있게 넘기는 규칙. `atLeast:32` 또는
+    /// `exactly:512,1024` 꼴이다 (`Public/image-check.js`).
+    var rule: String
 
     static func rows(
         for kinds: [BrandingAssetKind],
@@ -674,7 +677,8 @@ struct BrandingSlot: Encodable {
                 summary: asset.map {
                     "\($0.width)×\($0.height) · \(Self.readableSize($0.byteCount))"
                 },
-                requirement: "정사각형 PNG · \(kind.sizeRule.requirement)"
+                requirement: "정사각형 PNG · \(kind.sizeRule.requirement)",
+                rule: kind.sizeRule.scriptRule
             )
         }
     }

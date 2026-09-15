@@ -75,7 +75,8 @@
                     <form method="post" action="/admin/settings/branding/#(slot.kind)"
                           enctype="multipart/form-data">
                         <input type="hidden" name="returnPath" value="/admin/settings">
-                        <input class="file" type="file" name="image" accept="image/png" required>
+                        <input class="file" type="file" name="image" accept="image/png" required
+                               data-image-rule="#(slot.rule)" data-image-label="#(slot.label)">
                         <button class="button" type="submit">올리기</button>
                     </form>
 
