@@ -232,6 +232,33 @@ swift run alley-server serve
 `http://localhost:8080/auth/google` 을 브라우저로 열면 로그인이 시작됩니다.
 설정한 도메인 밖의 계정은 서버가 거부합니다.
 
+#### 로그인을 시험할 공급자가 없다면
+
+조직 계정 없이 로그인 경로 전체를 돌려보려면 Keycloak 을 함께 띄웁니다
+([ADR-0047](docs/adr/0047-any-oidc-provider.md)).
+
+```bash
+docker compose -f docker-compose.dev-oidc.yml up -d
+```
+
+`.env` 에 세 줄을 넣고 서버를 다시 띄웁니다.
+
+```bash
+OIDC_ISSUER=http://localhost:8081/realms/alley
+OIDC_CLIENT_ID=alley
+OIDC_CLIENT_SECRET=alley-dev-secret
+```
+
+로그인 화면에서 `alice / alice` 로 들어갑니다. `bob / bob` 도 있습니다. 관리자로
+보려면 `INITIAL_ADMIN_EMAILS` 에 `alice@example.com` 을 넣거나, 이미 만들어진 행의
+역할을 올리세요.
+
+**평문 http 인데 되는 것은 loopback 이라서** 입니다. 그 트래픽은 이 기계를 벗어나지
+않고, 브라우저도 `localhost` 를 보안 컨텍스트로 칩니다. loopback 이 아닌 http 주소는
+서버가 거절합니다.
+
+데이터를 볼륨에 두지 않아서 내리면 계정도 함께 사라집니다.
+
 `docker compose up` 으로 서버까지 컨테이너로 띄우면 compose 가 `DATABASE_URL` 과
 `S3_ENDPOINT` 를 컨테이너 이름으로 덮어쓰므로 `.env` 는 그대로 두면 됩니다. 그 이름은
 브라우저가 풀지 못하므로 `S3_PUBLIC_ENDPOINT` 도 함께 채워집니다 (로컬 기본값은

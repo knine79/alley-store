@@ -1,0 +1,28 @@
+# 로컬에서 로그인을 시험하는 OIDC 공급자.
+#
+# **운영에 쓰는 파일이 아닙니다.** Google 이나 조직의 IdP 없이 로그인 경로 전체를
+# 돌려보려고 두었습니다(ADR-0047). 기여자가 이 경로를 확인하려면 진짜 조직 계정이
+# 있어야 한다는 것은 요구할 수 없는 조건입니다.
+#
+#   docker compose -f docker-compose.dev-oidc.yml up -d
+#
+# 뜨고 나면 realm `alley` 에 사용자 하나(alice / alice)가 들어 있습니다. 서버 설정에
+# 아래 세 줄을 넣으면 그 계정으로 로그인됩니다.
+#
+#   OIDC_ISSUER=http://localhost:8081/realms/alley
+#   OIDC_CLIENT_ID=alley
+#   OIDC_CLIENT_SECRET=alley-dev-secret
+#
+# http 인데도 되는 것은 loopback 이기 때문입니다(`OIDCMetadata.isSafe`).
+# 데이터를 볼륨에 두지 않아서 내리면 전부 사라집니다. 그것이 의도입니다.
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: ["start-dev", "--import-realm", "--http-port=8081"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports:
+      - "127.0.0.1:8081:8081"
+    volumes:
+      - ./scripts/dev/keycloak-realm.json:/opt/keycloak/data/import/realm.json:ro
