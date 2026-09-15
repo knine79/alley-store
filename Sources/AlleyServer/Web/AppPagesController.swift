@@ -28,7 +28,6 @@ struct AppPagesController: RouteCollection, Sendable {
         pages.post(":appID", "deploy-tokens", use: issueDeployToken)
         pages.post(":appID", "deploy-tokens", ":tokenID", "revoke", use: revokeDeployToken)
         pages.get(":appID", "versions", ":versionID", "download", use: download)
-        pages.post(":appID", "feedback", use: submitFeedback)
         pages.post(":appID", "feedback", ":feedbackID", "delete", use: deleteFeedback)
         pages.post(":appID", "feed-tokens", use: issueFeedToken)
         pages.post(":appID", "feed-tokens", ":tokenID", "revoke", use: revokeFeedToken)
@@ -193,7 +192,6 @@ struct AppPagesController: RouteCollection, Sendable {
         on request: Request,
         issuedToken: IssuedDeployToken?,
         issuedFeed: IssuedFeedToken? = nil,
-        feedbackError: String? = nil,
         notificationError: String? = nil,
         feedError: String? = nil
     ) async throws -> View {
@@ -258,7 +256,6 @@ struct AppPagesController: RouteCollection, Sendable {
             )
             : [:]
 
-        let settings = try await request.storeSettings()
         // 이 앱이 스토어 앱인가. 스토어 앱만 웹에서 받을 수 있다 (이슈 #17).
         let isStoreApp = try await request.storeAppSettings().$app.id == app.requireID()
         // 올릴 권한이 있는 사람에게만 보여준다. 받는 사람에게는 쓸 데가 없는 숫자다.
@@ -284,13 +281,6 @@ struct AppPagesController: RouteCollection, Sendable {
             viewer: user,
             on: request
         )
-        // 받아본 버전에만 남길 수 있다. 남길 곳이 없으면 폼을 띄우지 않는다.
-        let reviewable = try await FeedbackPresentation.reviewableVersions(
-            ofApp: try app.requireID(),
-            viewer: user,
-            on: request.db
-        )
-
         return try await request.view.render(
             "app-detail",
             AppDetailContext(
@@ -320,9 +310,6 @@ struct AppPagesController: RouteCollection, Sendable {
                 feedError: feedError,
                 notificationTargets: targets,
                 feedback: feedback,
-                reviewableVersions: reviewable,
-                allowsAnonymousFeedback: settings.allowsAnonymousFeedback,
-                feedbackError: feedbackError,
                 notificationError: notificationError,
                 canUpload: canUpload,
                 canManage: canManage,
@@ -471,46 +458,12 @@ struct AppPagesController: RouteCollection, Sendable {
 
     // MARK: - 피드백
 
-    @Sendable
-    func submitFeedback(request: Request) async throws -> Response {
-        let user = try request.requireUser()
-        let app = try await request.findApp()
-        let values = try request.content.decode(FeedbackFormValues.self)
-
-        // 폼이 어느 버전에 남기는지 함께 보낸다. 주소에 버전을 박으면 고른 값과
-        // 어긋나고, 그걸 맞추려면 스크립트가 필요해진다.
-        guard let versionID = values.versionID.flatMap(UUID.init(uuidString:)),
-              let version = try await Version.query(on: request.db)
-                  .filter(\.$id == versionID)
-                  .filter(\.$app.$id == app.requireID())
-                  .with(\.$app)
-                  .first()
-        else {
-            throw Abort(.badRequest, reason: "어느 버전에 남길지 고르세요.")
-        }
-
-        do {
-            let entry = try await FeedbackSubmission.submit(
-                SubmitFeedbackRequest(
-                    rating: Int(values.rating ?? ""),
-                    body: values.body,
-                    // 체크박스는 꺼져 있으면 아예 전송되지 않는다.
-                    isAnonymous: values.isAnonymous != nil
-                ),
-                to: version,
-                by: user,
-                settings: try await request.storeSettings(),
-                on: request.db
-            )
-            await announce(entry, version: version, by: user, on: request)
-        } catch let abort as any AbortError where abort.status.code < 500 {
-            let view = try await renderDetail(
-                on: request, issuedToken: nil, feedbackError: abort.reason
-            )
-            return htmlResponse(view, status: abort.status)
-        }
-        return request.redirect(to: "/apps/\(version.$app.id.uuidString)#feedback")
-    }
+    // **남기는 경로는 여기 없다.** 피드백은 스토어 앱에서 받는다
+    // (`POST /api/v1/versions/:id/feedback`). 앱을 실제로 받아 쓴 사람만 남길 수
+    // 있어야 하는 값인데, 웹 콘솔에 오는 사람은 대개 올리는 쪽이다. 화면 하나에
+    // 남기는 칸과 읽는 칸이 같이 있으면 그 구분이 흐려진다.
+    //
+    // 지우는 것은 남는다. 도를 넘은 글을 앱을 맡은 사람이 내릴 수 있어야 한다.
 
     @Sendable
     func deleteFeedback(request: Request) async throws -> Response {
@@ -855,10 +808,7 @@ struct AppDetailContext: Encodable {
     var notificationTargets: [NotificationTargetDTO]
     var feedback: [FeedbackRow]
     /// 지금 사람이 피드백을 남길 수 있는 버전들. 받아본 것만 들어온다.
-    var reviewableVersions: [ReviewableVersion]
     /// 익명 체크박스를 띄울지. 스토어 설정에서 온다.
-    var allowsAnonymousFeedback: Bool
-    var feedbackError: String?
     var notificationError: String?
     var canUpload: Bool
     var canManage: Bool

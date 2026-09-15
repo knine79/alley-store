@@ -248,6 +248,20 @@ final class StoreModel {
         apps.filter { state(of: $0) == .updateAvailable }.count
     }
 
+    /// 목록에 보여줄 앱들. **스토어 앱 자신은 뺀다.**
+    ///
+    /// 자기 자신을 남겨두면 "설치됨" 으로 늘 한 칸을 차지하고, 새 버전이 있을 때는
+    /// 받기 버튼이 목록 안에 생긴다. 그런데 자기를 갈아끼우는 것은 다른 앱을 받는
+    /// 것과 달라서 - 앱이 종료되고 다시 뜬다 - 같은 자리에 같은 모양으로 두면 안
+    /// 된다. 그 일은 위쪽 배너가 맡는다(`selfUpdate`, `SelfUpdateBanner`).
+    ///
+    /// 번들 밖에서 실행할 때(`swift run`)는 번들 ID 가 없어 아무것도 빠지지 않는다.
+    /// 개발 중에는 그 편이 낫다.
+    var catalog: [AppDTO] {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return apps }
+        return apps.filter { $0.bundleID != bundleID }
+    }
+
     /// 스토어 앱 자신의 새 버전. 없으면 nil.
     ///
     /// 자기 자신도 이 스토어로 배포한다(설계 문서 §5.4). 다른 앱과 같은 방식으로

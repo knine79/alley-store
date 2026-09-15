@@ -131,10 +131,25 @@ code {
     font-weight: 600;
 }
 
+/* 조직이 올린 로고다. 작게 두면 무엇인지 알아볼 수 없고, 그러면 올린 보람이 없다.
+   껍데기의 세로 여백(12px×2)보다 크게 잡아 막대가 로고 높이에 맞춰 자라게 둔다. */
 .brand-logo {
-    width: 24px;
-    height: 24px;
+    width: 32px;
+    height: 32px;
     border-radius: var(--radius-small);
+    object-fit: contain;
+}
+
+/* 로그인 화면의 로고.
+ *
+ * 여기서는 크게 보여준다. 이 화면은 "어느 스토어에 들어가는가" 만 말하는 자리고,
+ * 로고가 그 답을 이름보다 빨리 준다. */
+.hero-logo {
+    display: block;
+    width: 96px;
+    height: 96px;
+    margin: 0 auto var(--space-4);
+    border-radius: var(--radius);
     object-fit: contain;
 }
 
@@ -496,14 +511,15 @@ a.tab:hover {
     letter-spacing: -0.01em;
 }
 
-/* 섹션 사이에 실선 하나. 배경이 같은 화면에서 제목만으로는 경계가 안 보인다. */
-.section + .section {
+/* 섹션 사이에 실선 하나. 배경이 같은 화면에서 제목만으로는 경계가 안 보인다.
+ *
+ * **위험 구역은 빼야 한다.** 그 상자는 자기 테두리를 네 면에 갖고 있어서, 여기서
+ * 위쪽에 실선을 하나 더 그으면 선이 겹친다. 예전에는 뒤에서 `border-top: 0` 으로
+ * 덮었는데 그러면 겹친 선이 아니라 **그 상자의 위쪽 테두리가 지워졌다.** 상자가
+ * 위만 뚫린 채로 보였다. 처음부터 적용하지 않는 것이 맞다. */
+.section + .section:not(.section-danger) {
     padding-top: var(--space-7);
     border-top: 1px solid var(--border);
-}
-
-.section + .section-danger {
-    border-top: 0;
 }
 
 /* ── 카드 목록 ───────────────────────────────────────────── */

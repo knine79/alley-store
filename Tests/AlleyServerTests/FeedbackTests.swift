@@ -357,45 +357,52 @@ struct RatingSummaryTests {
 
 @Suite("피드백 화면")
 struct FeedbackPageTests {
-    @Test("받아본 사람에게만 남기기 폼이 뜬다")
-    func formIsForDownloaders() async throws {
+    /// **웹 콘솔에는 남기는 자리가 없다.** 피드백은 앱을 실제로 받아 쓴 사람이
+    /// 스토어 앱에서 남기는 값인데, 웹 콘솔에 오는 사람은 대개 올리는 쪽이다.
+    /// 화면 하나에 남기는 칸과 읽는 칸이 같이 있으면 그 구분이 흐려진다.
+    @Test("웹 콘솔에는 남기는 폼도 경로도 없다")
+    func consoleHasNoSubmitPath() async throws {
         try await withMigratedApp { app in
             let setup = try await seedReleasedVersion(on: app)
-            let (_, strangerToken) = try await app.makeUser(
-                email: "stranger@example.com", role: .user
-            )
             let path = "/apps/\(setup.appID.uuidString)"
-
-            // 누를 수 없는 폼을 보여주고 거절하는 것보다 안 보이는 편이 낫다.
-            try await app.testing().test(
-                .GET, path, headers: .sessionCookie(strangerToken)
-            ) { #expect($0.body.string.contains("받아본 버전에만 남길 수 있습니다")) }
 
             try await app.testing().test(
                 .GET, path, headers: .sessionCookie(setup.readerToken)
-            ) { #expect($0.body.string.contains("남기기")) }
+            ) { response in
+                let html = response.body.string
+                #expect(!html.contains("남기기"))
+                #expect(html.contains("피드백은 스토어 앱에서 받습니다"))
+            }
+
+            // 화면에서 걷어내는 것만으로는 부족하다. 경로 자체가 없어야 한다.
+            try await app.testing().test(
+                .POST, "\(path)/feedback",
+                headers: .form(cookie: setup.readerToken),
+                beforeRequest: { request in
+                    try request.content.encode(
+                        ["versionID": setup.versionID.uuidString, "rating": "5"],
+                        as: .urlEncodedForm
+                    )
+                }
+            ) { #expect($0.status == .notFound) }
         }
     }
 
-    @Test("화면에서 남기면 목록에 뜬다")
-    func submitsFromConsole() async throws {
+    /// 남기는 길은 스토어 앱이 쓰는 API 다. 그 길로 들어온 것이 화면에 뜨는지 본다.
+    @Test("앱에서 남기면 콘솔 목록에 뜬다")
+    func showsFeedbackFromApp() async throws {
         try await withMigratedApp { app in
             let setup = try await seedReleasedVersion(on: app)
 
             try await app.testing().test(
-                .POST, "/apps/\(setup.appID.uuidString)/feedback",
+                .POST, "/api/v1/versions/\(setup.versionID.uuidString)/feedback",
                 headers: .form(cookie: setup.readerToken),
                 beforeRequest: { request in
                     try request.content.encode(
-                        [
-                            "versionID": setup.versionID.uuidString,
-                            "rating": "5",
-                            "body": "빠릅니다.",
-                        ],
-                        as: .urlEncodedForm
+                        SubmitFeedbackRequest(rating: 5, body: "빠릅니다.", isAnonymous: false)
                     )
                 }
-            ) { #expect($0.status == .seeOther) }
+            ) { #expect($0.status == .created) }
 
             try await app.testing().test(
                 .GET, "/apps/\(setup.appID.uuidString)",
@@ -416,19 +423,14 @@ struct FeedbackPageTests {
             let setup = try await seedReleasedVersion(on: app)
 
             try await app.testing().test(
-                .POST, "/apps/\(setup.appID.uuidString)/feedback",
+                .POST, "/api/v1/versions/\(setup.versionID.uuidString)/feedback",
                 headers: .form(cookie: setup.readerToken),
                 beforeRequest: { request in
                     try request.content.encode(
-                        [
-                            "versionID": setup.versionID.uuidString,
-                            "body": "느립니다.",
-                            "isAnonymous": "on",
-                        ],
-                        as: .urlEncodedForm
+                        SubmitFeedbackRequest(body: "느립니다.", isAnonymous: true)
                     )
                 }
-            ) { #expect($0.status == .seeOther) }
+            ) { #expect($0.status == .created) }
 
             try await app.testing().test(
                 .GET, "/apps/\(setup.appID.uuidString)",
@@ -563,15 +565,16 @@ struct AnonymousPolicyTests {
         }
     }
 
-    @Test("끄면 화면에서 체크박스가 사라진다")
-    func hidesCheckboxWhenDisabled() async throws {
+    /// **이 설정이 화면에 닿는 곳은 스토어 앱뿐이다.** 웹 콘솔에는 남기는 폼이
+    /// 없어서(위 `consoleHasNoSubmitPath`) 체크박스를 띄울 자리도 없다. 그래서
+    /// 여기서 확인할 것은 앱이 읽어가는 값이 설정을 따라 바뀌는가다.
+    @Test("스토어 앱이 볼 수 있게 meta 에 실린다")
+    func metaCarriesPolicy() async throws {
         try await withMigratedApp { app in
-            let setup = try await seedReleasedVersion(on: app)
-            let path = "/apps/\(setup.appID.uuidString)"
-
-            try await app.testing().test(
-                .GET, path, headers: .sessionCookie(setup.readerToken)
-            ) { #expect($0.body.string.contains("이름을 숨깁니다")) }
+            try await app.testing().test(.GET, APIPath.meta) { response in
+                let meta = try response.content.decode(StoreMeta.self)
+                #expect(meta.allowsAnonymousFeedback)
+            }
 
             let settings = try await StoreSettings.loadOrSeed(
                 on: app.db, seed: app.alleyConfig.store.seed, logger: app.logger
@@ -579,18 +582,9 @@ struct AnonymousPolicyTests {
             settings.allowsAnonymousFeedback = false
             try await settings.save(on: app.db)
 
-            try await app.testing().test(
-                .GET, path, headers: .sessionCookie(setup.readerToken)
-            ) { #expect(!$0.body.string.contains("이름을 숨깁니다")) }
-        }
-    }
-
-    @Test("스토어 앱이 볼 수 있게 meta 에 실린다")
-    func metaCarriesPolicy() async throws {
-        try await withMigratedApp { app in
             try await app.testing().test(.GET, APIPath.meta) { response in
                 let meta = try response.content.decode(StoreMeta.self)
-                #expect(meta.allowsAnonymousFeedback)
+                #expect(!meta.allowsAnonymousFeedback)
             }
         }
     }

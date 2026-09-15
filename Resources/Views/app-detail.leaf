@@ -192,67 +192,10 @@
         #endif
     </div>
 
-    #if(feedbackError):
-    <p class="notice notice-error">#(feedbackError)</p>
-    #endif
-
-    #if(count(reviewableVersions) == 0):
-    <p class="field-note">받아본 버전에만 남길 수 있습니다.</p>
-    #else:
-    <form class="form" method="post" action="/apps/#(app.id)/feedback">
-        <label class="field">
-            <span class="field-label">버전</span>
-            <select class="input select" name="versionID">
-                #for(version in reviewableVersions):
-                <option value="#(version.id)">#(version.name)</option>
-                #endfor
-            </select>
-            <span class="field-note">받아본 출시본만 고를 수 있습니다.</span>
-        </label>
-
-        <fieldset class="field choice-group">
-            <legend class="field-label">별점 <span class="field-optional">선택</span></legend>
-            <div class="rating-input">
-                <label class="rating-option">
-                    <input type="radio" name="rating" value="1"><span>1</span>
-                </label>
-                <label class="rating-option">
-                    <input type="radio" name="rating" value="2"><span>2</span>
-                </label>
-                <label class="rating-option">
-                    <input type="radio" name="rating" value="3"><span>3</span>
-                </label>
-                <label class="rating-option">
-                    <input type="radio" name="rating" value="4"><span>4</span>
-                </label>
-                <label class="rating-option">
-                    <input type="radio" name="rating" value="5"><span>5</span>
-                </label>
-            </div>
-        </fieldset>
-
-        <label class="field">
-            <span class="field-label">하고 싶은 말 <span class="field-optional">선택</span></span>
-            <textarea class="input" name="body" rows="3"
-                      placeholder="무엇이 좋았고 무엇이 불편했는지"></textarea>
-            <span class="field-note">별점과 글 중 하나는 있어야 합니다.</span>
-        </label>
-
-        #if(allowsAnonymousFeedback):
-        <label class="check">
-            <input type="checkbox" name="isAnonymous" value="on">
-            <span>
-                <span class="check-name">이름을 숨깁니다</span>
-                <span class="check-note">화면에 이름이 뜨지 않습니다. 서버에는 기록이 남습니다.</span>
-            </span>
-        </label>
-        #endif
-
-        <div class="form-actions">
-            <button class="button button-primary" type="submit">남기기</button>
-        </div>
-    </form>
-    #endif
+    <p class="field-note">
+        피드백은 스토어 앱에서 받습니다. 앱을 실제로 받아 쓴 사람만 남길 수 있어야
+        해서, 여기서는 읽기만 합니다.
+    </p>
 
     #if(count(feedback) == 0):
     <div class="empty">
