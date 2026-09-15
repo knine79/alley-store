@@ -31,12 +31,25 @@ struct PageContext: Encodable {
 struct StoreChrome: Encodable {
     var name: String
     var logoURL: String?
+    /// 브라우저 탭에 뜨는 그림. 안 올렸으면 nil 이고, 그때 레이아웃은 링크를 아예 넣지
+    /// 않는다. 없는 그림을 가리키는 `<link>` 는 요청 하나를 404 로 버리기만 한다.
+    var faviconURL: String?
     var accentColor: String?
 }
 
 extension StoreSettings {
-    func toChrome() -> StoreChrome {
-        StoreChrome(name: storeName, logoURL: logoURL, accentColor: accentColor)
+    /// - Parameter assets: 올라와 있는 브랜딩 이미지들.
+    ///
+    /// **올린 로고가 설정의 로고 주소를 이긴다.** 둘 다 있을 수 있는 이유는 주소
+    /// 입력이 먼저 있었기 때문이다. 올리는 쪽이 나중에 생긴 뜻이고, 무엇을 쓸지는
+    /// "마지막에 한 일" 로 정하는 것이 사람이 예상하는 순서다.
+    func toChrome(assets: [BrandingAssetKind: BrandingAsset]) -> StoreChrome {
+        StoreChrome(
+            name: storeName,
+            logoURL: assets[.logo]?.versionedPath ?? logoURL,
+            faviconURL: assets[.favicon]?.versionedPath,
+            accentColor: accentColor
+        )
     }
 }
 
@@ -55,7 +68,9 @@ extension Request {
         let user = auth.get(User.self)
         return PageContext(
             title: title ?? adminTab?.title,
-            store: try await storeSettings().toChrome(),
+            store: try await storeSettings().toChrome(
+                assets: try await BrandingAssetService.all(on: db)
+            ),
             user: user.flatMap { try? $0.toDTO() },
             isAdmin: user?.role.canAdminister ?? false,
             adminTabs: adminTab.map(AdminTab.links(current:)) ?? [],

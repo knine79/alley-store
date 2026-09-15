@@ -189,6 +189,13 @@ code {
     color: var(--text-muted);
 }
 
+/* 구역 제목 밑에 붙는 한 줄. 화면 제목 밑의 것보다 아래 간격이 좁다. 바로 아래에
+   그 구역의 내용이 이어져서, 화면 머리만큼 띄우면 제목에서 떨어져 보인다. */
+.section-lead {
+    margin: calc(var(--space-4) * -1) 0 var(--space-5);
+    color: var(--text-muted);
+}
+
 /* ── 관리자 화면 탭 ──────────────────────────────────────── */
 
 /* 관리자 화면 다섯 개가 늘 같은 탭을 쓴다. 목록과 순서는 `AdminTab` 에 있다.
@@ -1416,4 +1423,117 @@ textarea.input {
     margin-top: var(--space-1);
     font-size: var(--font-sm);
     color: var(--text-muted);
+}
+
+/* ── 브랜딩 이미지 ───────────────────────────────────────── */
+
+/* 파비콘·로고·앱 아이콘을 올리는 자리. 칸마다 폼이 따로다 (admin-settings.leaf 주석).
+ *
+ * 미리보기를 크게 두지 않는다. 여기서 보는 것은 "무엇이 올라가 있나" 이지 그림의
+ * 품질이 아니다. 품질은 실제로 쓰이는 자리 - 브라우저 탭, Dock - 에서만 판단된다. */
+.branding-grid {
+    display: grid;
+    gap: var(--space-4);
+}
+
+.branding-slot {
+    display: flex;
+    gap: var(--space-4);
+    align-items: flex-start;
+    padding: var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+/* 미리보기 자리는 그림이 있든 없든 같은 크기다. 올리고 나서 칸이 움직이면
+   무엇이 바뀐 건지 한눈에 안 들어온다. */
+.branding-preview {
+    flex: 0 0 auto;
+    width: 96px;
+    height: 96px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-small);
+    /* 투명한 PNG 가 흰 배경에 묻히는 것을 막는다. 격자 위에 놓으면 어디까지가
+       그림이고 어디부터가 배경인지 보인다. */
+    background-color: var(--bg);
+    background-image:
+        linear-gradient(45deg, var(--border) 25%, transparent 25%),
+        linear-gradient(-45deg, var(--border) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, var(--border) 75%),
+        linear-gradient(-45deg, transparent 75%, var(--border) 75%);
+    background-size: 12px 12px;
+    background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+    overflow: hidden;
+}
+
+.branding-preview img {
+    display: block;
+    width: 96px;
+    height: 96px;
+    object-fit: contain;
+}
+
+.branding-empty {
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+    /* 격자 위에 글자만 놓으면 읽기 어렵다. 바탕을 한 겹 깐다. */
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-small);
+    background: var(--surface);
+}
+
+.branding-body {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.branding-name {
+    margin: 0;
+    font-size: var(--font-base);
+    font-weight: 600;
+}
+
+.branding-summary {
+    margin: var(--space-1) 0 0;
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.branding-requirement {
+    margin: var(--space-2) 0 var(--space-3);
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+}
+
+.branding-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    align-items: center;
+}
+
+.branding-actions form {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+}
+
+/* 파일 입력의 생김새는 브라우저마다 다르고 바꿀 수 없다(.dropzone 주석 참고).
+   여기서는 덮지 않고 크기와 글자만 화면에 맞춘다. 칸 하나에 그림 하나라
+   끌어다 놓을 넓은 자리가 필요 없다. */
+.file {
+    max-width: 16rem;
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+}
+
+/* 좁은 화면에서는 미리보기를 위로 올린다. 96px 를 옆에 두면 본문이 너무 좁아진다. */
+@media (max-width: 30rem) {
+    .branding-slot {
+        flex-direction: column;
+    }
 }

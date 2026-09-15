@@ -19,6 +19,15 @@ struct AdminPagesController: RouteCollection, Sendable {
         pages.get(use: home)
         pages.get("settings", use: settingsForm)
         pages.post("settings", use: submitSettings)
+
+        // 이미지만 본문이 크다. 이 경로에만 따로 상한을 준다 (ADR-0016 과 같은 이유).
+        pages.on(
+            .POST,
+            "settings", "branding", ":kind",
+            body: .collect(maxSize: .init(value: BrandingAssetService.maximumUploadSize)),
+            use: submitBrandingAsset
+        )
+        pages.post("settings", "branding", ":kind", "remove", use: removeBrandingAsset)
         pages.get("users", use: userList)
         pages.post("users", ":userID", "role", use: submitRole)
         pages.get("workers", use: workerList)
@@ -49,7 +58,9 @@ struct AdminPagesController: RouteCollection, Sendable {
         let settings = try await request.storeSettings()
         return try await renderSettings(
             StoreSettingsFormValues(settings: settings),
-            error: nil,
+            // 이미지 업로드는 화면을 다시 그리지 않고 이유를 실어 돌려보낸다
+            // (`back(to:error:on:)` 참고).
+            error: request.query[String.self, at: "error"],
             // 저장하고 나면 같은 화면으로 돌아온다. 아무 표시가 없으면 저장이 됐는지
             // 알 수 없어서, 리다이렉트에 붙여둔 표시를 읽어 한 줄 띄운다.
             saved: request.query[String.self, at: "saved"] == "1",
@@ -94,10 +105,86 @@ struct AdminPagesController: RouteCollection, Sendable {
             StoreSettingsPageContext(
                 page: try await request.pageContext(adminTab: .settings),
                 values: values,
+                branding: BrandingSlot.rows(
+                    for: [.favicon, .logo],
+                    assets: try await BrandingAssetService.all(on: request.db)
+                ),
                 error: error,
                 saved: saved
             )
         ).get()
+    }
+
+    // MARK: - 브랜딩 이미지
+
+    /// 파비콘·로고를 올린다. 앱 아이콘은 스토어 앱 화면에서 같은 경로로 올린다.
+    @Sendable
+    func submitBrandingAsset(request: Request) async throws -> Response {
+        let admin = try request.requireAdmin()
+        let kind = try Self.requireBrandingKind(on: request)
+        let form = try request.content.decode(BrandingUploadForm.self)
+
+        guard let file = form.image, file.data.readableBytes > 0 else {
+            return Self.back(to: form.returnPath, error: "올릴 \(kind.label) 파일을 고르세요.", on: request)
+        }
+        do {
+            try await BrandingAssetService.accept(
+                kind: kind,
+                data: Data(buffer: file.data),
+                by: admin,
+                storage: request.application.artifactStorage,
+                on: request.db,
+                logger: request.logger
+            )
+        } catch let abort as any AbortError {
+            return Self.back(to: form.returnPath, error: abort.reason, on: request)
+        }
+        return Self.back(to: form.returnPath, error: nil, on: request)
+    }
+
+    @Sendable
+    func removeBrandingAsset(request: Request) async throws -> Response {
+        _ = try request.requireAdmin()
+        let kind = try Self.requireBrandingKind(on: request)
+        let form = try? request.content.decode(BrandingUploadForm.self)
+
+        try await BrandingAssetService.remove(
+            kind: kind,
+            storage: request.application.artifactStorage,
+            on: request.db,
+            logger: request.logger
+        )
+        return Self.back(to: form?.returnPath, error: nil, on: request)
+    }
+
+    private static func requireBrandingKind(on request: Request) throws -> BrandingAssetKind {
+        guard let raw = request.parameters.get("kind"),
+              let kind = BrandingAssetKind(rawValue: raw)
+        else {
+            throw Abort(.notFound, reason: "알 수 없는 브랜딩 이미지 종류입니다.")
+        }
+        return kind
+    }
+
+    /// 이미지를 올린 화면으로 돌려보낸다.
+    ///
+    /// 다른 폼처럼 화면을 다시 그리지 않는 이유는 **되살릴 값이 없어서**다. 사용자가
+    /// 고른 것은 파일 하나이고 브라우저는 그것을 돌려주지 않는다. 다시 그려도 빈 칸이
+    /// 나오므로, 돌아갈 자리에 이유만 실어 보낸다.
+    ///
+    /// 같은 폼이 스토어 설정과 스토어 앱 두 화면에 있어서 돌아갈 자리를 폼이 들고
+    /// 온다. 값이 없으면 스토어 설정으로 간다.
+    private static func back(to path: String?, error: String?, on request: Request) -> Response {
+        // 열린 리다이렉트를 만들지 않는다. 폼에 실려오는 값이라 손댈 수 있고,
+        // `//evil.example` 은 브라우저가 다른 호스트로 읽는다.
+        let target = (path?.hasPrefix("/") == true && path?.hasPrefix("//") == false)
+            ? path! : AdminTab.settings.path
+
+        var components = URLComponents(string: target) ?? URLComponents()
+        components.queryItems = [
+            error.map { URLQueryItem(name: "error", value: $0) } ?? URLQueryItem(name: "saved", value: "1")
+        ]
+        return request.redirect(to: components.string ?? AdminTab.settings.path)
     }
 
     // MARK: - 역할 관리
@@ -545,8 +632,58 @@ extension StoreSettingsFormValues: Content {}
 struct StoreSettingsPageContext: Encodable {
     var page: PageContext
     var values: StoreSettingsFormValues
+    var branding: [BrandingSlot]
     var error: String?
     var saved: Bool
+}
+
+/// 이미지 하나를 올리는 폼이 보내는 값.
+///
+/// 종류는 경로에 있고 여기 없다. 폼이 종류를 실어 보내면 화면의 어느 칸에서 올렸는지와
+/// 서버가 무엇으로 받았는지가 갈라질 수 있다.
+struct BrandingUploadForm: Content {
+    var image: File?
+    /// 끝나고 돌아갈 화면. 같은 폼을 두 화면이 쓴다.
+    var returnPath: String?
+}
+
+/// 화면에 그리는 이미지 칸 하나.
+///
+/// 올린 것이 있으면 미리보기와 크기를, 없으면 무엇을 올려야 하는지를 보여준다.
+/// 둘을 같은 타입으로 두는 이유는 템플릿에서 갈라 쓰지 않으려는 것이다.
+struct BrandingSlot: Encodable {
+    var kind: String
+    var label: String
+    /// 지금 올라와 있는 그림의 주소. 없으면 nil 이고 템플릿이 빈 자리를 그린다.
+    var imageURL: String?
+    /// `1024×1024 · 240KB` 처럼 한 줄로 적은 지금 상태.
+    var summary: String?
+    /// `1024×1024 PNG 를 권합니다` 처럼 무엇을 올려야 하는지.
+    var requirement: String
+
+    static func rows(
+        for kinds: [BrandingAssetKind],
+        assets: [BrandingAssetKind: BrandingAsset]
+    ) -> [BrandingSlot] {
+        kinds.map { kind in
+            let asset = assets[kind]
+            return BrandingSlot(
+                kind: kind.rawValue,
+                label: kind.label,
+                imageURL: asset?.versionedPath,
+                summary: asset.map {
+                    "\($0.width)×\($0.height) · \(Self.readableSize($0.byteCount))"
+                },
+                requirement: "정사각형 PNG · \(kind.sizeRule.requirement)"
+            )
+        }
+    }
+
+    private static func readableSize(_ bytes: Int) -> String {
+        bytes < 1024 * 1024
+            ? "\(max(1, bytes / 1024))KB"
+            : String(format: "%.1fMB", Double(bytes) / 1024 / 1024)
+    }
 }
 
 struct RoleFormValues: Codable {

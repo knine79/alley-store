@@ -24,7 +24,9 @@
             <input class="input" type="url" name="logoURL" value="#(values.logoURL)"
                    placeholder="https://example.com/logo.png"
                    autocapitalize="off" autocorrect="off" spellcheck="false">
-            <span class="field-note">비우면 이름만 표시됩니다.</span>
+            <span class="field-note">
+                비우면 이름만 표시됩니다. 아래에서 로고 파일을 올렸다면 그쪽이 쓰입니다.
+            </span>
         </label>
 
         <label class="field">
@@ -35,6 +37,62 @@
             <span class="field-note"><code>#RGB</code>, <code>#RRGGBB</code>, <code>#RRGGBBAA</code> 형식입니다.</span>
         </label>
     </fieldset>
+
+    <div class="form-actions">
+        <button class="button button-primary" type="submit">저장</button>
+    </div>
+</form>
+
+<!-- 이미지는 위 폼 밖에 둔다. 파일 입력이 섞이면 설정 한 칸을 고칠 때마다 폼 전체가
+     multipart 로 나가고, 그때 "이미지를 안 골랐다" 와 "지우겠다" 가 구분되지 않는다.
+     칸마다 폼을 따로 두면 누른 버튼이 곧 하려던 일이다. -->
+<section class="section">
+    <h2 class="section-title">브랜딩 이미지</h2>
+    <p class="section-lead">
+        올리는 즉시 바뀝니다. 스토어 앱 아이콘은
+        <a href="/admin/store-app">스토어 앱</a> 화면에 있습니다.
+    </p>
+
+    <div class="branding-grid">
+        #for(slot in branding):
+        <div class="branding-slot">
+            <div class="branding-preview">
+                #if(slot.imageURL):
+                <img src="#(slot.imageURL)" alt="#(slot.label) 미리보기" width="96" height="96">
+                #else:
+                <span class="branding-empty">없음</span>
+                #endif
+            </div>
+
+            <div class="branding-body">
+                <h3 class="branding-name">#(slot.label)</h3>
+                #if(slot.summary):
+                <p class="branding-summary">#(slot.summary)</p>
+                #endif
+                <p class="branding-requirement">#(slot.requirement)</p>
+
+                <div class="branding-actions">
+                    <form method="post" action="/admin/settings/branding/#(slot.kind)"
+                          enctype="multipart/form-data">
+                        <input type="hidden" name="returnPath" value="/admin/settings">
+                        <input class="file" type="file" name="image" accept="image/png" required>
+                        <button class="button" type="submit">올리기</button>
+                    </form>
+
+                    #if(slot.imageURL):
+                    <form method="post" action="/admin/settings/branding/#(slot.kind)/remove">
+                        <input type="hidden" name="returnPath" value="/admin/settings">
+                        <button class="button button-quiet" type="submit">지우기</button>
+                    </form>
+                    #endif
+                </div>
+            </div>
+        </div>
+        #endfor
+    </div>
+</section>
+
+<form class="form" method="post" action="/admin/settings">
 
     <fieldset class="form-group">
         <legend class="form-group-title">로그인 허용 범위</legend>

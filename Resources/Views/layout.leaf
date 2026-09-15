@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>#if(page.title):#(page.title) · #endif#(page.store.name)</title>
     <link rel="stylesheet" href="/console.css?v=#(page.assetVersion)">
+    #if(page.store.faviconURL):
+    <link rel="icon" type="image/png" href="#(page.store.faviconURL)">
+    <link rel="apple-touch-icon" href="#(page.store.faviconURL)">
+    #endif
     #if(page.store.accentColor):
     <style>:root { --accent: #(page.store.accentColor); }</style>
     #endif

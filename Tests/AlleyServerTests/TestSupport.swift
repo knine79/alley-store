@@ -153,7 +153,7 @@ final class FakeArtifactStorage: ArtifactStoring, @unchecked Sendable {
     struct Unavailable: Error {}
 
     private let lock = NSLock()
-    private var sizes: [String: Int64] = [:]
+    private var objects: [String: Data] = [:]
     /// 스토리지가 죽은 상황을 흉내낸다.
     var isUnavailable = false
 
@@ -164,10 +164,17 @@ final class FakeArtifactStorage: ArtifactStoring, @unchecked Sendable {
     }
 
     /// 누군가 이 키에 파일을 올렸다고 가정한다.
+    ///
+    /// 크기만 정하면 그만큼의 0바이트가 놓인다. 내용을 보는 시험(브랜딩 이미지,
+    /// 스토어 앱 번들 조립)은 `place(key:data:)` 로 진짜 바이트를 놓는다.
     func place(key: String, size: Int64 = 1024) {
+        place(key: key, data: Data(count: Int(size)))
+    }
+
+    func place(key: String, data: Data) {
         lock.lock()
         defer { lock.unlock() }
-        sizes[key] = size
+        objects[key] = data
     }
 
     func uploadURL(key: String) async throws -> PresignedURL {
@@ -195,12 +202,29 @@ final class FakeArtifactStorage: ArtifactStoring, @unchecked Sendable {
     private func size(of key: String) -> Int64? {
         lock.lock()
         defer { lock.unlock() }
-        return sizes[key]
+        return objects[key].map { Int64($0.count) }
     }
 
     func put(_ data: Data, to key: String, contentType: String?) async throws {
         if isUnavailable { throw Unavailable() }
-        place(key: key, size: Int64(data.count))
+        place(key: key, data: data)
+    }
+
+    func get(key: String, limit: Int) async throws -> Data {
+        if isUnavailable { throw Unavailable() }
+        guard let data = contents(of: key) else {
+            throw ArtifactStorage.StorageError.objectMissing(key: key)
+        }
+        guard data.count <= limit else {
+            throw ArtifactStorage.StorageError.tooLarge(key: key, limit: limit)
+        }
+        return data
+    }
+
+    private func contents(of key: String) -> Data? {
+        lock.lock()
+        defer { lock.unlock() }
+        return objects[key]
     }
 
     func delete(key: String) async throws {
@@ -212,7 +236,7 @@ final class FakeArtifactStorage: ArtifactStoring, @unchecked Sendable {
     private func forget(_ key: String) {
         lock.lock()
         defer { lock.unlock() }
-        sizes[key] = nil
+        objects[key] = nil
     }
 }
 

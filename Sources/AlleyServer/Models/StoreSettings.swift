@@ -90,10 +90,29 @@ extension StoreSettings {
     ///
     /// 커스텀 URL 스킴은 설정이 아니라 환경변수에서 온다. 스토어 앱의 `Info.plist`
     /// 에 박히는 값이라 서버 혼자 바꾸면 이미 깔린 앱의 로그인이 깨진다.
-    public func toMeta(callbackURLScheme: String) -> StoreMeta {
-        StoreMeta(
+    ///
+    /// - Parameters:
+    ///   - assets: 올라와 있는 브랜딩 이미지들. 올린 로고가 설정의 로고 주소를 이긴다.
+    ///   - publicBaseURL: 이미지 주소를 절대 주소로 만들 밑동. 스토어 앱은 화면에
+    ///     그리려고 이 주소를 그대로 여는데, 브라우저와 달리 "지금 보고 있는 서버"
+    ///     라는 기준이 없어서 상대 경로를 줄 수 없다.
+    public func toMeta(
+        callbackURLScheme: String,
+        assets: [BrandingAssetKind: BrandingAsset] = [:],
+        publicBaseURL: String = ""
+    ) -> StoreMeta {
+        // 설정값의 끝 슬래시는 사람마다 적는 방식이 다르다. 둘을 그냥 이으면
+        // `//branding/…` 이 되고, 그것도 대개는 열리지만 리다이렉트를 한 번 더 탄다.
+        let base = publicBaseURL.hasSuffix("/") ? String(publicBaseURL.dropLast()) : publicBaseURL
+
+        func absolute(_ asset: BrandingAsset?) -> String? {
+            asset.map { base + $0.versionedPath }
+        }
+
+        return StoreMeta(
             storeName: storeName,
-            logoURL: logoURL,
+            logoURL: absolute(assets[.logo]) ?? logoURL,
+            appIconURL: absolute(assets[.appIcon]),
             accentColor: accentColor,
             allowedEmailDomains: allowedEmailDomains,
             callbackURLScheme: callbackURLScheme,

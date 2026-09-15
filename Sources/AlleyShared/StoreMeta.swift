@@ -9,6 +9,12 @@ public struct StoreMeta: Codable, Sendable, Equatable {
     public var storeName: String
     /// 로고 이미지 URL. 없으면 클라이언트가 기본 심볼을 쓴다.
     public var logoURL: String?
+    /// 스토어 앱 아이콘 이미지 URL. 없으면 nil.
+    ///
+    /// 번들에 박힌 아이콘과 같은 그림이다. 앱이 이것을 따로 받아 쓰는 자리는 자기
+    /// 소개 화면처럼 "이 스토어의 앱" 을 보여주는 곳이고, Dock 아이콘은 번들 것이
+    /// 그대로 쓰인다. 둘이 어긋나지 않게 출처를 하나로 둔다.
+    public var appIconURL: String?
     /// 강조 색상 (`#RRGGBB`). 없으면 클라이언트 기본값.
     public var accentColor: String?
     /// 로그인 화면에 안내할 허용 도메인 목록. 실제 검증은 서버가 한다.
@@ -25,6 +31,7 @@ public struct StoreMeta: Codable, Sendable, Equatable {
     public init(
         storeName: String,
         logoURL: String? = nil,
+        appIconURL: String? = nil,
         accentColor: String? = nil,
         allowedEmailDomains: [String] = [],
         authorizationPath: String = APIPath.googleAuthorize,
@@ -34,6 +41,7 @@ public struct StoreMeta: Codable, Sendable, Equatable {
     ) {
         self.storeName = storeName
         self.logoURL = logoURL
+        self.appIconURL = appIconURL
         self.accentColor = accentColor
         self.allowedEmailDomains = allowedEmailDomains
         self.authorizationPath = authorizationPath
