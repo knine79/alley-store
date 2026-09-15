@@ -27,6 +27,7 @@ struct AppPagesController: RouteCollection, Sendable {
         pages.post(":appID", "delete", use: deleteApp)
         pages.post(":appID", "deploy-tokens", use: issueDeployToken)
         pages.post(":appID", "deploy-tokens", ":tokenID", "revoke", use: revokeDeployToken)
+        pages.get(":appID", "versions", ":versionID", "download", use: download)
         pages.post(":appID", "feedback", use: submitFeedback)
         pages.post(":appID", "feedback", ":feedbackID", "delete", use: deleteFeedback)
         pages.post(":appID", "feed-tokens", use: issueFeedToken)
@@ -258,6 +259,8 @@ struct AppPagesController: RouteCollection, Sendable {
             : [:]
 
         let settings = try await request.storeSettings()
+        // 이 앱이 스토어 앱인가. 스토어 앱만 웹에서 받을 수 있다 (이슈 #17).
+        let isStoreApp = try await request.storeAppSettings().$app.id == app.requireID()
         // 올릴 권한이 있는 사람에게만 보여준다. 받는 사람에게는 쓸 데가 없는 숫자다.
         var downloads: DownloadSummaryRow?
         var perVersion: [UUID: Int] = [:]
@@ -301,7 +304,11 @@ struct AppPagesController: RouteCollection, Sendable {
                     try VersionRow(
                         version: version,
                         report: reports[try version.requireID()],
-                        downloadCount: perVersion[try version.requireID()]
+                        downloadCount: perVersion[try version.requireID()],
+                        // 스토어 앱은 출시된 것만. 스토어 앱이 없는 사람에게 이것이
+                        // 유일한 길이라 출시 전 것까지 열 이유가 없다.
+                        isDownloadable: canUpload
+                            || (isStoreApp && version.state.isPubliclyVisible)
                     )
                 },
                 members: members,
@@ -325,6 +332,54 @@ struct AppPagesController: RouteCollection, Sendable {
                 removal: RemovalCostRow(try await AppRemoval.cost(of: app, on: request.db))
             )
         ).get()
+    }
+
+    /// 브라우저에서 바로 받는다 (이슈 #17).
+    ///
+    /// **스토어 앱의 부트스트랩을 위한 자리다.** 스토어 앱이 없는 사람에게는 스토어
+    /// 앱을 받을 길이 이것뿐이다. 그 밖의 앱은 스토어 앱으로 받는다. 스토어 앱이 하는
+    /// 검증 중 "이미 깔린 같은 앱과 서명한 팀이 같은가" 는 로컬을 알아야만 판단할 수
+    /// 있어서 웹에서는 재현할 수 없고, 웹 다운로드가 기본 경로가 되면 그 판단을
+    /// 건너뛰는 문이 된다.
+    ///
+    /// 이력은 API 경로와 같게 남긴다. 어디로 받았든 "누가 언제 무엇을 받았나" 는
+    /// 같은 표에 있어야 한다.
+    @Sendable
+    func download(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        let version = try await request.findVersion()
+
+        guard version.$app.id == (try app.requireID()) else {
+            throw Abort(.notFound, reason: "이 앱의 버전이 아닙니다.")
+        }
+
+        let canUpload = try await app.canUpload(user, on: request.db)
+        let isStoreApp = try await request.storeAppSettings().$app.id == app.requireID()
+
+        // 화면에 링크를 그리는 조건과 같아야 한다. 화면이 안 그린다고 경로가 막히는
+        // 것은 아니라서, 여는 조건은 여기가 기준이다.
+        guard canUpload || (isStoreApp && version.state.isPubliclyVisible) else {
+            throw Abort(
+                .forbidden,
+                reason: "이 앱은 스토어 앱에서 받습니다. 웹에서 바로 받을 수 있는 것은 스토어 앱 자신뿐입니다."
+            )
+        }
+        guard let artifact = version.bestArtifact else {
+            throw Abort(.conflict, reason: "이 버전에는 내려받을 파일이 없습니다.")
+        }
+
+        // URL 을 내주기 전에 남긴다. 나중에 남기면 URL 만 받고 이력이 빠지는 경로가 생긴다.
+        try await Download(
+            userID: try user.requireID(),
+            versionID: try version.requireID()
+        ).save(on: request.db)
+
+        let presigned = try await request.artifactStorage.downloadURL(key: artifact.storageKey)
+        request.logger.notice(
+            "웹에서 내려받습니다 [\(app.bundleID) \(version.shortVersion) (\(version.buildNumber)), 받는 사람: \(user.email)]"
+        )
+        return request.redirect(to: presigned.url)
     }
 
     @Sendable
@@ -694,11 +749,23 @@ struct VersionRow: Encodable {
     /// 비밀이 아니다. 앱이 실행되자마자 죽을 때 "권한이 붙긴 했나"를 화면에서 바로
     /// 확인할 수 있어야 한다. 안 올렸으면 nil 이고 화면에 아무것도 나오지 않는다.
     var entitlementKeys: String?
+    /// 브라우저에서 바로 받을 수 있는 자리. 없으면 링크를 그리지 않는다.
+    ///
+    /// **모든 앱에 주지 않는다** (이슈 #17). 스토어 앱은 검증하고 설치하는 코드를
+    /// 갖고 있는데 (`BundleVerifier`), 그중 "이미 깔린 같은 앱과 서명한 팀이 같은가"
+    /// 는 로컬에 무엇이 깔렸는지 알아야만 판단할 수 있어서 웹에서는 불가능하다.
+    /// 웹 다운로드를 기본 경로로 두면 그 판단을 건너뛰는 문이 된다.
+    ///
+    /// 그래서 두 경우만 연다. 스토어 앱 자신(그것이 없으면 아무것도 받을 수 없다)과,
+    /// 올릴 권한이 있는 사람(어차피 올린 파일을 갖고 있고 서명 결과를 확인할 이유가
+    /// 있다)이다.
+    var downloadPath: String?
 
     init(
         version: Version,
         report: SigningJob.Report? = nil,
-        downloadCount: Int? = nil
+        downloadCount: Int? = nil,
+        isDownloadable: Bool = false
     ) throws {
         self.id = try version.requireID().uuidString
         self.shortVersion = version.shortVersion
@@ -723,6 +790,13 @@ struct VersionRow: Encodable {
 
         let keys = version.entitlements.map(EntitlementsPlist.keys(of:)) ?? []
         self.entitlementKeys = keys.isEmpty ? nil : keys.joined(separator: "\n")
+
+        // 받을 파일이 실제로 있어야 한다. 눌러도 "파일이 없습니다" 가 나오는 링크는
+        // 없는 것만 못하다.
+        let hasArtifact = version.bestArtifact != nil
+        self.downloadPath = isDownloadable && hasArtifact
+            ? "/apps/\(version.$app.id.uuidString)/versions/\(self.id)/download"
+            : nil
     }
 }
 
