@@ -12,8 +12,12 @@ func routes(_ app: Application) throws {
     app.get(APIPath.meta.pathComponents) { req async throws -> StoreMeta in
         // 브랜딩과 허용 도메인은 관리자가 화면에서 바꾸므로 요청 시점에 읽는다.
         // 커스텀 URL 스킴만 환경변수에서 온다 (ADR-0011).
-        try await req.storeSettings()
-            .toMeta(callbackURLScheme: req.application.alleyConfig.store.callbackURLScheme)
+        let config = req.application.alleyConfig
+        return try await req.storeSettings().toMeta(
+            callbackURLScheme: config.store.callbackURLScheme,
+            assets: try await BrandingAssetService.all(on: req.db),
+            publicBaseURL: config.publicBaseURL
+        )
     }
 
     try app.register(collection: AuthController())
@@ -27,6 +31,9 @@ func routes(_ app: Application) throws {
     try app.register(collection: FeedbackController())
     try app.register(collection: NotificationController())
     try app.register(collection: AppcastController())
+
+    // 브랜딩 이미지. 로그인 전에도 보여야 해서 인증 밖에 둔다.
+    try app.register(collection: BrandingController())
 
     // 웹 콘솔. JSON API 보다 뒤에 등록해서 경로가 겹칠 때 API 가 이긴다.
     try app.register(collection: WebController())

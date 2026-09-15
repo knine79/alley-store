@@ -37,6 +37,17 @@ public protocol ArtifactStoring: Sendable {
     /// 왜 예외를 두었는지는 ADR-0016 에 있다.
     func put(_ data: Data, to key: String, contentType: String?) async throws
 
+    /// 스토리지에 있는 파일을 서버가 직접 읽는다.
+    ///
+    /// 두 자리에서 쓴다. 브랜딩 이미지를 화면에 내줄 때, 그리고 스토어 앱 번들을
+    /// 다시 쌀 때다. 둘 다 서버가 **내용을 알아야** 하는 경우라 presigned URL 로는
+    /// 대신할 수 없다.
+    ///
+    /// - Parameter limit: 이 바이트 수를 넘으면 읽지 않고 실패한다. 호출하는 쪽이
+    ///   자기가 다룰 수 있는 크기를 안다. 상한 없이 읽으면 잘못 올라온 파일 하나로
+    ///   서버 메모리가 넘어간다.
+    func get(key: String, limit: Int) async throws -> Data
+
     func delete(key: String) async throws
 }
 
@@ -64,6 +75,7 @@ public struct ArtifactStorage: ArtifactStoring {
         case invalidEndpoint(String)
         case objectMissing(key: String)
         case noCredentials
+        case tooLarge(key: String, limit: Int)
 
         public var description: String {
             switch self {
@@ -71,6 +83,8 @@ public struct ArtifactStorage: ArtifactStoring {
                 return "스토리지 엔드포인트를 URL 로 해석할 수 없습니다: \(value)"
             case .objectMissing(let key):
                 return "스토리지에 파일이 없습니다: \(key)"
+            case .tooLarge(let key, let limit):
+                return "파일이 서버가 읽을 수 있는 크기(\(limit / 1024 / 1024)MB)를 넘습니다: \(key)"
             case .noCredentials:
                 return """
                     스토리지 자격증명을 찾지 못했습니다. S3_ACCESS_KEY_ID 와 \
@@ -147,6 +161,19 @@ public struct ArtifactStorage: ArtifactStoring {
                     key: key
                 )
             )
+        }
+    }
+
+    public func get(key: String, limit: Int) async throws -> Data {
+        let output = try await explained { try await s3.getObject(.init(bucket: bucket, key: key)) }
+
+        // 상한을 넘으면 `collect` 가 던진다. 그 오류는 "너무 크다" 를 말해주지 않아서
+        // 여기서 바꿔 준다. 이 실패는 사람이 잘못된 파일을 올려서 나는 것이라,
+        // 무엇이 문제인지 화면까지 그대로 전해져야 한다.
+        do {
+            return Data(buffer: try await output.body.collect(upTo: limit))
+        } catch {
+            throw StorageError.tooLarge(key: key, limit: limit)
         }
     }
 
