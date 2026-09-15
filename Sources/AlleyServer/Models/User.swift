@@ -1,21 +1,29 @@
 import AlleyShared
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 /// 스토어 사용자.
 ///
-/// Google 계정과 1:1로 대응한다. 식별자는 이메일이 아니라 `googleSubject`(`sub` claim)다.
-/// 이메일은 조직 안에서 바뀔 수 있지만 `sub` 는 계정이 살아 있는 한 바뀌지 않는다.
+/// 로그인 공급자의 계정과 1:1로 대응한다. 식별자는 이메일이 아니라 `subject`(`sub`
+/// claim)다. 이메일은 조직 안에서 바뀔 수 있지만 `sub` 는 계정이 살아 있는 한 바뀌지
+/// 않는다.
+///
+/// **`sub` 는 공급자 안에서만 유일하다.** 그래서 `issuer` 와 짝으로 본다 (ADR-0047).
 public final class User: Model, @unchecked Sendable {
     public static let schema = "users"
 
     @ID(key: .id)
     public var id: UUID?
 
-    /// Google ID 토큰의 `sub` claim. 계정의 영구 식별자.
-    @Field(key: "google_subject")
-    public var googleSubject: String
+    /// 이 계정을 발급한 OIDC 공급자. `https://accounts.google.com` 처럼 생겼다.
+    @Field(key: "issuer")
+    public var issuer: String
+
+    /// ID 토큰의 `sub` claim. 그 공급자 안에서의 영구 식별자.
+    @Field(key: "subject")
+    public var subject: String
 
     /// 소문자로 정규화해 저장한다.
     @Field(key: "email")
@@ -43,14 +51,16 @@ public final class User: Model, @unchecked Sendable {
 
     public init(
         id: UUID? = nil,
-        googleSubject: String,
+        issuer: String = AppConfig.OAuthConfig.googleIssuer,
+        subject: String,
         email: String,
         name: String,
         avatarURL: String? = nil,
         role: UserRole
     ) {
         self.id = id
-        self.googleSubject = googleSubject
+        self.issuer = issuer
+        self.subject = subject
         self.email = email
         self.name = name
         self.avatarURL = avatarURL
@@ -117,5 +127,75 @@ public struct CreateUser: AsyncMigration {
 
     public func revert(on database: any Database) async throws {
         try await database.schema(User.schema).delete()
+    }
+}
+
+/// 계정을 Google 전용에서 어떤 OIDC 공급자든 받도록 넓힌다 (ADR-0047).
+///
+/// `google_subject` 를 `subject` 로 바꾸고 `issuer` 를 더한다. **이미 있는 행은 전부
+/// Google 에서 온 것이므로** 그 값으로 채운다. 그래야 지금 로그인해 있는 사람들이
+/// 다음 로그인에서 같은 계정을 찾는다.
+///
+/// 유일성도 옮긴다. `sub` 는 공급자 안에서만 유일해서 `issuer` 와 짝이어야 한다.
+///
+/// Fluent 의 스키마 빌더에는 컬럼 이름을 바꾸는 방법이 없어서 SQL 을 직접 쓴다.
+/// 이 레포가 이미 여러 자리에서 쓰는 길이다(`SigningJob`, `DownloadStats`).
+public struct AddIssuerToUser: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+
+        // 제약 이름은 Fluent 의 `unique(on:)` 이 붙인 것이다. 점과 `+` 가 들어 있어
+        // 따옴표로 감싼다. 값이 아니라 식별자라 바인딩으로 넘길 수 없어서 그대로
+        // 적는다. 바깥에서 오는 값이 없으므로 넣을 자리도 없다.
+        try await sql.raw("ALTER TABLE users RENAME COLUMN google_subject TO subject").run()
+        try await sql.raw(
+            """
+            ALTER TABLE users
+            ADD COLUMN issuer text NOT NULL
+            DEFAULT 'https://accounts.google.com'
+            """
+        ).run()
+        // 기본값은 채우기용이다. 남겨두면 앞으로 들어오는 행이 공급자를 안 적어도
+        // 조용히 Google 이 된다. 채웠으니 떼어낸다.
+        try await sql.raw("ALTER TABLE users ALTER COLUMN issuer DROP DEFAULT").run()
+
+        try await sql.raw(
+            #"ALTER TABLE users DROP CONSTRAINT IF EXISTS "uq:users.google_subject""#
+        ).run()
+        try await sql.raw(
+            #"""
+            ALTER TABLE users
+            ADD CONSTRAINT "uq:users.issuer+users.subject" UNIQUE (issuer, subject)
+            """#
+        ).run()
+    }
+
+    public func revert(on database: any Database) async throws {
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+        try await sql.raw(
+            #"ALTER TABLE users DROP CONSTRAINT IF EXISTS "uq:users.issuer+users.subject""#
+        ).run()
+        try await sql.raw("ALTER TABLE users DROP COLUMN issuer").run()
+        try await sql.raw("ALTER TABLE users RENAME COLUMN subject TO google_subject").run()
+        try await sql.raw(
+            #"""
+            ALTER TABLE users
+            ADD CONSTRAINT "uq:users.google_subject" UNIQUE (google_subject)
+            """#
+        ).run()
+    }
+}
+
+public enum MigrationError: Error, CustomStringConvertible {
+    case needsSQLDatabase
+
+    public var description: String {
+        "이 마이그레이션은 SQL 데이터베이스에서만 돌릴 수 있습니다."
     }
 }

@@ -131,6 +131,9 @@ private func configureMigrations(_ app: Application) {
 
     // 스토어 앱을 무엇으로 지을지 (ADR-0046).
     app.migrations.add(CreateStoreAppSettings())
+
+    // 로그인 공급자를 Google 에서 표준 OIDC 로 넓힌다 (ADR-0047).
+    app.migrations.add(AddIssuerToUser())
 }
 
 /// 미들웨어 스택.

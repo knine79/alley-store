@@ -264,7 +264,7 @@ extension Application {
         name: String? = nil
     ) async throws -> (user: User, token: String) {
         let user = User(
-            googleSubject: "sub-\(email)",
+            subject: "sub-\(email)",
             email: email,
             name: name ?? email,
             role: role
