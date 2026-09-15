@@ -94,8 +94,53 @@ struct StoreAppBundleRewriterTests {
         let output = try StoreAppBundleRewriter.rewrite(baseZip: Self.baseZip(), branding: Self.branding())
         let names = try ZipArchive.entries(in: output).map(\.name)
 
-        #expect(names.contains("우리 스토어.app/Contents/MacOS/우리 스토어"))
+        // 폴더는 적은 이름, 실행 파일은 ASCII 로 바뀐 이름이다(아래 시험 참고).
+        #expect(names.contains("우리 스토어.app/Contents/MacOS/AlleyStore"))
         #expect(!names.contains { $0.contains("Alley Store") })
+    }
+
+    /// **비ASCII 실행 파일 이름은 `codesign --verify --deep --strict` 가 거절한다.**
+    ///
+    /// `.app` 폴더 이름은 한글이어도 괜찮고 실행 파일만 그렇다. 실패는 서명이 끝난
+    /// 뒤에야 `a sealed resource is missing or invalid` 한 줄로 나와서, 이름이
+    /// 원인이라는 것을 짐작할 수 없다. 설치 가이드가 한글 이름을 예시로 들고 있어서
+    /// 그 길을 그대로 밟는 조직이 나온다.
+    ///
+    /// 진짜 `codesign` 으로 확인하는 것은 `StoreAppBundleRealZipTests` 다. 여기서는
+    /// 규칙만 본다.
+    @Test(
+        "실행 파일 이름은 ASCII 로 만든다",
+        arguments: [
+            // ASCII 이름은 그대로 둔다. 이미 그 이름으로 내보낸 조직의 번들 구조를
+            // 이유 없이 바꾸지 않는다. 공백은 ASCII 라 문제가 없다.
+            ("Alley Store", "Alley Store"),
+            ("Our Store 2", "Our Store 2"),
+            // 한글에서는 남는 것이 없어 제품 이름으로 떨어진다.
+            ("우리 스토어", "AlleyStore"),
+            ("   ", "AlleyStore"),
+            // 섞여 있으면 ASCII 글자·숫자만 남긴다.
+            ("한글Store", "Store"),
+            ("Café Store", "CafStore"),
+        ]
+    )
+    func derivesASCIIExecutableName(_ pair: (String, String)) {
+        #expect(StoreAppBundleRewriter.executableName(for: pair.0) == pair.1)
+    }
+
+    /// 사람에게 보이는 이름은 적은 그대로여야 한다. 바꾸는 것은 실행 파일 이름뿐이다.
+    @Test("보이는 이름은 그대로 두고 실행 파일만 바꾼다")
+    func keepsDisplayName() throws {
+        let output = try StoreAppBundleRewriter.rewrite(
+            baseZip: Self.baseZip(), branding: Self.branding(appName: "우리 스토어")
+        )
+        let entries = try ZipArchive.entries(in: output)
+        let plist = try #require(entries.first { $0.name.hasSuffix("Info.plist") })
+        let text = String(decoding: plist.compressedData, as: UTF8.self)
+
+        #expect(text.contains("<key>CFBundleDisplayName</key>"))
+        #expect(text.contains("<string>우리 스토어</string>"))
+        #expect(text.contains("<string>AlleyStore</string>"))
+        #expect(entries.contains { $0.name.hasPrefix("우리 스토어.app/") })
     }
 
     /// 실행 파일 이름은 `CFBundleExecutable` 과 같아야 한다. 어긋나면 macOS 가
@@ -111,7 +156,7 @@ struct StoreAppBundleRewriterTests {
         let text = String(decoding: plist.compressedData, as: UTF8.self)
         #expect(text.contains("<key>CFBundleExecutable</key>"))
         #expect(text.contains("<string>우리 스토어</string>"))
-        #expect(entries.contains { $0.name == "우리 스토어.app/Contents/MacOS/우리 스토어" })
+        #expect(entries.contains { $0.name == "우리 스토어.app/Contents/MacOS/AlleyStore" })
     }
 
     /// 파일을 하나라도 바꾸면 임시 서명은 이미 틀린 것이다. 남겨두면 "서명이 깨진
@@ -123,11 +168,38 @@ struct StoreAppBundleRewriterTests {
         #expect(!names.contains { $0.contains("_CodeSignature") })
     }
 
+    /// `ditto -c -k` 를 `--sequesterRsrc` 없이 돌리면 `._이름` 이 딸려 들어오고,
+    /// `zip`(1) 은 `__MACOSX/` 를 넣는다. 그대로 옮기면 `codesign` 이
+    /// `unsealed contents present in the bundle root` 로 거절한다.
+    @Test("맥이 끼워 넣는 곁다리 파일을 버린다")
+    func dropsAppleDoubleJunk() throws {
+        let messy = ZipArchive.write([
+            ZipArchive.stored(name: "Alley Store.app/", data: Data(), mode: 0o755),
+            ZipArchive.stored(
+                name: "Alley Store.app/Contents/MacOS/Alley Store",
+                data: Data("실행 파일".utf8), mode: 0o755
+            ),
+            ZipArchive.stored(name: "Alley Store.app/Contents/Info.plist", data: Data("x".utf8)),
+            ZipArchive.stored(
+                name: "Alley Store.app/Contents/MacOS/._Alley Store", data: Data("확장 속성".utf8)
+            ),
+            ZipArchive.stored(name: "Alley Store.app/Contents/._MacOS", data: Data("확장 속성".utf8)),
+            ZipArchive.stored(name: "__MACOSX/Alley Store.app/._Contents", data: Data("확장 속성".utf8)),
+        ])
+
+        let output = try StoreAppBundleRewriter.rewrite(baseZip: messy, branding: Self.branding())
+        let names = try ZipArchive.entries(in: output).map(\.name)
+
+        #expect(!names.contains { $0.contains("__MACOSX") })
+        #expect(!names.contains { ($0.split(separator: "/").last ?? "").hasPrefix("._") })
+        #expect(names.contains("우리 스토어.app/Contents/MacOS/AlleyStore"))
+    }
+
     @Test("실행 파일 내용과 권한을 그대로 옮긴다")
     func copiesExecutableUntouched() throws {
         let output = try StoreAppBundleRewriter.rewrite(baseZip: Self.baseZip(), branding: Self.branding())
         let binary = try #require(
-            try ZipArchive.entries(in: output).first { $0.name.hasSuffix("MacOS/우리 스토어") }
+            try ZipArchive.entries(in: output).first { $0.name.hasSuffix("MacOS/AlleyStore") }
         )
         #expect(binary.compressedData == Data("실행 파일이라고 치자".utf8))
         #expect((binary.externalAttributes >> 16) & 0o777 == 0o755)
