@@ -36,6 +36,11 @@ func routes(_ app: Application) throws {
     // 브랜딩 이미지. 로그인 전에도 보여야 해서 인증 밖에 둔다.
     try app.register(collection: BrandingController())
 
+    // 스토어 앱을 받는 공개 페이지 (ADR-0049). 받으러 온 사람에게 로그인을
+    // 요구하지 않는다. 콘솔(`/apps`)보다 먼저 등록해서 경로가 갈리는 자리를
+    // 남기지 않는다.
+    try app.register(collection: StoreAppGetController())
+
     // 웹 콘솔. JSON API 보다 뒤에 등록해서 경로가 겹칠 때 API 가 이긴다.
     try app.register(collection: WebController())
     try app.register(collection: AppPagesController())

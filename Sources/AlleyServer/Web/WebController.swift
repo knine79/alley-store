@@ -40,7 +40,8 @@ public struct WebController: RouteCollection, Sendable {
                 authorizationPath: APIPath.googleAuthorize,
                 // 공급자가 Google 이 아닐 수 있다 (ADR-0047). 버튼에 "Google" 이
                 // 적혀 있는데 다른 곳으로 가면 사용자가 잘못 누른 줄 안다.
-                isGoogle: request.application.alleyConfig.oauth.isGoogle
+                isGoogle: request.application.alleyConfig.oauth.isGoogle,
+                storeAppPath: StoreAppGetController.path
             )
         ).get()
 
@@ -77,6 +78,11 @@ struct LoginContext: Encodable {
     /// 공급자는 조직마다 부르는 이름이 달라서(회사 계정, SSO, Okta…) 우리가
     /// 정해줄 수 없다.
     var isGoogle: Bool
+    /// 스토어 앱을 받는 공개 페이지의 경로 (ADR-0049).
+    ///
+    /// 앱을 받으러 왔는데 로그인 화면에 떨어진 사람이 있다. 로그인해서 콘솔에
+    /// 들어가봐야 거기는 앱을 올리는 사람이 보는 화면이다.
+    var storeAppPath: String
 }
 
 extension HTTPCookies.Value {

@@ -94,7 +94,12 @@ struct AppPagesController: RouteCollection, Sendable {
                 name: storeApp.name,
                 version: "\(released.shortVersion) (빌드 \(released.buildNumber))",
                 downloadPath:
-                    "/apps/\(storeAppID.uuidString)/versions/\(versionID.uuidString)/download"
+                    "/apps/\(storeAppID.uuidString)/versions/\(versionID.uuidString)/download",
+                // 받으러 온 사람에게 알려줄 주소 (ADR-0049). 이 화면은 앱을 올리는
+                // 사람이 보는 곳이라, 여기 적힌 콘솔 주소를 사내 문서에 그대로
+                // 옮기면 받으러 온 사람이 개발자용 화면에 떨어진다.
+                publicURL: request.application.alleyConfig.publicBaseURL
+                    + "/" + StoreAppGetController.path
             )
         }
 
@@ -837,6 +842,8 @@ struct StoreAppBootstrapRow: Encodable {
     var name: String
     var version: String
     var downloadPath: String
+    /// 받으러 온 사람에게 알려줄 공개 주소 (ADR-0049).
+    var publicURL: String
 }
 
 struct AppFormContext: Encodable {

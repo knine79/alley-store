@@ -18,6 +18,12 @@
 <p class="notice notice-hint">
     <strong>#(storeApp.name)</strong> 으로 앱을 받고 업데이트합니다. 아직 없다면
     <a href="#(storeApp.downloadPath)">여기서 받으세요</a> (#(storeApp.version)).
+    <!-- 이 화면은 앱을 올리는 사람이 보는 곳이다. 받으러 오는 사람에게 콘솔
+         주소를 알려주면 개발자용 화면에 먼저 떨어지므로, 사내 문서에 적을
+         주소를 따로 내준다 (ADR-0049). -->
+    <br>
+    다른 사람에게는 로그인 없이 받는
+    <a href="#(storeApp.publicURL)"><code>#(storeApp.publicURL)</code></a> 를 알려주세요.
 </p>
 #endif
 
