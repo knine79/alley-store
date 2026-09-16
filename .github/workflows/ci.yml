@@ -139,7 +139,10 @@ jobs:
     runs-on: ubuntu-latest
     # 테스트를 통과하지 못한 커밋의 이미지가 레지스트리에 남지 않게 한다.
     # 이미지에 들어가는 것은 서버뿐이라 macOS 잡은 기다리지 않는다.
-    needs: [build-and-test]
+    # macOS 잡이 만든 스토어 앱 번들을 이미지에 넣는다 (ADR-0048). 서버는 macOS
+    # 바이너리를 컴파일하지 못하므로 같은 릴리스의 맥 잡이 만든 것을 받아 넣는다.
+    # 그래야 서버 버전과 스토어 앱 제품 버전이 어긋날 수 없다.
+    needs: [build-and-test, build-macos]
     permissions:
       contents: read
       # 레지스트리 쓰기는 이 잡에만 준다.
@@ -185,6 +188,15 @@ jobs:
 
       - uses: actions/checkout@v4
         if: steps.need.outputs.build == 'true'
+
+      # 비어 있으면 서버는 예전처럼 "번들이 없습니다" 로 굴러간다. 이미지가 깨지지는
+      # 않는다.
+      - name: 스토어 앱 번들 받기
+        if: steps.need.outputs.build == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: alley-store-app-unsigned
+          path: Resources/StoreAppBundle
 
       - uses: docker/setup-buildx-action@v3
         if: steps.need.outputs.build == 'true'

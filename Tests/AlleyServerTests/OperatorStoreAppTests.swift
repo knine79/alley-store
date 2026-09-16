@@ -147,6 +147,7 @@ struct OperatorStoreAppTests {
                 by: admin,
                 storage: storage,
                 on: app.db,
+                directory: app.directory,
                 logger: app.logger
             )
 
@@ -171,7 +172,7 @@ struct OperatorStoreAppTests {
                 .POST, APIPath.operatorStoreAppBuild, headers: .bearer(value)
             ) { response in
                 #expect(response.status == .badRequest)
-                #expect(response.body.string.contains("스토어 앱 번들을 먼저 올려주세요"))
+                #expect(response.body.string.contains("빌드할 번들이 없습니다"))
             }
         }
     }

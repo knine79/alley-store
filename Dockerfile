@@ -32,7 +32,8 @@ RUN cp "$(swift build --package-path /build -c release --show-bin-path)/alley-se
     && cp -R /build/Public ./Public \
     && mkdir -p ./Resources \
     && cp -R /build/Resources/Views ./Resources/Views \
-    && cp -R /build/Resources/DefaultBranding ./Resources/DefaultBranding
+    && cp -R /build/Resources/DefaultBranding ./Resources/DefaultBranding \
+    && cp -R /build/Resources/StoreAppBundle ./Resources/StoreAppBundle
 
 # ==============================================================================
 # 실행 단계

@@ -93,7 +93,9 @@ struct StoreAppPagesTests {
             try await app.testing().test(
                 .GET, "/admin/store-app", headers: .sessionCookie(token)
             ) { response in
-                #expect(response.body.string.contains("아직 안 올렸습니다"))
+                // 서버 이미지에 스토어 앱이 없는 배포다 (시험은 그 상태로 돈다).
+                // 빌드할 것이 없다는 사실과 무엇을 하면 되는지를 함께 말해야 한다.
+                #expect(response.body.string.contains("이 서버 이미지에 스토어 앱이 들어 있지 않습니다"))
             }
         }
     }

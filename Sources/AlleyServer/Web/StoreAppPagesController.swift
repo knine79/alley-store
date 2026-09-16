@@ -53,6 +53,9 @@ struct StoreAppPagesController: RouteCollection, Sendable {
         let settings = try await request.storeAppSettings()
         let assets = try await BrandingAssetService.all(on: request.db)
         let shipped = try await settings.hasShipped(on: request.db)
+        let base = StoreAppBuildService.baseBundle(
+            settings: settings, in: request.application.directory
+        )
 
         var rows: [StoreAppBuildRow] = []
         if let appID = settings.$app.id {
@@ -73,11 +76,11 @@ struct StoreAppPagesController: RouteCollection, Sendable {
                 page: try await request.pageContext(adminTab: .storeApp),
                 values: values ?? StoreAppFormValues(settings: settings),
                 icon: BrandingSlot.rows(for: [.appIcon], assets: assets).first,
-                base: StoreAppBaseBundle(settings: settings),
+                base: StoreAppBaseBundle(settings: settings, bundled: base),
                 serverURL: request.application.alleyConfig.publicBaseURL,
                 isLocked: shipped,
-                blockers: settings.missingPieces(),
-                canBuild: settings.baseBundleKey != nil && !settings.bundleID.isEmpty,
+                blockers: base == nil ? StoreAppSettings.noBundleBlockers : [],
+                canBuild: base != nil && !settings.bundleID.isEmpty,
                 builds: rows,
                 error: error,
                 saved: saved,
@@ -206,6 +209,7 @@ struct StoreAppPagesController: RouteCollection, Sendable {
                 by: admin,
                 storage: request.application.artifactStorage,
                 on: request.db,
+                directory: request.application.directory,
                 logger: request.logger
             )
             return request.redirect(
@@ -310,18 +314,28 @@ struct StoreAppBaseBundleForm: Content {
     var bundle: File?
 }
 
-/// 올라와 있는 베이스 번들 한 줄.
+/// 무엇으로 빌드하는지 한 줄.
+///
+/// 사람이 올린 것이 없으면 서버 이미지에 딸려 온 것을 쓴다 (ADR-0048). 그때도
+/// "없습니다" 라고 적으면 안 된다. 빌드 버튼은 켜져 있는데 화면은 없다고 말하는
+/// 상태가 된다.
 struct StoreAppBaseBundle: Encodable {
     var isPresent: Bool
     var version: String?
     var summary: String?
+    /// 사람이 올린 것인가. 아니면 제품에 들어 있던 것이다.
+    var isUploaded: Bool
 
-    init(settings: StoreAppSettings) {
-        self.isPresent = settings.baseBundleKey != nil
-        self.version = settings.baseBundleVersion
-        if let size = settings.baseBundleSize {
+    init(settings: StoreAppSettings, bundled: StoreAppBuildService.BaseBundle?) {
+        self.isPresent = bundled != nil
+        self.version = bundled?.version
+        self.isUploaded = bundled?.isUploaded ?? false
+
+        if bundled?.isUploaded == true, let size = settings.baseBundleSize {
             let megabytes = Double(size) / 1024 / 1024
             self.summary = String(format: "%.1fMB", megabytes)
+        } else if bundled != nil {
+            self.summary = "이 서버에 들어 있는 것"
         }
     }
 }

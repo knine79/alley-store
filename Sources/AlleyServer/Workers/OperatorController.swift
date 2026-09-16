@@ -91,6 +91,7 @@ public struct OperatorController: RouteCollection, Sendable {
             by: token.createdBy,
             storage: request.application.artifactStorage,
             on: request.db,
+            directory: request.application.directory,
             logger: request.logger
         )
         request.logger.notice(
