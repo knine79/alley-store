@@ -28,6 +28,22 @@
         return null;
     }
 
+    /*
+     * 글자 칸에 값을 써넣는다.
+     *
+     * **이벤트를 함께 낸다.** 스크립트가 `value` 를 바꾸는 것만으로는 아무 이벤트도
+     * 나지 않는다. 그래서 팔레트로 색을 골라도 그 칸을 지켜보는 다른 코드는 아무
+     * 일도 없었던 것으로 안다. 실제로 저장 버튼이 잠긴 채였다(`dirty-guard.js`).
+     *
+     * 사람이 손으로 적은 것과 같은 자리에 놓는 것이 맞다. 고르개로 고르든 팔레트를
+     * 누르든 사람이 그 칸을 고친 것이다.
+     */
+    function write(target, value) {
+        target.value = value;
+        target.dispatchEvent(new Event("input", { bubbles: true }));
+        target.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
     function setUp(field) {
         var target = document.getElementById(field.dataset.colorFor);
         if (!target) return;
@@ -70,7 +86,7 @@
 
         if (picker) {
             picker.addEventListener("input", function () {
-                target.value = picker.value;
+                write(target, picker.value);
                 preview(picker.value);
             });
         }
@@ -87,7 +103,7 @@
 
         swatches.forEach(function (swatch) {
             swatch.addEventListener("click", function () {
-                target.value = swatch.dataset.color;
+                write(target, swatch.dataset.color);
                 syncPicker();
                 preview(swatch.dataset.color);
             });

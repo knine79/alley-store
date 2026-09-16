@@ -25,7 +25,8 @@
                 <span class="table-note">#(person.email)</span>
             </td>
             <td class="table-tight">
-                <form class="row-form" method="post" action="/admin/users/#(person.id)/role">
+                <form class="row-form" method="post" action="/admin/users/#(person.id)/role"
+                      data-guard-dirty>
                     <select class="input select" name="role" aria-label="#(person.email) 의 역할">
                         #for(option in roles):
                         <option value="#(option.value)"#if(option.value == person.role): selected#endif>#(option.name)</option>

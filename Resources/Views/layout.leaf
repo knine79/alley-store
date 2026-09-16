@@ -55,5 +55,8 @@
     <!-- 한 번만 보여줄 표시를 주소에서 걷어낸다. 없으면 새로고침할 때마다
          "저장했습니다" 가 다시 뜬다. -->
     <script src="/flash.js?v=#(page.assetVersion)" defer></script>
+    <!-- 바뀐 것이 없으면 저장 버튼을 잠근다. 없어도 저장은 되고, 같은 값을 다시
+         쓸 뿐이다. -->
+    <script src="/dirty-guard.js?v=#(page.assetVersion)" defer></script>
 </body>
 </html>
