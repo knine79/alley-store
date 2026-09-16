@@ -137,6 +137,9 @@ private func configureMigrations(_ app: Application) {
 
     // 번들에서 꺼낸 앱 아이콘.
     app.migrations.add(AddAppIconKey())
+
+    // 스토어 앱을 받는 공개 페이지에는 세션이 없다 (ADR-0049).
+    app.migrations.add(MakeDownloadUserOptional())
 }
 
 /// 미들웨어 스택.

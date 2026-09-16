@@ -56,6 +56,7 @@
 | [0046](0046-server-assembles-store-app.md) | 스토어 앱 번들은 서버가 조립하고 워커가 서명한다 | 수락됨 | 2026-09-15 |
 | [0047](0047-any-oidc-provider.md) | 로그인은 표준 OIDC 공급자면 무엇이든 받는다 | 수락됨 | 2026-09-15 |
 | [0048](0048-server-ships-the-store-app-bundle.md) | 서버 이미지가 스토어 앱 번들을 함께 싣는다 | 수락됨 | 2026-09-16 |
+| [0049](0049-public-store-app-download-page.md) | 스토어 앱을 받는 페이지를 로그인 없이 연다 | 수락됨 | 2026-09-16 |
 
 ## 언제 쓰나
 
