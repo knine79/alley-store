@@ -185,10 +185,16 @@ final class FakeArtifactStorage: ArtifactStoring, @unchecked Sendable {
         )
     }
 
-    func downloadURL(key: String) async throws -> PresignedURL {
+    func downloadURL(key: String, filename: String?) async throws -> PresignedURL {
         if isUnavailable { throw Unavailable() }
+        // 이름을 넘기면 진짜 스토리지처럼 질의 항목으로 싣는다. 테스트가 그 값을
+        // 그대로 견줄 수 있어야 한다.
+        let disposition = filename
+            .flatMap(ArtifactStorage.contentDisposition(for:))
+            .flatMap { $0.addingPercentEncoding(withAllowedCharacters: .alphanumerics) }
+            .map { "&response-content-disposition=\($0)" } ?? ""
         return PresignedURL(
-            url: "https://storage.example/\(key)?download=1",
+            url: "https://storage.example/\(key)?download=1\(disposition)",
             expiresAt: Date().addingTimeInterval(600)
         )
     }
