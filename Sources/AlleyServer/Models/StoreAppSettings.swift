@@ -103,14 +103,19 @@ extension StoreAppSettings {
             .count() > 0
     }
 
-    /// 빌드할 준비가 됐는지. 안 됐으면 무엇이 모자란지 말한다.
-    public func missingPieces(iconIsSet: Bool) -> [String] {
+    /// 빌드를 **막는** 것들. 없으면 빈 배열이다.
+    ///
+    /// **앱 아이콘은 여기 없다.** 예전에는 "아직 안 올렸습니다. 아이콘 없이도 빌드할
+    /// 수 있지만 Dock 에 기본 아이콘이 뜹니다" 를 함께 띄웠는데, 제품에 기본 아이콘이
+    /// 들어온 뒤로는 두 문장이 다 틀렸다. 아이콘 없이 빌드되지 않고, 뜨는 것도 macOS
+    /// 의 흰 종이가 아니라 제품 기본 아이콘이다. 화면에는 그 그림이 이미 그려져
+    /// 있는데 그 옆에서 "안 올렸다" 고 경고하니 어느 쪽이 참인지 알 수 없었다.
+    ///
+    /// 지금 무엇으로 빌드되는지는 아이콘 자리가 "제품 기본 그림" 이라고 말한다.
+    public func missingPieces() -> [String] {
         var missing: [String] = []
         if baseBundleKey == nil {
             missing.append("CI 가 만든 스토어 앱 번들을 아직 안 올렸습니다.")
-        }
-        if !iconIsSet {
-            missing.append("앱 아이콘을 아직 안 올렸습니다. 아이콘 없이도 빌드할 수 있지만 Dock 에 기본 아이콘이 뜹니다.")
         }
         return missing
     }
