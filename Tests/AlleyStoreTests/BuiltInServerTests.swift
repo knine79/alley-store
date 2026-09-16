@@ -33,14 +33,34 @@ struct BuiltInServerTests {
     }
 }
 
-@Suite("주소가 박힌 빌드의 상태")
+@Suite("붙을 곳은 하나뿐이다")
 @MainActor
 struct BuiltInServerModelTests {
-    @Test("서버를 잊으라는 요청을 받아도 그대로 있는다")
-    func keepsBuiltInServer() {
-        // 주소 입력 화면으로 돌아가면 그 빌드는 거기서 나올 길이 없다.
+    /// **서버를 바꾸는 길이 없어야 한다.**
+    ///
+    /// 예전에는 "다른 서버에 연결" 이 있었고, 주소가 박힌 빌드에서만 그 버튼을
+    /// 감췄다. 감추는 것으로는 모자란다. 주소를 묻는 화면이 코드에 남아 있는 한
+    /// 어떤 경로로든 거기에 닿을 수 있고, 닿으면 그 앱은 서명한 조직이 보증하지
+    /// 않은 서버에도 붙는 앱이 된다.
+    ///
+    /// 그래서 기능 자체를 걷어냈다. 이 시험은 그것이 다시 생기면 깨진다.
+    @Test("모델에 서버를 바꾸는 길이 없다")
+    func hasNoWayToSwitchServers() {
         let model = StoreModel(builtInServer: URL(string: "https://store.example.com"))
-        model.forgetServer()
-        #expect(model.builtInServer != nil)
+        #expect(model.builtInServer?.absoluteString == "https://store.example.com")
+
+        // 시작 상태는 "묻는 중" 이 아니라 "붙는 중" 이다. 물어볼 것이 없다.
+        #expect(model.phase == .connecting)
+    }
+
+    /// 주소 없이 만든 빌드는 물어보지 않고 잘못 만들어졌다고 말한다.
+    ///
+    /// 물어보면 그 빌드는 어느 조직의 서버에도 붙는다. 사람이 고칠 수 있는 것이
+    /// 아니라 빌드가 잘못된 것이므로, 고칠 사람에게 전할 말만 남긴다.
+    @Test("주소 없는 빌드는 아무 데도 붙지 않는다")
+    func buildWithoutAddressConnectsNowhere() async {
+        let model = StoreModel(builtInServer: nil)
+        await model.restore()
+        #expect(model.phase == .connecting)
     }
 }

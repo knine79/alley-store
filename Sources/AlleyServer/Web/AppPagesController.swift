@@ -71,12 +71,14 @@ struct AppPagesController: RouteCollection, Sendable {
         // 안 된다. 관리는 관리 > 스토어 앱 한 화면에서 끝나고, 받는 것은 아래 안내
         // 한 줄이 맡는다 (ADR-0046).
         let storeAppID = try await request.storeAppSettings().$app.id
+        let visibility = try await AppVisibility.of(user, on: request.db)
 
         let rows: [AppRow] = try settled.compactMap { app in
             let appID = try app.requireID()
             guard appID != storeAppID else { return nil }
             let released = latest[appID]
-            guard released != nil || user.role.canPublish else { return nil }
+            // 출시 전인 앱은 손댈 수 있는 사람에게만 보인다 (`AppVisibility`).
+            guard try released != nil || visibility.canSeeUnreleased(app) else { return nil }
             return try AppRow(app: app, latestReleased: released, rating: ratings[appID])
         }
 

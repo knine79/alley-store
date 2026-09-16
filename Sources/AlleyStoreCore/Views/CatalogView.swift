@@ -74,20 +74,6 @@ struct CatalogView: View {
                     Text(user.email)
                     Divider()
                     Button("로그아웃", action: model.signOut)
-
-                    // **주소가 박힌 빌드에는 이 길이 없다.**
-                    //
-                    // 서버가 자기 주소를 번들에 넣어 내보내고(ADR-0044, ADR-0046),
-                    // 그 값은 서명 대상인 `Info.plist` 안에 있다. 받은 사람이 다른
-                    // 서버에 붙을 수 있는 앱이 아니다. 그런데 이 메뉴만 조건 없이
-                    // 열려 있어서, 누르면 주소 입력 화면으로 떨어졌다. 로그인 화면은
-                    // 이미 같은 조건으로 막고 있었다.
-                    //
-                    // 주소 없이 만든 빌드(로컬 개발)에서는 이것이 되돌아갈 유일한
-                    // 길이라 남긴다.
-                    if model.builtInServer == nil {
-                        Button("다른 서버에 연결", action: model.forgetServer)
-                    }
                 } label: {
                     Label(user.name, systemImage: "person.crop.circle")
                 }
