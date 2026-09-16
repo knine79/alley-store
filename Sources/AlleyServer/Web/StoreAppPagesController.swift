@@ -76,7 +76,7 @@ struct StoreAppPagesController: RouteCollection, Sendable {
                 base: StoreAppBaseBundle(settings: settings),
                 serverURL: request.application.alleyConfig.publicBaseURL,
                 isLocked: shipped,
-                blockers: settings.missingPieces(iconIsSet: assets[.appIcon] != nil),
+                blockers: settings.missingPieces(),
                 canBuild: settings.baseBundleKey != nil && !settings.bundleID.isEmpty,
                 builds: rows,
                 error: error,
