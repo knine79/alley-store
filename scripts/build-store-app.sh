@@ -19,7 +19,7 @@
 #   ALLEY_STORE_APP_URL_SCHEME   로그인 콜백 스킴 (기본값: alley)
 #   ALLEY_STORE_APP_VERSION      버전 문자열    (기본값: 0.1.0)
 #   ALLEY_STORE_APP_BUILD        빌드 번호      (기본값: 1)
-#   ALLEY_STORE_APP_SERVER_URL   스토어 주소    (기본값: 없음, 앱이 사람에게 묻는다)
+#   ALLEY_STORE_APP_SERVER_URL   스토어 주소    (필수. 없으면 빌드하지 않는다)
 #
 # 옛 이름 `ALLEY_APP_*` 도 그대로 받는다. 새 이름이 있으면 그쪽이 이긴다.
 #
@@ -78,6 +78,30 @@ esac
 #
 # 여기서 막지 않으면 서명·공증까지 다 끝난 뒤 사람 손에서 드러난다. 그때는 다시
 # 만드는 데 공증 대기만큼이 더 든다.
+#
+# **주소는 반드시 있어야 합니다.** 없이 만들면 그 앱은 받은 사람에게 주소를 묻게
+# 되는데, 그러면 서명한 조직이 보증하지 않은 서버에도 붙는 앱이 됩니다. 붙을 곳은
+# 빌드할 때 정해지고 그 뒤로는 바뀌지 않습니다 (ADR-0044).
+#
+# 딱 하나 예외가 있습니다. 서버가 조립할 재료로 쓸 **베이스 번들** 은 주소가 없어야
+# 합니다. 조직마다 주소가 다르고, 그 값은 서버가 자기 `PUBLIC_BASE_URL` 로 채워
+# 넣습니다 (ADR-0046). 그 번들은 그대로 실행하는 것이 아니라 다시 싸이는 재료라,
+# 주소가 없는 채로 손에 들어올 일이 없습니다.
+if [ "${ALLEY_STORE_APP_BASE_BUNDLE:-}" = "1" ]; then
+    SERVER_URL=""
+fi
+
+[ -n "$SERVER_URL" ] || [ "${ALLEY_STORE_APP_BASE_BUNDLE:-}" = "1" ] || die "$(cat <<'MSG'
+스토어 주소가 없습니다. ALLEY_STORE_APP_SERVER_URL 을 주세요.
+
+  ALLEY_STORE_APP_SERVER_URL=https://store.example.com ./scripts/build-store-app.sh
+
+이 앱은 붙을 곳을 하나만 압니다. 주소는 Info.plist 에 박히고 그 파일은 서명 대상
+안에 있어서, 받은 사람이 고치면 서명이 깨집니다. 로컬에서 띄워볼 때는 띄워둔
+서버 주소를 그대로 주면 됩니다.
+MSG
+)"
+
 SERVER_ENTRY=""
 if [ -n "$SERVER_URL" ]; then
     case "$SERVER_URL" in
@@ -90,7 +114,7 @@ if [ -n "$SERVER_URL" ]; then
     case "$SERVER_URL" in
         */) die "스토어 주소 끝의 슬래시를 빼세요: $SERVER_URL" ;;
     esac
-    SERVER_ENTRY="    <!-- 이 빌드가 붙는 스토어. 없으면 앱이 사람에게 묻는다(ADR-0044). -->
+    SERVER_ENTRY="    <!-- 이 빌드가 붙는 스토어. 빌드할 때 정해지고 바뀌지 않는다(ADR-0044). -->
     <key>AlleyServerURL</key>
     <string>$SERVER_URL</string>"
 fi
@@ -101,7 +125,7 @@ info "$APP_NAME $VERSION ($BUILD)"
 echo "  번들 ID  $BUNDLE_ID"
 echo "  URL 스킴 $URL_SCHEME"
 [ "$EXECUTABLE_NAME" = "$APP_NAME" ] || echo "  실행 파일 $EXECUTABLE_NAME (이름에 비ASCII 문자가 있어 바꿨습니다)"
-echo "  스토어   ${SERVER_URL:-(빌드에 박지 않음. 받은 사람이 입력합니다)}"
+echo "  스토어   ${SERVER_URL:-(베이스 번들. 서버가 조립할 때 넣습니다)}"
 
 info "빌드합니다..."
 (cd "$REPO_ROOT" && swift build -c release --product alley-store-app)

@@ -936,6 +936,13 @@ a.tab:hover {
 .field {
     display: grid;
     gap: var(--space-2);
+    /* **줄을 위에서부터 채운다.**
+     *
+     * 두 칸을 나란히 두면 둘 다 더 긴 쪽의 높이로 늘어난다. 그 남는 높이를 grid 가
+     * 기본값(`stretch`)대로 각 줄에 나눠주면서, 설명이 한 줄인 칸의 입력칸이 두 줄인
+     * 칸보다 커졌다. "URL 스킴" 은 42px, "최소 macOS 버전" 은 49px 이 됐고 시작
+     * 위치도 8px 어긋났다. 남는 높이는 아래에 두고 줄은 제 높이를 지킨다. */
+    align-content: start;
 }
 
 .field-label {

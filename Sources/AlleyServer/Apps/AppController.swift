@@ -46,11 +46,13 @@ public struct AppController: RouteCollection, Sendable {
         // 어느 앱이 스토어 앱인지는 서버만 안다. 클라이언트가 번들 ID 로 견주면
         // 번들 ID 를 바꾼 뒤에 어긋난다 (`AppDTO.isStoreApp`).
         let storeAppID = try await request.storeAppSettings().$app.id
+        let visibility = try await AppVisibility.of(user, on: request.db)
 
         return try apps.compactMap { app in
             let appID = try app.requireID()
             let released = latest[appID]
-            guard released != nil || user.role.canPublish else { return nil }
+            // 출시 전인 앱은 손댈 수 있는 사람에게만 보인다 (`AppVisibility`).
+            guard try released != nil || visibility.canSeeUnreleased(app) else { return nil }
             return try app.toDTO(
                 latestReleased: released,
                 rating: ratings[appID],

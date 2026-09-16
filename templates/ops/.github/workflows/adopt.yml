@@ -187,6 +187,13 @@ jobs:
       - name: 스토어 앱 베이스 번들 만들기
         if: ${{ !inputs.skip_store_app && steps.store_app.outputs.needed == 'true' }}
         working-directory: product
+        env:
+          # 브랜딩 없는 재료라 주소를 박지 않는다. 조직마다 다르고, 서버가 조립할
+          # 때 자기 `PUBLIC_BASE_URL` 로 채운다 (ADR-0046). 이 표시가 없으면
+          # 스크립트가 "주소가 없다" 며 거절한다. 그 거절이 기본값인 이유는,
+          # 주소 없이 나간 앱은 받은 사람에게 주소를 묻게 되고 그러면 서명한
+          # 조직이 보증하지 않은 서버에도 붙기 때문이다.
+          ALLEY_STORE_APP_BASE_BUNDLE: '1'
         run: ./scripts/build-store-app.sh
 
       - name: 베이스 번들 올리고 빌드시키기

@@ -4,16 +4,16 @@ import Observation
 
 /// 앱 전체가 보는 상태.
 ///
-/// 화면은 이 하나만 읽는다. 서버 주소를 넣기 전, 로그인 전, 목록을 보는 중이 모두
-/// 같은 창에서 이어지므로 상태를 나눠 들고 있으면 어느 것이 진짜인지 흐려진다.
+/// 화면은 이 하나만 읽는다. 붙는 중, 로그인 전, 목록을 보는 중이 모두 같은 창에서
+/// 이어지므로 상태를 나눠 들고 있으면 어느 것이 진짜인지 흐려진다.
 @MainActor
 @Observable
 final class StoreModel {
     /// 지금 앱이 서 있는 자리.
     enum Phase: Equatable {
-        /// 서버 주소를 아직 모른다. 첫 실행이다.
-        case needsServer
-        /// 서버는 알지만 로그인하지 않았다.
+        /// 아직 서버에 붙지 못했다. 처음 뜬 직후이거나 연결에 실패한 뒤다.
+        case connecting
+        /// 서버에 붙었지만 로그인하지 않았다.
         case signedOut(StoreMeta)
         case ready(StoreMeta, UserDTO)
     }
@@ -25,7 +25,7 @@ final class StoreModel {
         case installing
     }
 
-    private(set) var phase: Phase = .needsServer
+    private(set) var phase: Phase = .connecting
     private(set) var apps: [AppDTO] = []
     private(set) var installed: [String: InstalledApp] = [:]
     private(set) var isLoading = false
@@ -36,7 +36,16 @@ final class StoreModel {
     /// 방금 무엇을 했는지 알리는 한 줄. 설치가 끝났다는 것 정도.
     var statusMessage: String?
 
-    /// 이 빌드에 박혀 나온 서버 주소. 없으면 사람이 넣는다.
+    /// 이 빌드에 박혀 나온 서버 주소.
+    ///
+    /// **이 앱은 붙을 곳을 하나만 안다.** 주소는 빌드할 때 `Info.plist` 에 박히고,
+    /// 그 파일은 서명 대상 안에 있어서 받은 사람이 고치면 서명이 깨진다
+    /// (ADR-0044, ADR-0046).
+    ///
+    /// 옵셔널로 남겨둔 것은 주소 없이 만든 빌드가 물리적으로 가능하기 때문이다.
+    /// 그때는 물어보지 않고 "잘못 만든 빌드" 라고 말한다. 물어보면 그 빌드는 어느
+    /// 조직의 서버에도 붙는 앱이 되고, 서명한 조직이 보증하지 않은 곳에 구성원을
+    /// 보내게 된다.
     let builtInServer: URL?
 
     private let credentials = Credentials()
@@ -48,31 +57,22 @@ final class StoreModel {
 
     // MARK: - 시작
 
-    /// 저장된 서버와 토큰으로 되돌아간다.
+    /// 박힌 주소로 붙고, 저장된 토큰으로 되돌아간다.
     func restore() async {
-        if let builtInServer {
-            // 박힌 주소가 저장된 주소를 이긴다. 조직이 주소를 옮기면 새 빌드가 퍼지며
-            // 따라가야 하는데, 저장된 값을 먼저 보면 옛 주소에 계속 붙는다.
-            await connect(to: builtInServer, remember: false)
-            return
-        }
-        guard let server = credentials.serverURL else { return }
-        await connect(to: server, remember: false)
+        guard let builtInServer else { return }
+        await connect(to: builtInServer)
     }
 
-    /// 서버 주소를 확인하고 붙는다.
+    /// 서버에 붙는다.
     ///
     /// `/meta` 가 돌아오면 Alley 서버가 맞다. 이름과 색과 허용 도메인을 여기서 받는다.
-    func connect(to server: URL, remember: Bool = true) async {
+    func connect(to server: URL) async {
         isLoading = true
         defer { isLoading = false }
 
         var probe = StoreClient(server: server)
         do {
             let meta = try await probe.meta()
-            if remember {
-                credentials.serverURL = server
-            }
             probe.token = credentials.token(for: server)
             client = probe
 
@@ -84,22 +84,6 @@ final class StoreModel {
         } catch {
             errorMessage = error.localizedDescription
         }
-    }
-
-    /// 저장된 서버 주소를 지우고 처음으로 돌아간다.
-    ///
-    /// 주소가 박힌 빌드에서는 돌아갈 "처음" 이 없다. 화면도 그 버튼을 감추지만,
-    /// 여기서 한 번 더 막아 주소 입력 화면에 갇히는 상태를 만들지 않는다.
-    func forgetServer() {
-        guard builtInServer == nil else { return }
-
-        if let server = credentials.serverURL {
-            credentials.setToken(nil, for: server)
-        }
-        credentials.serverURL = nil
-        client = nil
-        apps = []
-        phase = .needsServer
     }
 
     // MARK: - 로그인

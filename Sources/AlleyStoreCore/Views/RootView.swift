@@ -3,8 +3,8 @@ import SwiftUI
 
 /// 창 하나에 들어가는 전부.
 ///
-/// 서버 주소 입력 → 로그인 → 목록이 한 창에서 이어진다. 단계마다 창을 따로 띄우면
-/// 처음 쓰는 사람이 무엇을 하고 있었는지 놓친다.
+/// 연결 → 로그인 → 목록이 한 창에서 이어진다. 단계마다 창을 따로 띄우면 처음 쓰는
+/// 사람이 무엇을 하고 있었는지 놓친다.
 struct RootView: View {
     @Environment(StoreModel.self) private var model
 
@@ -13,13 +13,8 @@ struct RootView: View {
 
         Group {
             switch model.phase {
-            case .needsServer:
-                // 주소가 박힌 빌드는 물어볼 것이 없다. 붙는 것을 보여주기만 한다.
-                if let server = model.builtInServer {
-                    ConnectingView(server: server)
-                } else {
-                    ServerSetupView()
-                }
+            case .connecting:
+                ConnectingView(server: model.builtInServer)
             case .signedOut(let meta):
                 SignInView(meta: meta)
             case .ready(let meta, let user):
@@ -43,95 +38,57 @@ struct RootView: View {
     }
 }
 
-/// 주소가 박힌 빌드의 첫 화면.
+/// 붙는 동안, 그리고 붙지 못했을 때.
 ///
-/// 조직이 나눠준 앱을 받은 사람에게 주소를 묻는 것은 물어볼 곳이 있는 사람에게만
-/// 통한다(ADR-0044). 그래서 여기서는 붙는 동안을 보여주고, 실패했을 때만 손댈
-/// 자리를 낸다.
+/// **주소를 묻지 않는다.** 조직이 나눠준 앱을 받은 사람에게 주소를 묻는 것은 물어볼
+/// 곳이 있는 사람에게만 통한다(ADR-0044). 주소는 빌드할 때 박히고 서명 대상 안에
+/// 있어서 받은 사람이 고칠 수도 없다.
 struct ConnectingView: View {
     @Environment(StoreModel.self) private var model
-    let server: URL
+    let server: URL?
 
     var body: some View {
         VStack(spacing: 20) {
             Spacer()
 
-            if model.isLoading {
-                ProgressView()
-                Text("연결하는 중입니다...")
-                    .foregroundStyle(.secondary)
+            if let server {
+                if model.isLoading {
+                    ProgressView()
+                    Text("연결하는 중입니다...")
+                        .foregroundStyle(.secondary)
+                } else {
+                    // 여기 오는 경우는 서버가 내려갔거나 사내망 밖이다. 둘 다 사용자가
+                    // 할 수 있는 일이 없어서, 무엇에 실패했는지만 정확히 보여준다.
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 36))
+                        .foregroundStyle(.secondary)
+                    Text("스토어에 연결하지 못했습니다")
+                        .font(.title2.weight(.semibold))
+                    Text(server.absoluteString)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Button("다시 시도") {
+                        Task { await model.restore() }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
             } else {
-                // 여기 오는 경우는 서버가 내려갔거나 사내망 밖이다. 둘 다 사용자가
-                // 할 수 있는 일이 없어서, 무엇에 실패했는지만 정확히 보여준다.
+                // 주소를 박지 않고 만든 빌드다. 사람이 고칠 수 있는 것이 아니므로
+                // 입력칸을 내지 않는다. 그것을 내면 이 앱은 어느 조직의 서버에도
+                // 붙는 앱이 되고, 서명한 조직이 보증하지 않은 곳에 구성원을 보낸다.
                 Image(systemName: "exclamationmark.triangle")
                     .font(.system(size: 36))
                     .foregroundStyle(.secondary)
-                Text("스토어에 연결하지 못했습니다")
+                Text("잘못 만들어진 앱입니다")
                     .font(.title2.weight(.semibold))
-                Text(server.absoluteString)
-                    .font(.callout)
+                Text("이 앱에는 스토어 주소가 들어 있지 않습니다. 담당자에게 알려주세요.")
                     .foregroundStyle(.secondary)
-                Button("다시 시도") {
-                    Task { await model.restore() }
-                }
-                .keyboardShortcut(.defaultAction)
+                    .multilineTextAlignment(.center)
             }
 
             Spacer()
         }
         .padding(40)
-    }
-}
-
-/// 첫 실행 화면. 서버 주소만 받는다.
-///
-/// 주소를 박지 않고 만든 빌드가 여기로 온다. 이 화면에 조직 이름이 미리 적혀 있으면
-/// 안 된다(ADR-0003). 그런 빌드는 어느 조직의 서버에도 그대로 붙는다.
-struct ServerSetupView: View {
-    @Environment(StoreModel.self) private var model
-    @State private var address = ""
-
-    private var normalized: URL? {
-        StoreClient.normalize(serverAddress: address)
-    }
-
-    var body: some View {
-        VStack(spacing: 20) {
-            Spacer()
-
-            Image(systemName: "shippingbox")
-                .font(.system(size: 44))
-                .foregroundStyle(.secondary)
-
-            VStack(spacing: 8) {
-                Text("스토어 주소를 입력하세요")
-                    .font(.title2.weight(.semibold))
-                Text("조직에서 안내받은 주소입니다. 담당자에게 물어보면 알려줍니다.")
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack {
-                TextField("store.example.com", text: $address)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 320)
-                    .onSubmit { connect() }
-                Button("연결", action: connect)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(normalized == nil || model.isLoading)
-            }
-
-            if model.isLoading {
-                ProgressView().controlSize(.small)
-            }
-
-            Spacer()
-        }
-        .padding(40)
-    }
-
-    private func connect() {
-        guard let normalized else { return }
-        Task { await model.connect(to: normalized) }
     }
 }
 
@@ -162,12 +119,6 @@ struct SignInView: View {
             }
 
             Spacer()
-
-            // 주소가 박힌 빌드는 갈 데가 없다.
-            if model.builtInServer == nil {
-                Button("다른 서버에 연결", action: model.forgetServer)
-                    .buttonStyle(.link)
-            }
         }
         .padding(40)
     }
