@@ -7,5 +7,5 @@
 /// 버전을 서버 것과 견주므로, 워커가 바뀌지 않은 릴리스에서 버전이 오르면 모든
 /// 워커가 쓸데없이 자기를 갈아끼운다. 그래서 따로 둔다.
 public enum AlleyVersion {
-    public static let current = "0.6.3"
+    public static let current = "0.6.4"
 }
