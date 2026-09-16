@@ -58,7 +58,7 @@
     <h2 class="section-title">번들에 박히는 값</h2>
     <p class="section-lead">저장하면 다음 빌드부터 반영됩니다. 이미 내보낸 빌드는 그대로입니다.</p>
 
-    <form class="form" method="post" action="/admin/store-app/settings">
+    <form class="form" method="post" action="/admin/store-app/settings" data-guard-dirty>
         <div class="form-group form-grid">
             <label class="field field-wide">
                 <span class="field-label">앱 이름</span>
