@@ -16,13 +16,31 @@ COPY Package.swift Package.resolved ./
 RUN swift package resolve --skip-update \
         $([ -f ./Package.resolved ] && echo "--force-resolved-versions")
 
-COPY . .
+# **컴파일에 필요한 것만 먼저 넣는다.**
+#
+# 예전에는 여기가 `COPY . .` 였다. 그러면 CSS 한 글자만 바꿔도 이 레이어가 깨지고
+# 뒤의 `swift build` 가 통째로 다시 돈다. 실측에서 그 빌드가 11분 중 7~8분이었고,
+# 화면만 고친 배포도 매번 그 값을 치렀다.
+#
+# 서버가 화면을 읽는 방식이 그 분리를 가능하게 한다. `Public` 과 `Resources` 는
+# SPM 리소스가 아니라 **실행 디렉터리에서 읽는 파일** 이라(Leaf 템플릿, 정적 파일,
+# 기본 그림, 스토어 앱 번들) 컴파일에 들어가지 않는다. Package.swift 에 `resources:`
+# 선언이 하나도 없는 것이 그 증거다.
+#
+# `Tests` 를 함께 넣는 것은 SPM 이 매니페스트의 모든 타깃 디렉터리가 있는지 보기
+# 때문이다. 없으면 패키지를 읽는 단계에서 거절한다.
+COPY Sources/ ./Sources/
+COPY Tests/ ./Tests/
 
 RUN swift build \
         --product alley-server \
         -c release \
         --static-swift-stdlib \
         -Xlinker -ljemalloc
+
+# 화면에 쓰이는 것들. 여기가 바뀌어도 위 컴파일은 그대로 재사용된다.
+COPY Public/ ./Public/
+COPY Resources/ ./Resources/
 
 # 실행에 필요한 것만 추려 담는다.
 WORKDIR /staging
