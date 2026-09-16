@@ -181,6 +181,18 @@ public struct WorkerController: RouteCollection, Sendable {
             )
         )
 
+        // dmg 를 요구하는 잡에만 자리를 내준다 (ADR-0050). 이 값이 없으면 워커는
+        // 지금까지처럼 zip 만 만든다.
+        let diskImage: PresignedURL? = job.makesDiskImage
+            ? try await request.artifactStorage.uploadURL(
+                key: request.artifactStorage.newKey(
+                    ArtifactStorage.objectKey(
+                        appID: appID, versionID: versionID, kind: .diskImage
+                    )
+                )
+            )
+            : nil
+
         // 번들 ID 가 아직 임시값이면 워커가 대조 대신 정책 검사를 한다 (ADR-0034).
         // 그러려면 정책을 함께 보내야 한다. 워커는 조직 설정을 모른다.
         let settings = try await request.storeSettings()
@@ -195,11 +207,13 @@ public struct WorkerController: RouteCollection, Sendable {
             enforceBundleIDPrefix: pending ? settings.enforceBundleIDPrefix : nil,
             artifactDownloadURL: download.url,
             resultUploadURL: upload.url,
+            diskImageUploadURL: diskImage?.url,
             // 올린 사람이 준 것이 있으면 실어 보낸다. 미서명 업로드에는 워커가 읽어낼
             // 기존 서명이 없어서, 이것 없이는 권한 없이 서명된다 (ADR-0020).
             entitlements: job.version.entitlements,
-            // 둘 중 먼저 만료되는 쪽이 이 잡의 유효 기간이다.
-            expiresAt: min(download.expiresAt, upload.expiresAt)
+            // 가장 먼저 만료되는 쪽이 이 잡의 유효 기간이다.
+            expiresAt: [download.expiresAt, upload.expiresAt, diskImage?.expiresAt]
+                .compactMap { $0 }.min() ?? download.expiresAt
         )
     }
 
@@ -305,14 +319,30 @@ public struct WorkerController: RouteCollection, Sendable {
             return
         }
 
-        try await upsertSignedArtifact(
+        try await upsertArtifact(
             versionID: versionID,
+            kind: .signed,
             key: key,
             sha256: update.resultSHA256?.lowercased(),
             fileSize: size,
             edSignature: update.resultEdSignature,
             on: request.db
         )
+
+        // dmg 를 요구한 잡이면 그것도 확인해서 붙인다 (ADR-0050).
+        //
+        // **없다고 잡을 실패시키지 않는다.** zip 은 이미 올라왔고 그것만으로 배포가
+        // 된다. 여기서 실패시키면 dmg 를 모르는 예전 워커가 처리한 잡이 전부 실패로
+        // 떨어지고, 되는 배포까지 막힌다. 대신 로그로 남겨서 왜 dmg 가 없는지
+        // 화면에서 알 수 있게 한다.
+        if job.makesDiskImage {
+            try await attachDiskImage(
+                version: version,
+                versionID: versionID,
+                update: update,
+                on: request
+            )
+        }
 
         if let metadata = update.bundleMetadata {
             applyBundleMetadata(metadata, to: version, logger: request.logger)
@@ -491,8 +521,52 @@ public struct WorkerController: RouteCollection, Sendable {
         return Response(status: .noContent)
     }
 
-    private func upsertSignedArtifact(
+    /// dmg 를 확인해서 붙인다 (ADR-0050).
+    ///
+    /// 워커가 "만들었다" 고 말하는 것만 믿지 않는다. zip 과 같은 이유로 스토리지에서
+    /// 한 번 더 본다. 다만 여기서 실패해도 **잡을 실패시키지 않는다.** zip 이 이미
+    /// 올라와서 배포는 되고, dmg 를 모르는 예전 워커까지 실패로 떨어뜨릴 이유가 없다.
+    private func attachDiskImage(
+        version: Version,
         versionID: UUID,
+        update: SigningJobUpdate,
+        on request: Request
+    ) async throws {
+        guard update.diskImageSHA256 != nil || update.diskImageSize != nil else {
+            request.logger.notice(
+                "dmg 를 요구한 잡인데 워커가 만들지 않았습니다. zip 으로만 나갑니다 [버전: \(versionID)]"
+            )
+            return
+        }
+
+        let key = request.artifactStorage.newKey(
+            ArtifactStorage.objectKey(
+                appID: version.$app.id, versionID: versionID, kind: .diskImage
+            )
+        )
+        guard let size = try await request.artifactStorage.head(key: key), size > 0 else {
+            request.logger.warning(
+                "워커가 dmg 를 올렸다고 했지만 스토리지에 없습니다. zip 으로만 나갑니다 [버전: \(versionID)]"
+            )
+            return
+        }
+
+        try await upsertArtifact(
+            versionID: versionID,
+            kind: .diskImage,
+            key: key,
+            sha256: update.diskImageSHA256?.lowercased(),
+            fileSize: size,
+            // Sparkle 은 dmg 를 쓰지 않는다. 그 피드가 가리키는 것은 zip 이다.
+            edSignature: nil,
+            on: request.db
+        )
+        request.logger.notice("dmg 를 붙였습니다 [버전: \(versionID), 크기: \(size)바이트]")
+    }
+
+    private func upsertArtifact(
+        versionID: UUID,
+        kind: ArtifactKind,
         key: String,
         sha256: String?,
         fileSize: Int64,
@@ -502,7 +576,7 @@ public struct WorkerController: RouteCollection, Sendable {
         // 재시도하면 같은 키에 덮어쓴다. 행을 새로 만들면 유니크 제약에 걸린다.
         if let existing = try await Artifact.query(on: database)
             .filter(\.$version.$id == versionID)
-            .filter(\.$kind == .signed)
+            .filter(\.$kind == kind)
             .first()
         {
             existing.storageKey = key
@@ -515,7 +589,7 @@ public struct WorkerController: RouteCollection, Sendable {
 
         let artifact = Artifact(
             versionID: versionID,
-            kind: .signed,
+            kind: kind,
             storageKey: key,
             sha256: sha256,
             fileSize: fileSize

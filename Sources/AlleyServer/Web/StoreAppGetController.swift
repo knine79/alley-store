@@ -138,10 +138,17 @@ struct StoreAppGetController: RouteCollection, Sendable {
 extension StoreAppGetController {
     /// 이 버전에서 사람에게 내줄 파일.
     ///
+    /// **dmg 가 있으면 그것을 먼저 준다** (ADR-0050). 받은 사람이 열면 Applications
+    /// 별칭이 함께 보여서 옮기는 일이 드래그 한 번으로 끝난다. zip 은 풀어서 직접
+    /// 옮겨야 하고, 안 옮기고 내려받기 폴더에서 그냥 실행하는 사람이 반드시 나온다.
+    ///
     /// **미서명본으로는 내려가지 않는다.** `bestArtifact` 는 서명본이 없으면 올린
-    /// 그대로를 주는데, 여기는 아무것도 모르는 사람이 받는 자리라 그 폴백이 맞지 않다.
+    /// 그대로를 주는데, 여기는 아무것도 모르는 사람이 받는 자리라 그 폴백이 맞지 않다
+    /// (ADR-0049).
     static func downloadable(_ version: Version) -> Artifact? {
-        (version.$artifacts.value ?? []).first { $0.kind == .signed }
+        let artifacts = version.$artifacts.value ?? []
+        return artifacts.first { $0.kind == .diskImage }
+            ?? artifacts.first { $0.kind == .signed }
     }
 
     /// 받는 사람의 내려받기 폴더에 남을 이름.
@@ -149,7 +156,8 @@ extension StoreAppGetController {
     /// 오브젝트 키를 그대로 쓰면 `unsigned.zip` 이 된다. 무엇을 받았는지 알 수 없고,
     /// 두 번 받으면 `unsigned (2).zip` 이 된다. 앱 이름과 버전을 적어서 내보낸다.
     static func downloadFilename(app: App, version: Version) -> String {
-        "\(app.name) \(version.shortVersion).zip"
+        let kind = downloadable(version)?.kind ?? .signed
+        return "\(app.name) \(version.shortVersion).\(kind.fileExtension)"
     }
 }
 

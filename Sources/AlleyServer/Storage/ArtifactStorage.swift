@@ -139,7 +139,9 @@ public struct ArtifactStorage: ArtifactStoring {
     /// 앱과 버전 ID 로 계층을 나눠서 사람이 콘솔에서 봐도 어느 앱의 무엇인지 알 수 있게 한다.
     /// 확장자를 `.zip` 으로 고정하는 이유는 `.app` 번들이 디렉터리라서 그대로는 못 올리기 때문이다.
     public static func objectKey(appID: UUID, versionID: UUID, kind: ArtifactKind) -> String {
-        "apps/\(appID.uuidString)/versions/\(versionID.uuidString)/\(kind.rawValue).zip"
+        // 확장자는 갈래가 정한다. dmg 를 `.zip` 으로 올려두면 받는 쪽이 zip 으로 알고
+        // 풀려 들다가 실패한다 (ADR-0050).
+        "apps/\(appID.uuidString)/versions/\(versionID.uuidString)/\(kind.rawValue).\(kind.fileExtension)"
     }
 
     public func uploadURL(key: String) async throws -> PresignedURL {

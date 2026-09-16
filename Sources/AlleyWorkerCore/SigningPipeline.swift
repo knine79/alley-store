@@ -26,6 +26,9 @@ public struct SigningPipeline: Sendable {
         public var edSignature: String?
         /// 번들이 스스로 밝히는 값. 서버가 등록된 값과 맞춘다 (ADR-0033).
         public var bundleMetadata: BundleMetadata?
+        /// 함께 만든 dmg 의 검증값 (ADR-0050). 요구받지 않았으면 nil.
+        public var diskImageSHA256: String?
+        public var diskImageSize: Int64?
     }
 
     public enum PipelineError: Error, CustomStringConvertible {
@@ -141,7 +144,101 @@ public struct SigningPipeline: Sendable {
         output.bundleMetadata = metadata.isEmpty ? nil : metadata
 
         try await client.upload(result, to: job.resultUploadURL)
+
+        // **dmg 는 서버가 요구할 때만 만든다** (ADR-0050). 워커는 이 잡이 무엇인지
+        // 모르고, 지시서에 자리가 있으면 만들 뿐이다.
+        //
+        // zip 을 먼저 올리는 순서가 중요하다. dmg 를 만들다 실패해도 zip 은 이미
+        // 올라가 있어서 배포가 되고, 서버는 dmg 없이 마무리한다.
+        if let uploadURL = job.diskImageUploadURL {
+            await progress(.packaging, nil)
+            let image = try await makeDiskImage(bundle: bundle, workspace: workspace)
+            let described = try describe(image)
+            try await client.upload(image, to: uploadURL)
+            output.diskImageSHA256 = described.sha256
+            output.diskImageSize = described.size
+        }
+
         return output
+    }
+
+    /// 서명·공증이 끝난 `.app` 을 dmg 로 감싼다 (ADR-0050).
+    ///
+    /// **Applications 별칭을 함께 넣는다.** 그것이 dmg 를 쓰는 이유의 전부다. 받은
+    /// 사람이 열면 앱과 응용 프로그램 폴더가 나란히 보이고, 옮기는 일이 드래그 한
+    /// 번으로 끝난다. zip 은 풀어서 직접 옮겨야 하고, 안 옮기고 내려받기 폴더에서
+    /// 그냥 실행하는 사람이 반드시 나온다.
+    ///
+    /// **dmg 자체도 서명하고 공증한다.** 안에 든 `.app` 이 이미 공증돼 있어도
+    /// 껍데기가 서명돼 있지 않으면 Gatekeeper 가 열 때 경고한다.
+    private func makeDiskImage(bundle: AppBundle, workspace: URL) async throws -> URL {
+        let staging = workspace.appendingPathComponent("dmg-staging", isDirectory: true)
+        try? FileManager.default.removeItem(at: staging)
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+
+        // `ditto` 로 옮긴다. `.app` 안의 심볼릭 링크와 확장 속성이 그대로 남아야
+        // 서명이 깨지지 않는다 (`unzip` 대신 `ditto` 를 쓰는 것과 같은 이유다).
+        let appName = bundle.url.lastPathComponent
+        let copied = staging.appendingPathComponent(appName)
+        let copy = await Shell.runDetached(
+            "/usr/bin/ditto", [bundle.url.path, copied.path], timeout: 600
+        )
+        guard copy.succeeded else {
+            throw PipelineError.commandFailed(
+                step: "dmg 준비",
+                code: Self.code(exitCode: copy.exitCode, otherwise: .unknown),
+                detail: copy.combinedOutput
+            )
+        }
+
+        try FileManager.default.createSymbolicLink(
+            at: staging.appendingPathComponent("Applications"),
+            withDestinationURL: URL(fileURLWithPath: "/Applications")
+        )
+
+        // 볼륨 이름은 앱 이름에서 딴다. 마운트했을 때 Finder 창 제목이 된다.
+        let volumeName = (appName as NSString).deletingPathExtension
+        let image = workspace.appendingPathComponent("signed.dmg")
+        try? FileManager.default.removeItem(at: image)
+
+        let create = await Shell.runDetached(
+            "/usr/bin/hdiutil",
+            [
+                "create",
+                "-volname", volumeName,
+                "-srcfolder", staging.path,
+                "-ov",
+                // UDZO 는 읽기 전용 압축본이다. 받는 사람이 안을 고칠 일이 없다.
+                "-format", "UDZO",
+                image.path,
+            ],
+            timeout: 900
+        )
+        guard create.succeeded else {
+            throw PipelineError.commandFailed(
+                step: "dmg 만들기",
+                code: Self.code(exitCode: create.exitCode, otherwise: .unknown),
+                detail: create.combinedOutput
+            )
+        }
+
+        // 껍데기 서명. entitlements 는 붙이지 않는다. dmg 는 실행되는 것이 아니다.
+        let signed = await Shell.runDetached(
+            "/usr/bin/codesign",
+            ["--force", "--sign", config.signingIdentity, "--timestamp", image.path],
+            timeout: 600
+        )
+        guard signed.succeeded else {
+            throw PipelineError.commandFailed(
+                step: "dmg 서명",
+                code: Self.codesignCode(from: signed.combinedOutput),
+                detail: signed.combinedOutput
+            )
+        }
+
+        try await notarize(image)
+        try await staple(image)
+        return image
     }
 
     // MARK: - 단계

@@ -220,6 +220,20 @@ public enum UploadKind: String, Codable, Sendable, CaseIterable {
 public enum ArtifactKind: String, Codable, Sendable, CaseIterable {
     case unsigned
     case signed
+    /// 서명·공증까지 마친 `.dmg` (ADR-0050).
+    ///
+    /// **스토어 앱에만 붙는다.** 다른 앱은 스토어 앱이 받아서 `/Applications` 에
+    /// 직접 넣으므로 사람이 옮길 일이 없다. 스토어 앱 자신만 사람이 손으로 옮기고,
+    /// 그때 dmg 안의 Applications 별칭이 그 일을 한 번의 드래그로 만든다.
+    case diskImage = "dmg"
+
+    /// 파일 확장자. 오브젝트 키와 받는 파일 이름이 이것으로 갈린다.
+    public var fileExtension: String {
+        switch self {
+        case .unsigned, .signed: return "zip"
+        case .diskImage: return "dmg"
+        }
+    }
 }
 
 public struct CreateVersionRequest: Codable, Sendable {
