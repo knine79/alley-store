@@ -67,9 +67,18 @@ public struct CreateArtifact: AsyncMigration {
     public init() {}
 
     public func prepare(on database: any Database) async throws {
+        // **값을 여기 그대로 적는다.** `ArtifactKind.allCases` 를 순회하면 이 마이그레이션이
+        // 코드와 함께 움직인다. 갈래를 하나 더하는 순간 새 데이터베이스는 그 값을 갖고
+        // 시작하는데, 뒤따르는 추가 마이그레이션은 이미 있는 값을 또 넣으려다 죽는다.
+        // 마이그레이션은 그것을 쓸 당시의 스키마여야 하고, 그 뒤의 변화는 뒤에 오는
+        // 마이그레이션이 맡는다.
+        //
+        // 같은 모양이 `version_state`, `upload_kind`, `signing_job_state`, `user_role`
+        // 에도 남아 있다. 지금은 터지지 않지만 그 enum 들에 값을 더하는 순간 같은 일이
+        // 벌어진다.
         var kind = database.enum("artifact_kind")
-        for value in ArtifactKind.allCases {
-            kind = kind.case(value.rawValue)
+        for value in ["unsigned", "signed"] {
+            kind = kind.case(value)
         }
         let artifactKind = try await kind.create()
 
