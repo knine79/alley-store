@@ -27,6 +27,14 @@ public protocol ArtifactStoring: Sendable {
     func uploadURL(key: String) async throws -> PresignedURL
     /// 이 키의 파일을 받을 수 있는 URL. `GET` 으로 보낸다.
     func downloadURL(key: String) async throws -> PresignedURL
+
+    /// 받는 쪽에 보일 파일 이름을 정해서 내준다.
+    ///
+    /// **오브젝트 키가 곧 파일 이름이 된다.** 키는 `.../unsigned.zip` 처럼 우리
+    /// 사정에 맞춰 지은 이름이라, 그대로 나가면 받은 사람의 내려받기 폴더에
+    /// `unsigned.zip` 이 쌓인다. 무엇을 받았는지 알 수 없고, 여러 번 받으면
+    /// `unsigned (3).zip` 이 된다.
+    func downloadURL(key: String, filename: String?) async throws -> PresignedURL
     /// 스토리지에 실제로 파일이 있는지 확인하고 크기를 읽는다. 없으면 nil.
     func head(key: String) async throws -> Int64?
 
@@ -52,6 +60,11 @@ public protocol ArtifactStoring: Sendable {
 }
 
 extension ArtifactStoring {
+    /// 이름을 정하지 않으면 지금까지와 같다. 스토리지가 키에서 짐작한다.
+    public func downloadURL(key: String) async throws -> PresignedURL {
+        try await downloadURL(key: key, filename: nil)
+    }
+
     /// 프리픽스를 안 쓰는 것이 기본이다. 테스트용 가짜가 이걸 신경 쓸 필요는 없다.
     public var keyPrefix: String { "" }
 
@@ -133,8 +146,8 @@ public struct ArtifactStorage: ArtifactStoring {
         try await sign(key: key, method: .PUT)
     }
 
-    public func downloadURL(key: String) async throws -> PresignedURL {
-        try await sign(key: key, method: .GET)
+    public func downloadURL(key: String, filename: String?) async throws -> PresignedURL {
+        try await sign(key: key, method: .GET, filename: filename)
     }
 
     /// 클라이언트가 "다 올렸다"고 말하는 것만 믿으면 빈 버전이 출시될 수 있다.
@@ -181,8 +194,23 @@ public struct ArtifactStorage: ArtifactStoring {
         _ = try await explained { try await s3.deleteObject(.init(bucket: bucket, key: key)) }
     }
 
-    private func sign(key: String, method: HTTPMethod) async throws -> PresignedURL {
-        let url = objectBase.appendingPathComponent(key)
+    private func sign(
+        key: String,
+        method: HTTPMethod,
+        filename: String? = nil
+    ) async throws -> PresignedURL {
+        var url = objectBase.appendingPathComponent(key)
+
+        // S3 와 minio 둘 다 이 질의 항목을 읽어 응답 헤더로 돌려준다. 서명에 포함되므로
+        // 여기서 붙여야 하고, 받는 쪽이 고치면 서명이 깨진다.
+        if let filename, let disposition = Self.contentDisposition(for: filename),
+           var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        {
+            components.queryItems = (components.queryItems ?? [])
+                + [URLQueryItem(name: "response-content-disposition", value: disposition)]
+            url = components.url ?? url
+        }
+
         let signed = try await explained {
             try await s3.signURL(
                 url: url,
@@ -191,6 +219,38 @@ public struct ArtifactStorage: ArtifactStoring {
             )
         }
         return PresignedURL(url: signed.absoluteString, expiresAt: Date().addingTimeInterval(ttl))
+    }
+
+    /// `Content-Disposition` 한 줄을 만든다. 쓸 수 없는 이름이면 nil 이고, 그때는
+    /// 지금까지처럼 키에서 짐작한 이름으로 나간다.
+    ///
+    /// **두 벌을 싣는다.** `filename` 은 ASCII 로 접은 것이고, `filename*` 은 원래
+    /// 이름을 RFC 5987 로 적은 것이다. 앱 이름에 한글이 흔한데 ASCII 만 실으면
+    /// "----- 1.0.0.zip" 이 되고, 반대로 `filename*` 만 실으면 그것을 모르는 오래된
+    /// 내려받기 도구가 이름을 통째로 버린다. 둘을 함께 싣는 것이 표준이 시키는 방식이고,
+    /// 아는 쪽은 `filename*` 을 먼저 본다.
+    static func contentDisposition(for filename: String) -> String? {
+        let trimmed = filename.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        // ASCII 벌. 헤더 값에서 따옴표와 역슬래시가 구문을 깨므로 함께 걷어낸다.
+        let asciiAllowed = CharacterSet.alphanumerics
+            .union(CharacterSet(charactersIn: " .-_()"))
+        var ascii = ""
+        for scalar in trimmed.unicodeScalars {
+            ascii.append(scalar.isASCII && asciiAllowed.contains(scalar) ? Character(scalar) : "-")
+        }
+        // 한글 이름은 전부 `-` 가 된다. 그 줄이 이름 노릇을 하지는 못해도 확장자는
+        // 남아서, `filename*` 을 모르는 쪽이 최소한 무엇인지는 알 수 있다.
+        ascii = ascii.trimmingCharacters(in: .whitespaces)
+        guard !ascii.isEmpty else { return nil }
+
+        // RFC 5987 벌.
+        let unreserved = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "!#$&+-.^_`|~"))
+        guard let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: unreserved) else {
+            return "attachment; filename=\"\(ascii)\""
+        }
+        return "attachment; filename=\"\(ascii)\"; filename*=UTF-8''\(encoded)"
     }
 
     /// 자격증명을 못 찾았을 때의 실패를 알아볼 수 있는 말로 바꾼다.
