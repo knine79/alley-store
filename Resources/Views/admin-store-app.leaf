@@ -143,19 +143,21 @@
 <section class="section">
     <h2 class="section-title">내보내기</h2>
     <p class="section-lead">
-        CI 가 만든 브랜딩 없는 번들에 위 값과 아이콘을 입혀 새 버전으로 등록하고 서명
-        워커에 넘깁니다. 빌드 번호는 서버가 정해 번들과 스토어 양쪽에 같은 값을 씁니다.
+        이 서버에 들어 있는 브랜딩 없는 번들에 위 값과 아이콘을 입혀 새 버전으로
+        등록하고 서명 워커에 넘깁니다. 서버를 올릴 때마다 그 번들도 함께 새것이
+        되므로 따로 올릴 것이 없습니다. 빌드 번호는 서버가 정해 번들과 스토어 양쪽에
+        같은 값을 씁니다.
     </p>
 
     #if(base.isPresent):
     <p class="fact-line">
-        <span class="fact-label">배포된 번들</span>
+        <span class="fact-label">#if(base.isUploaded):올려둔 번들#else:이 서버의 번들#endif</span>
         <span class="fact-value">#(base.version)#if(base.summary): · #(base.summary)#endif</span>
     </p>
     #else:
     <p class="empty">
-        번들이 없습니다. 운영 CI 가 돌면 저절로 올라가고, 그 전에는 제품 릴리스의
-        <code>alley-store-app-unsigned.zip</code> 을 아래에서 올리면 됩니다.
+        빌드할 번들이 없습니다. 이 서버 이미지에 스토어 앱이 들어 있지 않습니다.
+        제품 릴리스의 <code>alley-store-app-unsigned.zip</code> 을 아래에서 올리면 됩니다.
     </p>
     #endif
 
@@ -166,7 +168,7 @@
     <!-- 손으로 올리는 길은 접어둔다. 운영 CI 를 붙였으면 여는 일이 없고, 펴 두면
          "이걸 매번 해야 하나" 로 읽힌다. -->
     <details class="disclosure">
-        <summary class="disclosure-summary">베이스 번들 직접 올리기</summary>
+        <summary class="disclosure-summary">다른 번들로 빌드하기</summary>
 
         <div class="disclosure-body">
             <form class="form card-form" method="post" action="/admin/store-app/base-bundle"

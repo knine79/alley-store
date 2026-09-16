@@ -44,6 +44,7 @@ struct StoreAppBootstrapTests {
             by: owner,
             storage: storage,
             on: app.db,
+            directory: app.directory,
             logger: app.logger
         )
 

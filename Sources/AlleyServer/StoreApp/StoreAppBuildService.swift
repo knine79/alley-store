@@ -126,6 +126,32 @@ public enum StoreAppBuildService {
         public var buildNumber: Int
     }
 
+    /// 무엇으로 빌드하는가.
+    ///
+    /// 올린 것이 있으면 그것을, 없으면 서버 이미지에 딸려 온 것을 쓴다 (ADR-0048).
+    public struct BaseBundle: Sendable {
+        public var version: String
+        /// 사람이 올린 것인가. 아니면 제품에 들어 있던 것이다.
+        public var isUploaded: Bool
+        var storageKey: String?
+    }
+
+    /// 지금 쓸 베이스 번들. 둘 다 없으면 nil.
+    public static func baseBundle(
+        settings: StoreAppSettings,
+        in directory: DirectoryConfiguration
+    ) -> BaseBundle? {
+        if let key = settings.baseBundleKey {
+            return BaseBundle(
+                version: settings.baseBundleVersion ?? "0.0.0",
+                isUploaded: true,
+                storageKey: key
+            )
+        }
+        guard BundledStoreApp.data(in: directory) != nil else { return nil }
+        return BaseBundle(version: BundledStoreApp.version, isUploaded: false, storageKey: nil)
+    }
+
     /// 지금 설정으로 번들을 빌드해 버전 하나로 올린다.
     public static func build(
         settings: StoreAppSettings,
@@ -134,21 +160,28 @@ public enum StoreAppBuildService {
         by admin: User,
         storage: any ArtifactStoring,
         on database: any Database,
+        directory: DirectoryConfiguration,
         logger: Logger
     ) async throws -> BuildResult {
-        guard let baseKey = settings.baseBundleKey else {
+        guard let base = baseBundle(settings: settings, in: directory) else {
             throw Abort(
                 .badRequest,
-                reason: "CI 가 만든 스토어 앱 번들을 먼저 올려주세요. 그것 없이는 빌드할 것이 없습니다."
+                reason: "빌드할 번들이 없습니다. 이 서버 이미지에 스토어 앱이 들어 있지 않고 올려둔 것도 없습니다. 제품 릴리스의 alley-store-app-unsigned.zip 을 올려주세요."
             )
         }
 
         let app = try await resolveApp(settings: settings, by: admin, on: database, logger: logger)
         let appID = try app.requireID()
         let buildNumber = try await VersionController.nextBuildNumber(ofApp: appID, on: database)
-        let shortVersion = settings.baseBundleVersion ?? "0.0.0"
+        let shortVersion = base.version
 
-        let baseZip = try await storage.get(key: baseKey, limit: maximumBaseBundleSize)
+        let baseZip: Data
+        if let key = base.storageKey {
+            baseZip = try await storage.get(key: key, limit: maximumBaseBundleSize)
+        } else {
+            // 이미지 안의 것을 쓴다. 바로 위에서 있는 것을 확인했다.
+            baseZip = BundledStoreApp.data(in: directory) ?? Data()
+        }
         let bundle = try StoreAppBundleRewriter.rewrite(
             baseZip: baseZip,
             branding: StoreAppBundleRewriter.Branding(
