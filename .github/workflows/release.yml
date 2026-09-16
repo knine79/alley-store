@@ -27,10 +27,10 @@ jobs:
     name: 베이스 번들 빌드
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: 의존성 캐시
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .build
           key: macos-spm-${{ hashFiles('Package.resolved') }}
@@ -45,7 +45,7 @@ jobs:
           ALLEY_STORE_APP_BASE_BUNDLE: '1'
         run: ./scripts/build-store-app.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: alley-store-app-unsigned
           path: .build/store-app/alley-store-app-unsigned.zip
@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: store-app
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # 릴리스 노트를 직전 태그부터 쓰려면 이력이 필요하다.
           fetch-depth: 0
@@ -101,12 +101,12 @@ jobs:
           cat manifest.json
 
       - name: 베이스 번들 받아오기
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: alley-store-app-unsigned
 
       - name: 릴리스 만들기
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             manifest.json
