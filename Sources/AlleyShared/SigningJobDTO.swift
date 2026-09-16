@@ -26,6 +26,14 @@ public struct SigningJobDTO: Codable, Sendable, Identifiable, Equatable {
     public var artifactDownloadURL: String
     /// 서명·공증을 마친 결과물을 올릴 만료 있는 URL.
     public var resultUploadURL: String
+    /// dmg 로도 감싸서 여기 올리라는 뜻 (ADR-0050). 없으면 만들지 않는다.
+    ///
+    /// **서버가 정한다.** 워커는 이 잡이 무엇인지 모르고, 알 필요도 없다. 스토어 앱만
+    /// dmg 가 필요한데 그것을 아는 것은 서버뿐이다 (`StoreAppSettings`).
+    ///
+    /// 옵셔널이라 이 필드를 모르는 예전 워커는 지금까지처럼 zip 만 만든다. 그 결과는
+    /// 모자랄 뿐 틀리지 않는다.
+    public var diskImageUploadURL: String?
     /// 업로더가 함께 올린 entitlements plist 의 XML 원문. 안 올렸으면 nil (ADR-0020).
     ///
     /// 옵셔널이라 합성 디코더가 `decodeIfPresent` 로 읽는다. 이 필드를 모르는 예전
@@ -42,6 +50,7 @@ public struct SigningJobDTO: Codable, Sendable, Identifiable, Equatable {
         enforceBundleIDPrefix: Bool? = nil,
         artifactDownloadURL: String,
         resultUploadURL: String,
+        diskImageUploadURL: String? = nil,
         entitlements: String? = nil,
         expiresAt: Date
     ) {
@@ -53,6 +62,7 @@ public struct SigningJobDTO: Codable, Sendable, Identifiable, Equatable {
         self.enforceBundleIDPrefix = enforceBundleIDPrefix
         self.artifactDownloadURL = artifactDownloadURL
         self.resultUploadURL = resultUploadURL
+        self.diskImageUploadURL = diskImageUploadURL
         self.entitlements = entitlements
         self.expiresAt = expiresAt
     }
@@ -89,6 +99,12 @@ public struct SigningJobUpdate: Codable, Sendable {
     /// 옵셔널이라 합성 디코더가 `decodeIfPresent` 로 읽는다. 이 필드를 모르는 예전
     /// 워커가 보낸 보고도 그대로 받아들인다.
     public var bundleMetadata: BundleMetadata?
+    /// dmg 를 만들어 올렸으면 그 검증값 (ADR-0050). 안 만들었으면 nil 이다.
+    ///
+    /// zip 과 같은 이유로 서버가 스토리지에서 한 번 더 확인한다. 워커가 "올렸다" 고
+    /// 말하는 것만 믿으면 빈 dmg 가 붙은 버전이 출시된다.
+    public var diskImageSHA256: String?
+    public var diskImageSize: Int64?
 
     public init(
         state: SigningJobState,
@@ -99,7 +115,9 @@ public struct SigningJobUpdate: Codable, Sendable {
         resultSHA256: String? = nil,
         resultSize: Int64? = nil,
         resultEdSignature: String? = nil,
-        bundleMetadata: BundleMetadata? = nil
+        bundleMetadata: BundleMetadata? = nil,
+        diskImageSHA256: String? = nil,
+        diskImageSize: Int64? = nil
     ) {
         self.state = state
         self.phase = phase
@@ -110,6 +128,8 @@ public struct SigningJobUpdate: Codable, Sendable {
         self.resultSize = resultSize
         self.resultEdSignature = resultEdSignature
         self.bundleMetadata = bundleMetadata
+        self.diskImageSHA256 = diskImageSHA256
+        self.diskImageSize = diskImageSize
     }
 }
 
@@ -158,6 +178,8 @@ public enum SigningPhase: String, Codable, Sendable, CaseIterable {
     case codesigning
     case notarizing
     case stapling
+    /// dmg 로 감싸는 중 (ADR-0050). 그 잡에만 지나간다.
+    case packaging
     case uploading
 
     public var displayName: String {
@@ -167,6 +189,7 @@ public enum SigningPhase: String, Codable, Sendable, CaseIterable {
         case .codesigning: return "서명 중"
         case .notarizing: return "공증 대기 중"
         case .stapling: return "공증 티켓 첨부 중"
+        case .packaging: return "dmg 만드는 중"
         case .uploading: return "올리는 중"
         }
     }

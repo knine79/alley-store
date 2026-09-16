@@ -124,11 +124,14 @@ public struct WorkerLoop: Sendable {
                     resultSHA256: output.sha256,
                     resultSize: output.size,
                     resultEdSignature: output.edSignature,
-                    bundleMetadata: output.bundleMetadata
+                    bundleMetadata: output.bundleMetadata,
+                    diskImageSHA256: output.diskImageSHA256,
+                    diskImageSize: output.diskImageSize
                 ),
                 for: job.id
             )
-            log("잡 \(job.id) 완료 (\(output.size) 바이트)")
+            let dmg = output.diskImageSize.map { " + dmg \($0) 바이트" } ?? ""
+            log("잡 \(job.id) 완료 (\(output.size) 바이트\(dmg))")
         } catch {
             let reason = String(describing: error)
             // 갈래를 여기서 정한다. 오류 타입을 손에 쥔 곳은 여기뿐이고, 서버가

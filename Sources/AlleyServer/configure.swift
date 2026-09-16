@@ -140,6 +140,10 @@ private func configureMigrations(_ app: Application) {
 
     // 스토어 앱을 받는 공개 페이지에는 세션이 없다 (ADR-0049).
     app.migrations.add(MakeDownloadUserOptional())
+
+    // 스토어 앱은 dmg 로도 나간다 (ADR-0050).
+    app.migrations.add(AddDiskImageArtifactKind())
+    app.migrations.add(AddSigningJobDiskImage())
 }
 
 /// 미들웨어 스택.

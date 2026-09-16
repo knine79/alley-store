@@ -67,6 +67,16 @@ public final class SigningJob: Model, @unchecked Sendable {
     @Field(key: "attempt")
     public var attempt: Int
 
+    /// zip 말고 dmg 도 만들라는 표시 (ADR-0050).
+    ///
+    /// **서버가 정해서 잡에 싣는다.** 워커는 이 잡이 스토어 앱인지 모르고, 알 필요도
+    /// 없다. 그 성질을 지키려고 "무엇인가" 가 아니라 "무엇을 해라" 로 싣는다.
+    ///
+    /// 잡에 두고 버전이나 앱에 두지 않는 이유는, 이것이 **이번 시도에 무엇을 만들지**
+    /// 이기 때문이다. 재시도하면 그때 서버가 다시 정한다.
+    @Field(key: "makes_disk_image")
+    public var makesDiskImage: Bool
+
     @OptionalField(key: "claimed_at")
     public var claimedAt: Date?
 
@@ -85,10 +95,11 @@ public final class SigningJob: Model, @unchecked Sendable {
 
     public init() {}
 
-    public init(versionID: UUID, attempt: Int = 1) {
+    public init(versionID: UUID, attempt: Int = 1, makesDiskImage: Bool = false) {
         self.$version.id = versionID
         self.state = .queued
         self.attempt = attempt
+        self.makesDiskImage = makesDiskImage
     }
 }
 
@@ -99,17 +110,27 @@ extension SigningJob {
     /// 받았다고 같은 버전을 두 번 서명할 이유가 없다. 실패한 잡만 있으면 시도 횟수를
     /// 이어서 새 잡을 만든다.
     @discardableResult
-    static func enqueue(versionID: UUID, on database: any Database) async throws -> SigningJob {
+    static func enqueue(
+        versionID: UUID,
+        makesDiskImage: Bool = false,
+        on database: any Database
+    ) async throws -> SigningJob {
         let existing = try await SigningJob.query(on: database)
             .filter(\.$version.$id == versionID)
             .sort(\.$attempt, .descending)
             .all()
 
         if let live = existing.first(where: { $0.state == .queued || $0.state == .running }) {
+            // 이미 도는 잡의 지시를 바꾸지 않는다. 워커가 지시서를 이미 받아갔을 수
+            // 있어서, 여기서 고쳐도 이번 시도에는 반영되지 않는다.
             return live
         }
 
-        let job = SigningJob(versionID: versionID, attempt: (existing.first?.attempt ?? 0) + 1)
+        let job = SigningJob(
+            versionID: versionID,
+            attempt: (existing.first?.attempt ?? 0) + 1,
+            makesDiskImage: makesDiskImage
+        )
         try await job.save(on: database)
         return job
     }
@@ -277,5 +298,45 @@ public struct AddSigningJobFailureCode: AsyncMigration {
         try await database.schema(SigningJob.schema)
             .deleteField("failure_code")
             .update()
+    }
+}
+
+/// dmg 를 만들라는 표시를 잡에 더한다 (ADR-0050).
+///
+/// 기본값은 거짓이다. 이미 큐에 있던 잡은 지금까지처럼 zip 만 만든다.
+public struct AddSigningJobDiskImage: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        try await database.schema(SigningJob.schema)
+            .field("makes_disk_image", .bool, .required, .sql(.default(false)))
+            .update()
+    }
+
+    public func revert(on database: any Database) async throws {
+        try await database.schema(SigningJob.schema)
+            .deleteField("makes_disk_image")
+            .update()
+    }
+}
+
+/// 아티팩트 갈래에 `dmg` 를 더한다 (ADR-0050).
+public struct AddDiskImageArtifactKind: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+        // `IF NOT EXISTS` 로 적는다. Fluent 의 enum 빌더는 그것을 만들지 못하는데,
+        // 값이 이미 있을 때 그냥 지나가야 한다. 옛 데이터베이스와 새 데이터베이스가
+        // 같은 자리에 도착하는지는 이 한 줄에 달려 있다.
+        try await sql.raw("ALTER TYPE \"artifact_kind\" ADD VALUE IF NOT EXISTS 'dmg'").run()
+    }
+
+    public func revert(on database: any Database) async throws {
+        // **되돌리지 않는다.** PostgreSQL 은 enum 에서 값을 빼지 못한다. 억지로 하려면
+        // 타입을 새로 만들어 열을 옮겨야 하는데, 그 값을 쓰는 아티팩트 행까지 지워야
+        // 하고 그러면 스토리지의 파일과 어긋난다. 쓰이지 않는 값 하나가 남는 편이 낫다.
     }
 }

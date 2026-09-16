@@ -228,7 +228,12 @@ public enum StoreAppBuildService {
         try version.transition(to: .uploaded)
         try await version.save(on: database)
 
-        let job = try await SigningJob.enqueue(versionID: versionID, on: database)
+        // **스토어 앱만 dmg 로도 나간다** (ADR-0050). 다른 앱은 스토어 앱이 받아서
+        // `/Applications` 에 직접 넣으므로 사람이 옮길 일이 없다. 이것만 사람이 손으로
+        // 옮기고, 그때 dmg 안의 Applications 별칭이 그 일을 드래그 한 번으로 만든다.
+        let job = try await SigningJob.enqueue(
+            versionID: versionID, makesDiskImage: true, on: database
+        )
         logger.notice(
             """
             스토어 앱을 빌드했습니다 \
