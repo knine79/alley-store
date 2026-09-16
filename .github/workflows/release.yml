@@ -36,7 +36,13 @@ jobs:
           key: macos-spm-${{ hashFiles('Package.resolved') }}
           restore-keys: macos-spm-
 
+      # 브랜딩 없는 재료라 붙을 주소를 박지 않는다. 서버가 조립할 때 자기
+      # `PUBLIC_BASE_URL` 로 채운다 (ADR-0046). 이 표시가 없으면 스크립트가
+      # 거절한다 — 주소 없이 나간 앱은 받은 사람에게 주소를 묻게 되고, 그러면
+      # 서명한 조직이 보증하지 않은 서버에도 붙기 때문이다 (ADR-0044).
       - name: 번들 조립
+        env:
+          ALLEY_STORE_APP_BASE_BUNDLE: '1'
         run: ./scripts/build-store-app.sh
 
       - uses: actions/upload-artifact@v4
