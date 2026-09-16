@@ -143,6 +143,17 @@ enum AdminOperations {
             throw Abort(.badRequest, reason: "워커 이름은 비울 수 없습니다.")
         }
 
+        // 쓰고 있는 워커끼리는 이름이 겹치지 않게 한다. 목록에서 둘을 가릴 방법이 없고,
+        // 잡 이력에 남는 것도 이름이라 나중에 "어느 맥이 서명했나" 를 되짚을 수 없다.
+        // 폐기한 워커의 이름은 다시 쓸 수 있다. 맥을 교체하고 같은 이름을 붙이는 것이
+        // 오히려 흔한 일이다.
+        let sameName = try await Worker.query(on: database)
+            .filter(\.$name == trimmed)
+            .all()
+        guard !sameName.contains(where: \.isActive) else {
+            throw Abort(.conflict, reason: "'\(trimmed)' 은 이미 쓰고 있는 워커입니다. 이름을 바꾸거나 그 워커를 먼저 폐기하세요.")
+        }
+
         let token = Worker.generateToken()
         let worker = Worker(
             name: trimmed,

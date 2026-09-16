@@ -1,5 +1,8 @@
 #extend("layout"):
 #export("content"):
+<!-- 발급은 리다이렉트하지 않는다. 새로고침이 폼을 다시 보내지 않게 이 주소로
+     바꿔둔다 (`no-resubmit.js`). -->
+<div hidden data-resubmit-guard="/admin/workers"></div>
 <h1 class="page-title">서명 워커</h1>
 <p class="page-lead">
     미서명으로 올라온 버전의 서명과 공증을 대신하는 맥입니다. 인증서는 그 머신의
@@ -32,6 +35,7 @@
     <thead>
         <tr>
             <th class="table-fill">이름</th>
+            <th class="table-tight">등록</th>
             <th class="table-tight">워커 버전</th>
             <th class="table-tight">macOS</th>
             <th class="table-tight">마지막 접속</th>
@@ -43,6 +47,9 @@
         #for(worker in workers):
         <tr>
             <td class="table-fill table-strong">#(worker.name)</td>
+            <!-- 맥을 교체하고 같은 이름을 다시 쓰는 일이 흔합니다. 폐기한 워커와
+                 지금 워커를 이름만으로는 가릴 수 없어서 등록 시각을 함께 보여줍니다. -->
+            <td class="table-tight table-muted"><time datetime="#(worker.registeredAt.iso)" data-date-only="#(worker.registeredAt.dateOnly)">#(worker.registeredAt.display)</time></td>
             <!-- 낡은 워커는 조용히 엉뚱한 실패를 냅니다. dmg 를 모르는 워커가 dmg 를
                  zip 으로 풀다 "번들 구조 문제" 라고 한 적이 있습니다 (ADR-0042). -->
             <td class="table-tight">
@@ -83,6 +90,7 @@
         <thead>
             <tr>
                 <th class="table-fill">이름</th>
+                <th class="table-tight">등록</th>
                 <th class="table-tight">워커 버전</th>
                 <th class="table-tight">macOS</th>
                 <th class="table-tight">마지막 접속</th>
@@ -93,6 +101,7 @@
             #for(worker in revokedWorkers):
             <tr>
                 <td class="table-fill table-muted">#(worker.name)</td>
+                <td class="table-tight table-muted"><time datetime="#(worker.registeredAt.iso)" data-date-only="#(worker.registeredAt.dateOnly)">#(worker.registeredAt.display)</time></td>
                 <td class="table-tight table-muted">#(worker.workerVersion)</td>
                 <td class="table-tight table-muted">#if(worker.osVersion):#(worker.osVersion)#else:—#endif</td>
                 <td class="table-tight table-muted">#if(worker.lastSeen):<time datetime="#(worker.lastSeen.iso)" data-date-only="#(worker.lastSeen.dateOnly)">#(worker.lastSeen.display)</time>#else:접속한 적 없음#endif</td>
@@ -208,6 +217,7 @@
         <thead>
             <tr>
                 <th class="table-fill">이름</th>
+                <th class="table-tight">발급</th>
                 <th class="table-tight">마지막 사용</th>
                 <th class="table-tight">상태</th>
                 <th class="table-tight"><span class="visually-hidden">폐기</span></th>
@@ -217,6 +227,9 @@
             #for(token in operatorTokens):
             <tr>
                 <td class="table-fill table-strong">#(token.name)</td>
+                <!-- 목록은 새로 발급한 것이 위로 옵니다. 그 기준이 화면에 없으면
+                     폐기하고 다시 발급한 토큰과 원래 있던 토큰이 똑같아 보입니다. -->
+                <td class="table-tight table-muted"><time datetime="#(token.issuedAt.iso)" data-date-only="#(token.issuedAt.dateOnly)">#(token.issuedAt.display)</time></td>
                 <td class="table-tight table-muted">#if(token.lastUsed):<time datetime="#(token.lastUsed.iso)" data-date-only="#(token.lastUsed.dateOnly)">#(token.lastUsed.display)</time>#else:쓴 적 없음#endif</td>
                 <td class="table-tight"><span class="badge">쓸 수 있음</span></td>
                 <td class="table-tight">
@@ -239,6 +252,7 @@
             <thead>
                 <tr>
                     <th class="table-fill">이름</th>
+                    <th class="table-tight">발급</th>
                     <th class="table-tight">마지막 사용</th>
                     <th class="table-tight">상태</th>
                 </tr>
@@ -247,6 +261,7 @@
                 #for(token in revokedOperatorTokens):
                 <tr>
                     <td class="table-fill table-muted">#(token.name)</td>
+                    <td class="table-tight table-muted"><time datetime="#(token.issuedAt.iso)" data-date-only="#(token.issuedAt.dateOnly)">#(token.issuedAt.display)</time></td>
                     <td class="table-tight table-muted">#if(token.lastUsed):<time datetime="#(token.lastUsed.iso)" data-date-only="#(token.lastUsed.dateOnly)">#(token.lastUsed.display)</time>#else:쓴 적 없음#endif</td>
                     <td class="table-tight"><span class="badge badge-failed">폐기됨</span></td>
                 </tr>
