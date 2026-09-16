@@ -161,56 +161,23 @@ jobs:
       # 배포 토큰을 쓰지 않는다. 앱 하나에 묶이는 토큰인데(ADR-0015) 이 일은 앱에
       # 올리는 것이 아니라 스토어 자신을 갱신하는 것이라, 워커 릴리스와 같은 운영
       # 토큰을 쓴다.
-      - name: 스토어 앱 상태 확인
+      # 셋을 스크립트 하나가 한다. 이미 빌드된 버전이면 건너뛰고, 베이스 번들을
+      # 만들어 올리고, 빌드를 시킨다.
+      #
+      # **서버 API 를 아는 자리를 제품 레포에 둔다.** 예전에는 이 워크플로에 `curl`
+      # 세 줄이 박혀 있었다. 제품이 경로나 필드를 바꾸면 여기가 따라와야 했고, 그
+      # 사실을 아무도 알려주지 않았다. `alley.lock` 이 제품 태그를 고정하므로
+      # 스크립트와 API 는 언제나 같은 커밋에서 나온다.
+      #
+      # 개발자가 로컬에서 쓰는 것도 같은 스크립트다. 여기서만 도는 경로로 두면
+      # 깨져 있어도 릴리스 날까지 아무도 모른다.
+      - name: 스토어 앱 베이스 번들 올리고 빌드시키기
         if: ${{ !inputs.skip_store_app }}
-        id: store_app
-        run: |
-          set -euo pipefail
-          BUILT=$(curl -fsS \
-              -H "Authorization: Bearer ${{ secrets.ALLEY_OPERATOR_TOKEN }}" \
-              "${{ secrets.ALLEY_SERVER_URL }}/api/v1/ops/store-app" \
-            | python3 -c 'import json,sys; print("\n".join(b["shortVersion"] for b in json.load(sys.stdin)["builds"]))')
-
-          # 이 버전으로 이미 빌드했으면 다시 하지 않는다. 빌드 번호는 서버가 스스로
-          # 올리므로 두 번 돌리면 버전이 하나 더 생긴다. 워커 릴리스처럼 서버가
-          # 같은 버전을 거절해주지 않는다.
-          # 따옴표를 붙인다. 셸의 단어 분리에 기대면 zsh 처럼 분리하지 않는 셸에서
-          # 조용히 "없다" 로 떨어지고, 그러면 같은 버전을 두 번 빌드한다.
-          if printf '%s\n' "$BUILT" | grep -qx "${{ steps.lock.outputs.version }}"; then
-            echo "needed=false" >> "$GITHUB_OUTPUT"
-            echo "스토어 앱 ${{ steps.lock.outputs.version }} 은 이미 빌드돼 있습니다."
-          else
-            echo "needed=true" >> "$GITHUB_OUTPUT"
-            echo "스토어 앱 ${{ steps.lock.outputs.version }} 을 빌드합니다."
-          fi
-
-      - name: 스토어 앱 베이스 번들 만들기
-        if: ${{ !inputs.skip_store_app && steps.store_app.outputs.needed == 'true' }}
         working-directory: product
         env:
-          # 브랜딩 없는 재료라 주소를 박지 않는다. 조직마다 다르고, 서버가 조립할
-          # 때 자기 `PUBLIC_BASE_URL` 로 채운다 (ADR-0046). 이 표시가 없으면
-          # 스크립트가 "주소가 없다" 며 거절한다. 그 거절이 기본값인 이유는,
-          # 주소 없이 나간 앱은 받은 사람에게 주소를 묻게 되고 그러면 서명한
-          # 조직이 보증하지 않은 서버에도 붙기 때문이다.
-          ALLEY_STORE_APP_BASE_BUNDLE: '1'
-        run: ./scripts/build-store-app.sh
-
-      - name: 베이스 번들 올리고 빌드시키기
-        if: ${{ !inputs.skip_store_app && steps.store_app.outputs.needed == 'true' }}
-        run: |
-          set -euo pipefail
-          curl -fsS -X POST \
-            -H "Authorization: Bearer ${{ secrets.ALLEY_OPERATOR_TOKEN }}" \
-            -F "version=${{ steps.lock.outputs.version }}" \
-            -F "bundle=@product/.build/store-app/alley-store-app-unsigned.zip" \
-            "${{ secrets.ALLEY_SERVER_URL }}/api/v1/ops/store-app/base-bundle" > /dev/null
-
-          curl -fsS -X POST \
-            -H "Authorization: Bearer ${{ secrets.ALLEY_OPERATOR_TOKEN }}" \
-            "${{ secrets.ALLEY_SERVER_URL }}/api/v1/ops/store-app/build" > /dev/null
-          echo
-          echo "서명 대기열에 넣었습니다. 서명·공증이 끝나면 관리 > 스토어 앱에서 출시하세요."
+          ALLEY_SERVER_URL: ${{ secrets.ALLEY_SERVER_URL }}
+          ALLEY_OPERATOR_TOKEN: ${{ secrets.ALLEY_OPERATOR_TOKEN }}
+        run: ./scripts/publish-store-app.sh --version "${{ steps.lock.outputs.version }}"
 
       - name: CLI 빌드·서명
         working-directory: product
