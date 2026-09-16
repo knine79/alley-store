@@ -216,6 +216,16 @@ enum FeedTokenIssuing {
             throw Abort(.badRequest, reason: "토큰 이름은 비울 수 없습니다.")
         }
 
+        // 배포 토큰과 같은 이유로 한 앱 안에서 이름이 겹치지 않게 한다
+        // (`DeployTokenIssuing.issue` 참고).
+        let sameName = try await FeedToken.query(on: database)
+            .filter(\.$app.$id == app.requireID())
+            .filter(\.$name == trimmed)
+            .all()
+        guard !sameName.contains(where: \.isActive) else {
+            throw Abort(.conflict, reason: "'\(trimmed)' 은 이미 쓸 수 있는 피드입니다. 새로 발급하려면 그것부터 폐기하세요.")
+        }
+
         let value = FeedToken.generateToken()
         let token = FeedToken(
             appID: try app.requireID(),

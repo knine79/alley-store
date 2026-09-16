@@ -58,5 +58,10 @@
     <!-- 바뀐 것이 없으면 저장 버튼을 잠근다. 없어도 저장은 되고, 같은 값을 다시
          쓸 뿐이다. -->
     <script src="/dirty-guard.js?v=#(page.assetVersion)" defer></script>
+    <!-- 폼을 POST 로 받아 그 자리에서 그린 화면에서만 붙인다. 새로고침이 같은 폼을
+         다시 보내는 것을 막는다. 없어도 서버가 같은 이름의 토큰을 거절한다. -->
+    #if(page.isFormResult):
+    <script src="/no-resubmit.js?v=#(page.assetVersion)" defer></script>
+    #endif
 </body>
 </html>

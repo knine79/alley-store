@@ -20,6 +20,15 @@ struct PageContext: Encodable {
     var adminTabs: [AdminTabLink]
     /// 정적 파일 주소에 붙는 지문. `AssetVersion` 참고.
     var assetVersion: String
+    /// 폼을 POST 로 받아 그 자리에서 그린 화면인가.
+    ///
+    /// 토큰 발급은 리다이렉트하지 않는다. 토큰 원문이 그 응답에만 있어서 다음 화면에서
+    /// 다시 보여줄 방법이 없기 때문이다(ADR-0013). 대신 브라우저의 주소는 POST 인 채로
+    /// 남고, 새로고침하면 같은 폼이 다시 제출된다. 그렇게 생긴 토큰이 "폐기한 토큰이
+    /// 다시 나타났다" 로 보인 적이 있다.
+    ///
+    /// 이 값이 참일 때만 `no-resubmit.js` 를 붙여 주소를 목록 주소로 바꾼다.
+    var isFormResult: Bool
 }
 
 /// 화면에 바르는 브랜딩.
@@ -79,7 +88,8 @@ extension Request {
             user: user.flatMap { try? $0.toDTO() },
             isAdmin: user?.role.canAdminister ?? false,
             adminTabs: adminTab.map(AdminTab.links(current:)) ?? [],
-            assetVersion: application.assetVersion.value
+            assetVersion: application.assetVersion.value,
+            isFormResult: method == .POST
         )
     }
 }

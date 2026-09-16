@@ -1,5 +1,6 @@
 import AlleyShared
 import Fluent
+import Foundation
 import Testing
 import VaporTesting
 
@@ -558,5 +559,156 @@ struct WorkerPageTests {
                 #expect(response.body.string.contains("워커 이름"))
             }
         }
+    }
+
+    @Test("쓰고 있는 워커와 같은 이름은 등록하지 않는다")
+    func rejectsDuplicateWorkerName() async throws {
+        try await withMigratedApp { app in
+            let (admin, _) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            _ = try await AdminOperations.registerWorker(
+                named: "build-mac-01", by: admin, on: app.db, logger: app.logger
+            )
+
+            await #expect(throws: (any Error).self) {
+                try await AdminOperations.registerWorker(
+                    named: "build-mac-01", by: admin, on: app.db, logger: app.logger
+                )
+            }
+
+            let stored = try await Worker.query(on: app.db).all()
+            #expect(stored.count == 1)
+        }
+    }
+
+    @Test("폐기한 워커의 이름은 다시 쓸 수 있다")
+    func revokedWorkerNameIsReusable() async throws {
+        try await withMigratedApp { app in
+            let (admin, _) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            let first = try await AdminOperations.registerWorker(
+                named: "build-mac-01", by: admin, on: app.db, logger: app.logger
+            )
+            try await AdminOperations.revokeWorker(
+                first.worker.id, by: admin, on: app.db, logger: app.logger
+            )
+
+            // 맥을 교체하고 같은 이름을 붙이는 것은 오히려 흔한 일이다.
+            let second = try await AdminOperations.registerWorker(
+                named: "build-mac-01", by: admin, on: app.db, logger: app.logger
+            )
+            #expect(second.worker.id != first.worker.id)
+        }
+    }
+}
+
+/// 운영 파이프라인 토큰 화면 (ADR-0043).
+///
+/// 이 화면에서 "폐기한 토큰이 목록에 다시 나타난다" 는 말이 나온 적이 있다. 실제로는
+/// 이름이 같은 다른 토큰이었다. 이름 말고는 화면에 가릴 단서가 없었고, 발급 폼이
+/// 새로고침으로 다시 제출되면서 같은 이름이 하나 더 생기기도 했다.
+@Suite("운영 토큰 화면")
+struct OperatorTokenPageTests {
+    private func issue(
+        named name: String, cookie: String, on app: Application
+    ) async throws -> HTTPStatus {
+        var status = HTTPStatus.internalServerError
+        try await app.testing().test(
+            .POST, "/admin/operator-tokens", headers: .form(cookie: cookie),
+            beforeRequest: { request in
+                try request.content.encode(["name": name], as: .urlEncodedForm)
+            }
+        ) { status = $0.status }
+        return status
+    }
+
+    @Test("쓸 수 있는 토큰과 같은 이름은 발급하지 않는다")
+    func rejectsDuplicateName() async throws {
+        try await withMigratedApp { app in
+            let (_, cookie) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            #expect(try await issue(named: "ops-local", cookie: cookie, on: app) == .ok)
+
+            // 발급 화면을 새로고침하면 브라우저가 보내는 요청이 정확히 이 모양이다.
+            try await app.testing().test(
+                .POST, "/admin/operator-tokens", headers: .form(cookie: cookie),
+                beforeRequest: { request in
+                    try request.content.encode(["name": "ops-local"], as: .urlEncodedForm)
+                }
+            ) { response in
+                #expect(response.status == .conflict)
+                #expect(response.body.string.contains("이미 쓸 수 있는 운영 토큰"))
+            }
+
+            let stored = try await OperatorToken.query(on: app.db).all()
+            #expect(stored.count == 1)
+        }
+    }
+
+    @Test("폐기한 뒤에는 같은 이름으로 다시 발급된다")
+    func revokedNameIsReusable() async throws {
+        try await withMigratedApp { app in
+            let (_, cookie) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            #expect(try await issue(named: "ops-local", cookie: cookie, on: app) == .ok)
+
+            let first = try #require(try await OperatorToken.query(on: app.db).first())
+            try await app.testing().test(
+                .POST, "/admin/operator-tokens/\(try first.requireID().uuidString)/revoke",
+                headers: .form(cookie: cookie)
+            ) { #expect($0.status == .seeOther) }
+
+            #expect(try await issue(named: "ops-local", cookie: cookie, on: app) == .ok)
+            let stored = try await OperatorToken.query(on: app.db).all()
+            #expect(stored.count == 2)
+            #expect(stored.filter(\.isActive).count == 1)
+        }
+    }
+
+    @Test("이름이 같아도 발급 시각으로 가릴 수 있다")
+    func issuedAtTellsTokensApart() async throws {
+        try await withMigratedApp { app in
+            let (admin, cookie) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            // 초 단위로 떨어뜨린다. 화면에 나가는 값이 초까지만 적히기 때문이다.
+            let retiredAt = Date(timeIntervalSince1970: 1_757_000_000)
+            let liveAt = Date(timeIntervalSince1970: 1_757_001_000)
+            try await store(
+                named: "ops-local", createdAt: retiredAt, revokedAt: retiredAt.addingTimeInterval(10),
+                by: admin, on: app.db
+            )
+            try await store(named: "ops-local", createdAt: liveAt, by: admin, on: app.db)
+
+            try await app.testing().test(
+                .GET, "/admin/workers", headers: .sessionCookie(cookie)
+            ) { response in
+                let html = response.body.string
+                #expect(html.contains("폐기된 운영 토큰 1개 보기"))
+                // 두 줄이 같은 이름이라, 이 두 값이 유일한 단서다.
+                #expect(html.contains(iso(retiredAt)))
+                #expect(html.contains(iso(liveAt)))
+            }
+        }
+    }
+
+    /// 발급 경로를 거치지 않고 행을 넣는다. 이름이 겹치는 상태를 만들어야 한다.
+    private func store(
+        named name: String,
+        createdAt: Date,
+        revokedAt: Date? = nil,
+        by admin: User,
+        on database: any Database
+    ) async throws {
+        let token = OperatorToken(
+            name: name,
+            tokenHash: OperatorToken.hash(token: OperatorToken.generateToken()),
+            createdByID: try admin.requireID()
+        )
+        token.revokedAt = revokedAt
+        try await token.save(on: database)
+        // `@Timestamp(on: .create)` 는 만들 때만 찍는다. 그래서 저장한 뒤에 바꾼다.
+        token.createdAt = createdAt
+        try await token.save(on: database)
+    }
+
+    private func iso(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.string(from: date)
     }
 }

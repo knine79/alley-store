@@ -267,6 +267,7 @@ struct AppPagesController: RouteCollection, Sendable {
                     DeployTokenRow(
                         id: token.id?.uuidString ?? "",
                         name: token.name,
+                        issuedAt: DateStyle.minute.display(from: token.createdAt ?? Date()),
                         lastUsed: token.lastUsedAt.map { DateStyle.minute.display(from: $0) },
                         isActive: token.isActive
                     )
@@ -956,12 +957,16 @@ extension DeployTokenFormValues: Content {}
 struct DeployTokenRow: Encodable {
     var id: String
     var name: String
+    /// 언제 발급한 것인지. 폐기하고 같은 이름으로 다시 발급하면 이름과 상태만으로는
+    /// 두 줄을 구별할 수 없다. 둘 다 쓴 적이 없으면 더욱 그렇다.
+    var issuedAt: DisplayDate
     var lastUsed: DisplayDate?
     var isActive: Bool
 
-    init(id: String, name: String, lastUsed: DisplayDate?, isActive: Bool) {
+    init(id: String, name: String, issuedAt: DisplayDate, lastUsed: DisplayDate?, isActive: Bool) {
         self.id = id
         self.name = name
+        self.issuedAt = issuedAt
         self.lastUsed = lastUsed
         self.isActive = isActive
     }
@@ -970,6 +975,7 @@ struct DeployTokenRow: Encodable {
         self.init(
             id: token.id?.uuidString ?? "",
             name: token.name,
+            issuedAt: DateStyle.minute.display(from: token.createdAt ?? Date()),
             lastUsed: token.lastUsedAt.map { DateStyle.minute.display(from: $0) },
             isActive: token.isActive
         )

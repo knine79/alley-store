@@ -104,6 +104,18 @@ enum DeployTokenIssuing {
             throw Abort(.badRequest, reason: "토큰 이름은 비울 수 없습니다.")
         }
 
+        // 한 앱 안에서 쓸 수 있는 토큰끼리는 이름이 겹치지 않게 한다. 화면에 나오는 것은
+        // 이름과 시각뿐이라, 이름이 같으면 어느 쪽이 파이프라인에 들어 있는지 알 수 없다.
+        // 발급 화면은 리다이렉트하지 않으므로 새로고침으로 폼이 다시 제출되는 경우도
+        // 여기서 걸린다. 폐기한 토큰의 이름은 다시 쓸 수 있다.
+        let sameName = try await DeployToken.query(on: database)
+            .filter(\.$app.$id == app.requireID())
+            .filter(\.$name == trimmed)
+            .all()
+        guard !sameName.contains(where: \.isActive) else {
+            throw Abort(.conflict, reason: "'\(trimmed)' 은 이미 쓸 수 있는 배포 토큰입니다. 새로 발급하려면 그것부터 폐기하세요.")
+        }
+
         let value = DeployToken.generateToken()
         let token = DeployToken(
             appID: try app.requireID(),

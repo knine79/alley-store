@@ -355,6 +355,24 @@ struct AdminPagesController: RouteCollection, Sendable {
             return try await redirectWithError("토큰 이름을 적으세요.", on: request)
         }
 
+        // 쓸 수 있는 토큰끼리는 이름이 겹치지 않게 한다. 목록에 나오는 것은 이름과
+        // 시각뿐이라, 이름이 같으면 어느 쪽이 파이프라인에 들어 있는 토큰인지 화면에서
+        // 가릴 수 없다. 실제로 이름이 같은 토큰이 셋 쌓인 적이 있고, 그때 폐기한 토큰이
+        // 다시 나타난 것으로 보였다.
+        //
+        // 발급 화면은 리다이렉트하지 않으므로(아래 주석 참고) 새로고침하면 브라우저가
+        // 같은 폼을 다시 보낸다. 그 재제출도 여기서 걸린다.
+        let sameName = try await OperatorToken.query(on: request.db)
+            .filter(\.$name == name)
+            .all()
+        guard !sameName.contains(where: \.isActive) else {
+            return try await redirectWithError(
+                "'\(name)' 은 이미 쓸 수 있는 운영 토큰입니다. 새로 발급하려면 그것부터 폐기하세요.",
+                status: .conflict,
+                on: request
+            )
+        }
+
         let value = OperatorToken.generateToken()
         let token = OperatorToken(
             name: name,
@@ -451,9 +469,13 @@ struct AdminPagesController: RouteCollection, Sendable {
     }
 
     /// 오류를 화면 위에 띄운 채로 워커 화면을 다시 그린다.
-    private func redirectWithError(_ message: String, on request: Request) async throws -> Response {
+    private func redirectWithError(
+        _ message: String,
+        status: HTTPStatus = .badRequest,
+        on request: Request
+    ) async throws -> Response {
         let view = try await renderWorkers(issued: nil, error: message, on: request)
-        let response = Response(status: .badRequest)
+        let response = Response(status: status)
         response.headers.contentType = .html
         response.body = .init(buffer: view.data)
         return response
@@ -777,12 +799,18 @@ struct IssuedOperatorToken: Encodable {
 struct OperatorTokenRow: Encodable {
     var id: String
     var name: String
+    /// 언제 발급한 것인지. 목록을 이 값으로 정렬하므로 화면에도 보여준다.
+    ///
+    /// 이름만 보여주던 때는 폐기하고 다시 발급한 토큰과 원래 있던 토큰이 화면에서
+    /// 똑같이 보였다. 둘 다 쓴 적이 없으면 구별할 단서가 하나도 없었다.
+    var issuedAt: DisplayDate
     var lastUsed: DisplayDate?
     var isActive: Bool
 
     init(token: OperatorToken) throws {
         self.id = try token.requireID().uuidString
         self.name = token.name
+        self.issuedAt = DateStyle.minute.display(from: token.createdAt ?? Date())
         self.lastUsed = token.lastUsedAt.map { DateStyle.minute.display(from: $0) }
         self.isActive = token.isActive
     }
@@ -815,6 +843,8 @@ struct WorkerReleaseRow: Encodable {
 struct WorkerRow: Encodable {
     var id: String
     var name: String
+    /// 언제 등록한 것인지. 이름이 같은 워커를 구별할 단서다 (`OperatorTokenRow` 참고).
+    var registeredAt: DisplayDate
     var osVersion: String?
     var lastSeen: DisplayDate?
     var isBusy: Bool
@@ -830,6 +860,7 @@ struct WorkerRow: Encodable {
     init(worker: Worker) throws {
         self.id = worker.id?.uuidString ?? ""
         self.name = worker.name
+        self.registeredAt = DateStyle.minute.display(from: worker.createdAt ?? Date())
         self.osVersion = worker.osVersion
         self.lastSeen = worker.lastSeenAt.map { DateStyle.minute.display(from: $0) }
         self.isBusy = worker.currentJobID != nil

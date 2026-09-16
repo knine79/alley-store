@@ -311,10 +311,12 @@ struct DeployTokenIssuingTests {
             let setup = try await seedAppWithDeployToken(on: app)
             let path = "/apps/\(setup.appID.uuidString)"
 
+            // 앱에는 이미 'github-actions' 가 있다. 쓸 수 있는 토큰끼리는 이름이
+            // 겹칠 수 없어서 다른 이름으로 발급한다.
             try await app.testing().test(
                 .POST, "\(path)/deploy-tokens", headers: .form(cookie: setup.ownerToken),
                 beforeRequest: { request in
-                    try request.content.encode(["name": "github-actions"], as: .urlEncodedForm)
+                    try request.content.encode(["name": "release-bot"], as: .urlEncodedForm)
                 }
             ) { response in
                 #expect(response.status == .created)
@@ -325,6 +327,45 @@ struct DeployTokenIssuingTests {
             try await app.testing().test(
                 .GET, path, headers: .sessionCookie(setup.ownerToken)
             ) { #expect(!$0.body.string.contains("alleyd_")) }
+        }
+    }
+
+    @Test("한 앱 안에서 같은 이름으로 또 발급하지 않는다")
+    func rejectsDuplicateName() async throws {
+        try await withMigratedApp { app in
+            let setup = try await seedAppWithDeployToken(on: app)
+            let path = "/apps/\(setup.appID.uuidString)"
+
+            // 발급 화면은 리다이렉트하지 않는다. 새로고침하면 브라우저가 같은 폼을
+            // 다시 보내고, 이름만 보이는 목록에 똑같은 줄이 하나 더 생긴다.
+            try await app.testing().test(
+                .POST, "\(path)/deploy-tokens", headers: .form(cookie: setup.ownerToken),
+                beforeRequest: { request in
+                    try request.content.encode(["name": "github-actions"], as: .urlEncodedForm)
+                }
+            ) { #expect($0.status == .conflict) }
+
+            let stored = try await DeployToken.query(on: app.db)
+                .filter(\.$app.$id == setup.appID)
+                .all()
+            #expect(stored.count == 1)
+        }
+    }
+
+    @Test("다른 앱에서는 같은 이름을 쓸 수 있다")
+    func namesAreScopedToApp() async throws {
+        try await withMigratedApp { app in
+            let setup = try await seedAppWithDeployToken(on: app)
+            let other = try await app.seedApp(
+                bundleID: "com.example.other", name: "다른 앱", owner: setup.owner
+            )
+
+            // 파이프라인 이름은 앱마다 같기 마련이다. 앱을 넘어 막을 이유가 없다.
+            let created = try await DeployTokenIssuing.issue(
+                named: "github-actions", for: other, by: setup.owner,
+                on: app.db, logger: app.logger
+            )
+            #expect(created.token.name == "github-actions")
         }
     }
 
