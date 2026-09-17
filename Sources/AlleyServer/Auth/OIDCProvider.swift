@@ -34,7 +34,9 @@ public struct OIDCProvider: Sendable {
     }
 
     /// 사용자를 보낼 로그인 주소.
-    public func authorizationURL(state: String) -> String {
+    /// - Parameter forcesReauthentication: 공급자에게 인증을 다시 시킬지. 방금
+    ///   로그아웃한 사람이 다시 들어올 때 참이다 (`reauthenticationCookieName`).
+    public func authorizationURL(state: String, forcesReauthentication: Bool = false) -> String {
         var components = URLComponents(string: metadata.authorizationEndpoint)!
         var items: [URLQueryItem] = [
             .init(name: "client_id", value: config.clientID),
@@ -46,7 +48,14 @@ public struct OIDCProvider: Sendable {
         // 어느 계정으로 들어갈지 고르게 한다. 여러 계정을 쓰는 사람이 많고, 이것이
         // 없으면 브라우저가 기억하는 계정으로 조용히 들어간다. 강제력은 없어서
         // 실제 판단은 돌아온 ID 토큰을 보고 서버가 한다.
-        items.append(.init(name: "prompt", value: "select_account"))
+        //
+        // **`select_account` 는 공급자마다 다르게 다뤄진다.** Google 은 계정 고르는
+        // 화면을 띄우지만 Keycloak 은 그런 화면이 없어 무시한다. 그래서 방금 로그아웃한
+        // 사람에게는 `login` 을 함께 보낸다. 그쪽은 "세션이 있어도 다시 인증시켜라" 라서
+        // 어느 공급자에서나 같은 뜻으로 통한다.
+        items.append(
+            .init(name: "prompt", value: forcesReauthentication ? "login select_account" : "select_account")
+        )
 
         // 기존 질의 항목을 지우지 않는다. Keycloak 처럼 endpoint 에 이미 질의가
         // 붙어 있는 공급자가 있다.
