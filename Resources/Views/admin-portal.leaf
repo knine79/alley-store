@@ -1,9 +1,10 @@
 #extend("layout"):
 #export("content"):
-<h1 class="page-title">개발자 포털</h1>
+<h1 class="page-title">앱 서명</h1>
 <p class="page-lead">
-    Apple 개발자 계정의 인증서와 App ID 현황입니다. 여기서 보기만 하고, 발급과
-    폐기는 Apple 화면에서 합니다. 서명 키는 이 서버에 오지 않습니다.
+    앱에 서명할 수 있는 상태인지 보는 곳입니다. 서명은 <a href="/admin/workers">서명 워커</a>가
+    자기 맥에서 하고, 여기서는 그때 쓰는 Apple 쪽 자격 - 인증서와 App ID - 의 현황만
+    봅니다. 발급과 폐기는 Apple 화면에서 하고, 서명 키는 이 서버에 오지 않습니다.
 </p>
 
 #if(error):
@@ -27,10 +28,14 @@
 #endif
 
 <section class="section">
-    <h2 class="section-title">인증서</h2>
-    #if(count(certificates) == 0):
+    <h2 class="section-title">서명용 인증서</h2>
+    #if(count(signingCertificates) == 0):
     <div class="empty">
-        <p>인증서를 가져오지 못했거나 등록된 것이 없습니다.</p>
+        <p>Developer ID 인증서가 없습니다.</p>
+        <p class="empty-note">
+            이것 없이는 워커가 서명을 못 합니다. Apple 개발자 계정에서 Developer ID
+            Application 인증서를 만들고 서명 맥의 키체인에 넣으세요.
+        </p>
     </div>
     #else:
     <table class="table">
@@ -43,14 +48,9 @@
             </tr>
         </thead>
         <tbody>
-            #for(certificate in certificates):
+            #for(certificate in signingCertificates):
             <tr>
-                <td class="table-fill">
-                    <span class="table-strong">#(certificate.name)</span>
-                    #if(certificate.isDeveloperID):
-                    <span class="badge badge-released">서명용</span>
-                    #endif
-                </td>
+                <td class="table-fill"><span class="table-strong">#(certificate.name)</span></td>
                 <td class="table-tight table-muted">#(certificate.type)</td>
                 <td class="table-tight table-muted">#if(certificate.expires):<time datetime="#(certificate.expires.iso)" data-date-only="#(certificate.expires.dateOnly)">#(certificate.expires.display)</time>#else:—#endif</td>
                 <td class="table-tight">
@@ -67,9 +67,49 @@
         </tbody>
     </table>
     <p class="field-note">
-        서명용 인증서가 만료되면 워커가 서명을 못 합니다. 갱신은 손이 여러 번 가는
-        일이라 30일 전부터 표시합니다.
+        이것이 만료되면 워커가 서명을 못 합니다. 갱신은 손이 여러 번 가는 일이라
+        30일 전부터 표시합니다.
     </p>
+    #endif
+
+    <!-- 팀의 나머지 인증서는 접어둔다. iOS 개발 인증서는 각자의 Xcode 가 관리하고,
+         여기서 만료를 봐도 이 스토어에서 할 수 있는 일이 없다. 그런데도 열 몇 줄이
+         서명용 한 줄을 덮었다. -->
+    #if(count(otherCertificates) > 0):
+    <details class="disclosure">
+        <summary class="disclosure-summary">
+            팀의 다른 인증서 #count(otherCertificates)개
+            #if(otherExpiringSoon > 0):
+            <span class="badge badge-failed">곧 만료 #(otherExpiringSoon)개</span>
+            #endif
+        </summary>
+        <div class="disclosure-body">
+            <p class="field-note">
+                이 스토어가 쓰지 않는 것들입니다. 각자의 Xcode 나 App Store 배포가
+                쓰는 인증서라, 여기서는 있다는 사실만 보여줍니다.
+            </p>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th class="table-fill">이름</th>
+                        <th class="table-tight">종류</th>
+                        <th class="table-tight">만료</th>
+                        <th class="table-tight">남은 기간</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    #for(certificate in otherCertificates):
+                    <tr>
+                        <td class="table-fill">#(certificate.name)</td>
+                        <td class="table-tight table-muted">#(certificate.type)</td>
+                        <td class="table-tight table-muted">#if(certificate.expires):<time datetime="#(certificate.expires.iso)" data-date-only="#(certificate.expires.dateOnly)">#(certificate.expires.display)</time>#else:—#endif</td>
+                        <td class="table-tight table-muted">#if(certificate.daysLeft):#(certificate.daysLeft)일#else:—#endif</td>
+                    </tr>
+                    #endfor
+                </tbody>
+            </table>
+        </div>
+    </details>
     #endif
 </section>
 
@@ -81,25 +121,25 @@
         등록합니다.
     </p>
 
-    #if(count(bundleIDs) == 0):
+    #if(count(storeBundleIDs) == 0):
     <div class="empty">
-        <p>등록된 App ID 가 없습니다.</p>
+        <p>이 스토어의 앱을 덮는 App ID 가 없습니다.</p>
         <p class="empty-note">그대로 두어도 서명과 공증만으로 배포됩니다.</p>
     </div>
     #else:
     <table class="table">
         <thead>
             <tr>
-                <th class="table-fill">식별자</th>
-                <th class="table-tight">이름</th>
+                <th class="table-code">식별자</th>
+                <th class="table-fill">이름</th>
                 <th class="table-tight">형태</th>
             </tr>
         </thead>
         <tbody>
-            #for(bundleID in bundleIDs):
+            #for(bundleID in storeBundleIDs):
             <tr>
-                <td class="table-fill"><code>#(bundleID.identifier)</code></td>
-                <td class="table-tight table-muted">#(bundleID.name)</td>
+                <td class="table-code"><code>#(bundleID.identifier)</code></td>
+                <td class="table-fill table-muted">#(bundleID.name)</td>
                 <td class="table-tight">
                     #if(bundleID.isWildcard):
                     <span class="badge">와일드카드</span>
@@ -111,6 +151,46 @@
             #endfor
         </tbody>
     </table>
+    #endif
+
+    <!-- 팀의 나머지 App ID 는 접어둔다. Apple 에 `filter[platform]=MAC_OS` 를 걸어도
+         iOS 앱의 것이 함께 오고, 그쪽이 훨씬 많다. -->
+    #if(count(otherBundleIDs) > 0):
+    <details class="disclosure">
+        <summary class="disclosure-summary">
+            팀의 다른 App ID #count(otherBundleIDs)개
+        </summary>
+        <div class="disclosure-body">
+            <p class="field-note">
+                이 스토어에 등록된 앱과 이어지지 않는 것들입니다. 같은 Apple 계정을
+                쓰는 다른 앱의 App ID 라, 여기서는 있다는 사실만 보여줍니다.
+            </p>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th class="table-code">식별자</th>
+                        <th class="table-fill">이름</th>
+                        <th class="table-tight">형태</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    #for(bundleID in otherBundleIDs):
+                    <tr>
+                        <td class="table-code"><code>#(bundleID.identifier)</code></td>
+                        <td class="table-fill table-muted">#(bundleID.name)</td>
+                        <td class="table-tight">
+                            #if(bundleID.isWildcard):
+                            <span class="badge">와일드카드</span>
+                            #else:
+                            <span class="badge">개별</span>
+                            #endif
+                        </td>
+                    </tr>
+                    #endfor
+                </tbody>
+            </table>
+        </div>
+    </details>
     #endif
 
     <form class="form" method="post" action="/admin/portal/bundle-ids">

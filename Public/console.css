@@ -904,6 +904,20 @@ a.tab:hover {
     width: auto;
 }
 
+/* 번들 ID 처럼 띄어쓰기 없는 식별자가 들어가는 칸.
+   `code` 에 `overflow-wrap: anywhere` 가 걸려 있어서(위쪽 `code` 규칙) 브라우저가
+   이 칸의 최소 폭을 한 글자로 계산한다. 옆 칸이 `nowrap` 이면 그쪽이 폭을 다
+   가져가고, 식별자가 `ai.` / `comm` / `onsp` 처럼 네 글자씩 쪼개져 내려갔다.
+   여기서만 되돌려 한 줄로 세운다. */
+.table-code {
+    width: 1%;
+    white-space: nowrap;
+}
+
+.table-code code {
+    overflow-wrap: normal;
+}
+
 .table-strong {
     font-weight: 600;
 }
