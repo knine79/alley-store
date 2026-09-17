@@ -982,7 +982,11 @@ enum PortalGrouping {
         var store: [ASCBundleID] = []
         var other: [ASCBundleID] = []
         for bundleID in bundleIDs {
-            if registered.contains(where: bundleID.covers) {
+            // **`*` 하나는 빼고 본다.** 그것은 무엇이든 덮으므로 어떤 기준을 들어도
+            // 늘 통과한다. Xcode 가 만들어두는 항목이라 이 스토어를 위해 만든 것도
+            // 아니다. 통과시키면 "이 스토어의 App ID" 라는 말이 뜻을 잃는다.
+            let coversEverything = bundleID.identifier == "*"
+            if !coversEverything, registered.contains(where: bundleID.covers) {
                 store.append(bundleID)
             } else {
                 other.append(bundleID)
