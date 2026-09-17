@@ -88,6 +88,45 @@ public enum StoreAppBuildService {
         return settings
     }
 
+    /// 올려둔 베이스 번들을 비운다.
+    ///
+    /// 비우면 서버 이미지에 딸려 온 번들로 돌아간다 (ADR-0048). **되돌리는 길이
+    /// 이것뿐이다.** 올리는 것은 화면에 있는데 무르는 것은 없어서, 잘못 올린 번들을
+    /// 물리려면 `store_app_settings` 의 열 네 개를 손으로 비워야 했다.
+    ///
+    /// 이미지에 번들이 없는 서버라면 비운 뒤 빌드할 것이 없어진다. 그래도 막지
+    /// 않는다. 무엇으로 빌드할지는 다시 정하면 되고, 잘못 올린 것을 그대로 두는
+    /// 쪽이 더 나쁘다. 화면이 비우기 전에 어디로 돌아가는지 말한다.
+    @discardableResult
+    public static func removeBaseBundle(
+        settings: StoreAppSettings,
+        by admin: User,
+        storage: any ArtifactStoring,
+        on database: any Database,
+        logger: Logger
+    ) async throws -> StoreAppSettings {
+        // 올린 것이 없으면 비울 것도 없다. 버튼을 두 번 눌러도 같은 자리에 선다.
+        guard let key = settings.baseBundleKey else { return settings }
+
+        settings.baseBundleKey = nil
+        settings.baseBundleVersion = nil
+        settings.baseBundleSize = nil
+        settings.baseBundleUploadedAt = nil
+        settings.$updatedBy.id = try admin.requireID()
+        try await settings.save(on: database)
+
+        // 오브젝트는 설정을 비운 뒤에 지운다. 순서를 바꿨다가 저장이 실패하면 설정이
+        // 이미 없는 오브젝트를 가리킨 채로 남고, 그 상태에서는 빌드가 안 된다.
+        do {
+            try await storage.delete(key: key)
+        } catch {
+            logger.warning("올려둔 스토어 앱 베이스 번들을 스토리지에서 지우지 못했습니다 [키: \(key), 오류: \(error)]")
+        }
+
+        logger.notice("올려둔 스토어 앱 베이스 번들을 비웠습니다 [관리자: \(admin.email)]")
+        return settings
+    }
+
     /// 빌드에 넣을 앱 아이콘. 안 올렸으면 nil 이고 아이콘 없이 나간다.
     ///
     /// 화면과 운영 CI 가 같은 것을 써야 해서 여기 둔다. 두 곳에서 따로 읽으면
