@@ -188,18 +188,43 @@ struct OIDCAuthorizationURLTests {
     /// 그때는 우리 쿠키만 지우고 다음 로그인에 재인증을 요구한다.
     @Test("세션 종료 자리가 없으면 보낼 곳도 없다")
     func hasNoEndSessionURLWithoutEndpoint() throws {
-        #expect(Self.provider().endSessionURL(postLogoutRedirectURI: "https://store.example.com") == nil)
+        let url = Self.provider().endSessionURL(
+            postLogoutRedirectURI: "https://store.example.com", idTokenHint: "id-token"
+        )
+        #expect(url == nil)
     }
 
-    @Test("세션 종료 자리가 있으면 돌아올 주소를 실어 보낸다")
+    /// 힌트 없이 보내면 Keycloak 이 "Do you want to log out?" 화면을 띄운다. 거기서
+    /// 멈추면 세션이 끊기지도, 우리 화면으로 돌아오지도 않는다.
+    @Test("세션 종료 요청에 돌아올 주소와 ID 토큰을 함께 싣는다")
     func buildsEndSessionURL() throws {
         let provider = Self.provider(endSessionEndpoint: "https://login.example.com/logout")
-        let url = try #require(provider.endSessionURL(postLogoutRedirectURI: "https://store.example.com"))
+        let url = try #require(
+            provider.endSessionURL(
+                postLogoutRedirectURI: "https://store.example.com", idTokenHint: "id-token"
+            )
+        )
         let items = try #require(URLComponents(string: url)?.queryItems)
         let values = Dictionary(items.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { a, _ in a })
 
         #expect(values["client_id"] == "client-id")
         #expect(values["post_logout_redirect_uri"] == "https://store.example.com")
+        #expect(values["id_token_hint"] == "id-token")
+    }
+
+    /// 이 기능을 켜기 전에 로그인한 사람은 들고 있는 것이 없다. 그때도 보내기는 한다.
+    @Test("ID 토큰이 없으면 그 항목만 빼고 보낸다")
+    func omitsIDTokenHintWhenMissing() throws {
+        let provider = Self.provider(endSessionEndpoint: "https://login.example.com/logout")
+        let url = try #require(
+            provider.endSessionURL(
+                postLogoutRedirectURI: "https://store.example.com", idTokenHint: nil
+            )
+        )
+        let items = try #require(URLComponents(string: url)?.queryItems)
+
+        #expect(!items.contains { $0.name == "id_token_hint" })
+        #expect(items.contains { $0.name == "post_logout_redirect_uri" })
     }
 
     /// Keycloak 처럼 엔드포인트에 이미 질의가 붙어 오는 공급자가 있다. 덮어쓰면

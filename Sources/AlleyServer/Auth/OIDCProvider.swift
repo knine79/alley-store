@@ -65,23 +65,32 @@ public struct OIDCProvider: Sendable {
 
     /// 공급자 세션까지 끝내고 돌아올 주소. 공급자가 그 자리를 내주지 않으면 nil.
     ///
-    /// **`id_token_hint` 를 싣지 않는다.** 세션 토큰은 우리가 서명한 것이고 공급자의
-    /// ID 토큰은 로그인 때 쓰고 버린다(ADR-0008). 규격은 힌트가 없으면 공급자가 사람에게
-    /// 확인을 받아도 된다고 하는데, 그 화면이 뜨는 편이 조용히 남의 세션을 끊는 것보다
-    /// 낫다.
+    /// **`idTokenHint` 를 함께 보낸다.** 규격은 그것을 "누가 나가려는지" 의 증거로
+    /// 삼고, 없으면 공급자가 사람에게 확인을 받아도 된다고 한다. Keycloak 은 실제로
+    /// "Do you want to log out?" 화면을 띄우는데, 거기서 멈추면 세션이 끊기지 않고
+    /// 우리 화면으로 돌아오지도 않는다 (ADR-0054).
     ///
     /// 돌아올 주소는 공급자에 등록돼 있어야 한다. Keycloak 은 클라이언트의
     /// `post.logout.redirect.uris`, Entra 와 Okta 는 각자의 로그아웃 URI 목록이다.
-    public func endSessionURL(postLogoutRedirectURI: String) -> String? {
+    public func endSessionURL(
+        postLogoutRedirectURI: String,
+        idTokenHint: String?
+    ) -> String? {
         guard let endpoint = metadata.endSessionEndpoint,
               var components = URLComponents(string: endpoint)
         else {
             return nil
         }
-        components.queryItems = (components.queryItems ?? []) + [
+        var items: [URLQueryItem] = [
             .init(name: "client_id", value: config.clientID),
             .init(name: "post_logout_redirect_uri", value: postLogoutRedirectURI),
         ]
+        // 없을 수 있다. 이 기능을 켜기 전에 로그인한 사람은 들고 있는 것이 없다.
+        // 그때는 확인 화면을 만나게 되지만, 한 번 다시 로그인하면 풀린다.
+        if let idTokenHint {
+            items.append(.init(name: "id_token_hint", value: idTokenHint))
+        }
+        components.queryItems = (components.queryItems ?? []) + items
         return components.url?.absoluteString
     }
 
