@@ -63,6 +63,28 @@ public struct OIDCProvider: Sendable {
         return components.url!.absoluteString
     }
 
+    /// 공급자 세션까지 끝내고 돌아올 주소. 공급자가 그 자리를 내주지 않으면 nil.
+    ///
+    /// **`id_token_hint` 를 싣지 않는다.** 세션 토큰은 우리가 서명한 것이고 공급자의
+    /// ID 토큰은 로그인 때 쓰고 버린다(ADR-0008). 규격은 힌트가 없으면 공급자가 사람에게
+    /// 확인을 받아도 된다고 하는데, 그 화면이 뜨는 편이 조용히 남의 세션을 끊는 것보다
+    /// 낫다.
+    ///
+    /// 돌아올 주소는 공급자에 등록돼 있어야 한다. Keycloak 은 클라이언트의
+    /// `post.logout.redirect.uris`, Entra 와 Okta 는 각자의 로그아웃 URI 목록이다.
+    public func endSessionURL(postLogoutRedirectURI: String) -> String? {
+        guard let endpoint = metadata.endSessionEndpoint,
+              var components = URLComponents(string: endpoint)
+        else {
+            return nil
+        }
+        components.queryItems = (components.queryItems ?? []) + [
+            .init(name: "client_id", value: config.clientID),
+            .init(name: "post_logout_redirect_uri", value: postLogoutRedirectURI),
+        ]
+        return components.url?.absoluteString
+    }
+
     /// 인가 코드를 토큰으로 교환한다. 서버에서 공급자로 직접 나간다.
     public func exchange(code: String, client: any Client) async throws -> TokenResponse {
         let response = try await client.post(URI(string: metadata.tokenEndpoint)) { request in
@@ -129,19 +151,32 @@ public struct OIDCMetadata: Codable, Sendable, Equatable {
     public var authorizationEndpoint: String
     public var tokenEndpoint: String
     public var jwksURI: String
+    /// 공급자 세션을 끝내는 자리. 규격에서 선택이라 없는 공급자가 있다.
+    ///
+    /// **Google 은 이것을 내주지 않는다.** 그쪽에서는 우리 쿠키만 지우고 다음 로그인에
+    /// 재인증을 요구하는 것으로 끝낸다 (`reauthenticationCookieName`).
+    public var endSessionEndpoint: String?
 
     enum CodingKeys: String, CodingKey {
         case issuer
         case authorizationEndpoint = "authorization_endpoint"
         case tokenEndpoint = "token_endpoint"
         case jwksURI = "jwks_uri"
+        case endSessionEndpoint = "end_session_endpoint"
     }
 
-    public init(issuer: String, authorizationEndpoint: String, tokenEndpoint: String, jwksURI: String) {
+    public init(
+        issuer: String,
+        authorizationEndpoint: String,
+        tokenEndpoint: String,
+        jwksURI: String,
+        endSessionEndpoint: String? = nil
+    ) {
         self.issuer = issuer
         self.authorizationEndpoint = authorizationEndpoint
         self.tokenEndpoint = tokenEndpoint
         self.jwksURI = jwksURI
+        self.endSessionEndpoint = endSessionEndpoint
     }
 
     /// discovery 문서가 있는 자리.

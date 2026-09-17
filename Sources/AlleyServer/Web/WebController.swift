@@ -60,7 +60,7 @@ public struct WebController: RouteCollection, Sendable {
     /// 누르는 것만으로 로그아웃되는 일을 막기 위해서다.
     @Sendable
     func logout(request: Request) async throws -> Response {
-        let response = request.redirect(to: "/")
+        let response = request.redirect(to: await Self.logoutDestination(on: request))
         response.cookies[sessionCookieName] = .expired
         // 다음 로그인에서 공급자에게 다시 물어보게 한다. 이것이 없으면 SSO 세션이
         // 남아 있어 로그인 버튼 한 번으로 같은 계정에 그대로 들어간다.
@@ -75,6 +75,35 @@ public struct WebController: RouteCollection, Sendable {
             sameSite: .lax
         )
         return response
+    }
+
+    /// 쿠키를 지운 뒤 어디로 보낼지.
+    ///
+    /// **기본은 홈이다.** 공급자 세션까지 끊는 것은 켠 스토어에서만 한다
+    /// (`OIDC_LOGOUT_ENDS_PROVIDER_SESSION`). 같은 IdP 를 쓰는 다른 사내 도구에서도
+    /// 로그아웃되기 때문이다. 공용 맥을 여럿이 쓰는 곳에서는 그것이 맞고, 개인 맥만
+    /// 쓰는 곳에서는 과하다. 조직이 정할 일이다.
+    ///
+    /// 켜지 않아도 다음 로그인은 재인증을 거친다 (`reauthenticationCookieName`).
+    /// 끊는 것과 다시 묻는 것의 차이는 "다른 사람이 그 브라우저로 무엇을 할 수
+    /// 있는가" 다.
+    ///
+    /// 공급자에게 물어보지 못하면 그냥 홈으로 보낸다. **로그아웃이 실패하는 것보다
+    /// 덜 지워지는 편이 낫다.** 우리 쿠키는 이미 지워졌다.
+    private static func logoutDestination(on request: Request) async -> String {
+        let config = request.application.alleyConfig
+        guard config.oauth.endsProviderSessionOnLogout else { return "/" }
+
+        do {
+            let metadata = try await request.application.oidcDirectory.metadata(
+                using: request.client, logger: request.logger
+            )
+            let provider = OIDCProvider(config: config.oauth, metadata: metadata)
+            return provider.endSessionURL(postLogoutRedirectURI: config.publicBaseURL) ?? "/"
+        } catch {
+            request.logger.warning("공급자 세션 종료 주소를 알아내지 못했습니다: \(error)")
+            return "/"
+        }
     }
 }
 

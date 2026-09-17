@@ -120,17 +120,31 @@ public struct AppConfig: Sendable {
         public var clientSecret: String
         /// 공급자에 등록한 리다이렉트 URI.
         public var redirectURI: String
+        /// 로그아웃할 때 공급자 세션까지 끊을지.
+        ///
+        /// **기본은 끄기다.** 켜면 같은 IdP 를 쓰는 다른 사내 도구에서도 로그아웃된다.
+        /// 스토어 하나에서 나가려고 누른 버튼치고는 멀리 간다.
+        ///
+        /// 공용 맥을 여럿이 쓰는 곳에서는 켜는 편이 맞다. 끈 상태에서는 우리 쿠키만
+        /// 지우고, 다음 로그인에 재인증을 요구하는 것으로 끝낸다
+        /// (`reauthenticationCookieName`).
+        ///
+        /// 켜려면 공급자에 로그아웃 후 돌아올 주소를 등록해야 한다. Keycloak 은
+        /// 클라이언트의 `post.logout.redirect.uris` 다.
+        public var endsProviderSessionOnLogout: Bool
 
         public init(
             issuer: String = OAuthConfig.googleIssuer,
             clientID: String,
             clientSecret: String,
-            redirectURI: String
+            redirectURI: String,
+            endsProviderSessionOnLogout: Bool = false
         ) {
             self.issuer = issuer
             self.clientID = clientID
             self.clientSecret = clientSecret
             self.redirectURI = redirectURI
+            self.endsProviderSessionOnLogout = endsProviderSessionOnLogout
         }
 
         public static let googleIssuer = "https://accounts.google.com"
@@ -376,7 +390,10 @@ extension AppConfig {
                 issuer: optional("OIDC_ISSUER") ?? OAuthConfig.googleIssuer,
                 clientID: try requiredEither("OIDC_CLIENT_ID", "GOOGLE_CLIENT_ID"),
                 clientSecret: try requiredEither("OIDC_CLIENT_SECRET", "GOOGLE_CLIENT_SECRET"),
-                redirectURI: try required("OAUTH_REDIRECT_URI")
+                redirectURI: try required("OAUTH_REDIRECT_URI"),
+                endsProviderSessionOnLogout: boolean(
+                    "OIDC_LOGOUT_ENDS_PROVIDER_SESSION", default: false
+                )
             ),
             security: SecurityConfig(
                 jwtSecret: try validatedJWTSecret(),
