@@ -47,7 +47,6 @@ extension App {
 /// **출시된 앱은 모두에게 보인다.** 그것이 스토어의 뜻이다. 문제는 아직 출시하지
 /// 않은 앱인데, 예전에는 "올릴 수 있는 사람(개발자·관리자)이면 전부" 보여줬다.
 /// 그러면 개발자 한 사람이 다른 팀이 준비 중인 앱을 이름·번들 ID·설명까지 다 본다.
-/// 아직 안 알린 것을 목록에서 먼저 보게 되는 자리다.
 ///
 /// 손댈 수 있는 사람에게만 보인다. 오너, 앱 멤버, 관리자다. 업로드 권한과 같은
 /// 기준이라 "보이는데 못 만지는" 상태가 생기지 않는다.
@@ -74,7 +73,7 @@ struct AppVisibility {
         )
     }
 
-    func canSeeUnreleased(_ app: App) throws -> Bool {
+    func canTouch(_ app: App) throws -> Bool {
         if isAdmin { return true }
         if app.$owner.id == userID { return true }
         return memberAppIDs.contains(try app.requireID())
