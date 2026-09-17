@@ -298,6 +298,19 @@ struct PortalGroupingTests {
         #expect(grouped.store.isEmpty)
         #expect(grouped.other.count == 1)
     }
+
+    /// 실제 계정에 Xcode 가 만들어둔 `*` 가 있었다. 무엇이든 덮으니 어떤 기준을 들어도
+    /// 통과해서, 이 스토어와 아무 상관이 없는데도 펼쳐진 쪽에 섰다.
+    @Test("모든 것을 덮는 와일드카드는 이 스토어 것으로 보지 않는다")
+    func collapsesCatchAllWildcard() throws {
+        let grouped = PortalGrouping.split(
+            bundleIDs: [bundleID("*"), bundleID("com.example.*")],
+            covering: ["com.example.tool"]
+        )
+
+        #expect(grouped.store.map(\.identifier) == ["com.example.*"])
+        #expect(grouped.other.map(\.identifier) == ["*"])
+    }
 }
 
 /// 아무것도 하지 않는 Vapor 클라이언트.
