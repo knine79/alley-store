@@ -51,7 +51,8 @@ public struct AppController: RouteCollection, Sendable {
         return try apps.compactMap { app in
             let appID = try app.requireID()
             let released = latest[appID]
-            // 출시 전인 앱은 손댈 수 있는 사람에게만 보인다 (`AppVisibility`).
+            // **출시된 앱은 모두에게 준다.** 이것이 스토어 앱이 그리는 카탈로그다
+            // (ADR-0051). 출시 전인 것만 손댈 수 있는 사람에게 보인다.
             guard try released != nil || visibility.canTouch(app) else { return nil }
             return try app.toDTO(
                 latestReleased: released,
