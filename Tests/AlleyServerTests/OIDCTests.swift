@@ -162,6 +162,26 @@ struct OIDCAuthorizationURLTests {
         #expect(values["redirect_uri"] == "https://store.example.com/auth/google/callback")
     }
 
+    /// 로그아웃한 사람이 다시 들어올 때만 인증을 다시 시킨다.
+    ///
+    /// `select_account` 는 공급자마다 다르게 다뤄진다. Google 은 계정 고르는 화면을
+    /// 띄우지만 Keycloak 은 그런 화면이 없어 무시하고, 세션이 살아 있으면 그대로
+    /// 통과시킨다. 로그아웃하자마자 같은 계정으로 다시 들어가지던 것이 이것이었다.
+    @Test("로그아웃 직후에는 다시 인증하라고 보낸다")
+    func asksToReauthenticateAfterLogout() throws {
+        let plain = Self.provider().authorizationURL(state: "s")
+        let forced = Self.provider().authorizationURL(state: "s", forcesReauthentication: true)
+
+        func prompt(_ url: String) throws -> String {
+            let items = try #require(URLComponents(string: url)?.queryItems)
+            return try #require(items.first { $0.name == "prompt" }?.value)
+        }
+
+        #expect(try prompt(plain) == "select_account")
+        // `login` 은 "세션이 있어도 다시 인증시켜라" 라서 어느 공급자에서나 통한다.
+        #expect(try prompt(forced).contains("login"))
+    }
+
     /// Keycloak 처럼 엔드포인트에 이미 질의가 붙어 오는 공급자가 있다. 덮어쓰면
     /// 그 값이 사라지고, 사라진 것을 알아채기 어렵다.
     @Test("엔드포인트에 이미 붙은 질의를 지우지 않는다")

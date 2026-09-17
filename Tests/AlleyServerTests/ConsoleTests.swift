@@ -184,6 +184,39 @@ struct ConsoleErrorTests {
             }
         }
     }
+
+    /// 로그아웃은 우리 쪽 쿠키만 지운다. 공급자 세션은 그대로라, 표시를 남기지 않으면
+    /// 로그인 버튼 한 번으로 같은 계정에 그대로 들어간다.
+    @Test("로그아웃하면 다음 로그인에서 다시 인증하라는 표시를 남긴다")
+    func logoutMarksReauthentication() async throws {
+        try await withMigratedApp { app in
+            try await app.testing().test(.POST, "/logout") { response in
+                let cookies = try #require(response.headers.setCookie)
+                let session = try #require(cookies[sessionCookieName])
+                #expect(session.string.isEmpty)
+
+                let mark = try #require(cookies[reauthenticationCookieName])
+                #expect(!mark.string.isEmpty)
+                // 로그아웃하고 바로 다시 들어오는 흐름만 잡으면 된다.
+                #expect((mark.maxAge ?? 0) > 0)
+            }
+        }
+    }
+
+    @Test("표시를 들고 로그인하러 가면 그 표시를 지운다")
+    func authorizeClearsReauthenticationMark() async throws {
+        try await withConfiguredApp { app in
+            // 표시가 남아 있으면 그 뒤로 로그인할 때마다 비밀번호를 다시 묻게 된다.
+            var headers = HTTPHeaders()
+            headers.cookie = HTTPCookies(dictionaryLiteral: (reauthenticationCookieName, .init(string: "1")))
+
+            try await app.testing().test(.GET, APIPath.googleAuthorize, headers: headers) { response in
+                let cookies = try #require(response.headers.setCookie)
+                let mark = try #require(cookies[reauthenticationCookieName])
+                #expect(mark.string.isEmpty)
+            }
+        }
+    }
 }
 
 @Suite("출처 검사")

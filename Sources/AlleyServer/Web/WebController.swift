@@ -62,6 +62,18 @@ public struct WebController: RouteCollection, Sendable {
     func logout(request: Request) async throws -> Response {
         let response = request.redirect(to: "/")
         response.cookies[sessionCookieName] = .expired
+        // 다음 로그인에서 공급자에게 다시 물어보게 한다. 이것이 없으면 SSO 세션이
+        // 남아 있어 로그인 버튼 한 번으로 같은 계정에 그대로 들어간다.
+        response.cookies[reauthenticationCookieName] = HTTPCookies.Value(
+            string: "1",
+            // 로그아웃하고 바로 다시 들어오는 흐름만 잡으면 된다. 길게 두면 한참 뒤의
+            // 로그인까지 재인증을 요구한다.
+            maxAge: 600,
+            path: "/",
+            isSecure: request.application.alleyConfig.publicBaseURL.hasPrefix("https://"),
+            isHTTPOnly: true,
+            sameSite: .lax
+        )
         return response
     }
 }

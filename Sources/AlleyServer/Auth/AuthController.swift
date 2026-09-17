@@ -40,9 +40,18 @@ public struct AuthController: RouteCollection, Sendable {
         let metadata = try await request.application.oidcDirectory.metadata(
             using: request.client, logger: request.logger
         )
+        // 방금 로그아웃한 사람이면 공급자에게 다시 물어보게 한다.
+        let reauthenticate = request.cookies[reauthenticationCookieName] != nil
         let url = OIDCProvider(config: config.oauth, metadata: metadata)
-            .authorizationURL(state: state)
-        return request.redirect(to: url)
+            .authorizationURL(state: state, forcesReauthentication: reauthenticate)
+
+        let response = request.redirect(to: url)
+        // 표시는 한 번 쓰고 지운다. 남겨두면 그 뒤로 로그인할 때마다 비밀번호를
+        // 다시 묻게 되고, 그것은 로그아웃을 누른 사람이 시킨 일이 아니다.
+        if reauthenticate {
+            response.cookies[reauthenticationCookieName] = .expired
+        }
+        return response
     }
 
     // MARK: - 공급자 콜백
