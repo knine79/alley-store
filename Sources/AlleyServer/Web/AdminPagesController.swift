@@ -524,7 +524,7 @@ struct AdminPagesController: RouteCollection, Sendable {
         ).get()
     }
 
-    // MARK: - 개발자 포털
+    // MARK: - 앱 서명 (Apple 개발자 포털 현황)
 
     /// 인증서 만료와 App ID 현황.
     ///
@@ -578,13 +578,20 @@ struct AdminPagesController: RouteCollection, Sendable {
         }
 
         let settings = try await request.storeSettings()
+        let registered = Set(try await App.query(on: request.db).all().map(\.bundleID))
+        let grouped = PortalGrouping.split(certificates: certificates)
+        let groupedIDs = PortalGrouping.split(bundleIDs: bundleIDs, covering: registered)
+
         return try await request.view.render(
             "admin-portal",
             PortalPageContext(
                 page: try await request.pageContext(adminTab: .portal),
                 isConfigured: request.application.alleyConfig.appStoreConnect != nil,
-                certificates: certificates,
-                bundleIDs: bundleIDs,
+                signingCertificates: grouped.signing,
+                otherCertificates: grouped.other,
+                otherExpiringSoon: grouped.otherExpiringSoon,
+                storeBundleIDs: groupedIDs.store,
+                otherBundleIDs: groupedIDs.other,
                 suggestedWildcard: settings.bundleIDPrefix.map { "\($0).*" },
                 connectionError: connectionError,
                 error: error
@@ -934,6 +941,57 @@ struct BundleIDFormValues: Codable {
 extension BundleIDFormValues: Content {}
 
 /// 화면에 뿌리는 인증서 한 줄.
+/// 앱 서명 화면이 무엇을 펼치고 무엇을 접을지 가른다.
+///
+/// 화면 밖에 두는 이유는 시험 때문이다. Apple 과 이야기하지 않고도 분류만 따로
+/// 확인할 수 있어야 한다.
+enum PortalGrouping {
+    /// 이만큼 남았으면 갱신을 시작해야 한다. 인증서 갱신은 사람의 손이 여러 번 든다.
+    static let expiringSoonDays = 30
+
+    struct Certificates {
+        var signing: [CertificateRow]
+        var other: [CertificateRow]
+        /// 접어둔 것 중 곧 만료되는 수. 접힌 채로도 그 사실은 알려야 한다.
+        var otherExpiringSoon: Int
+    }
+
+    static func split(certificates: [CertificateRow]) -> Certificates {
+        let other = certificates.filter { !$0.isDeveloperID }
+        return Certificates(
+            signing: certificates.filter(\.isDeveloperID),
+            other: other,
+            otherExpiringSoon: other.count { ($0.daysLeft ?? .max) < expiringSoonDays }
+        )
+    }
+
+    struct BundleIDs {
+        var store: [ASCBundleID]
+        var other: [ASCBundleID]
+    }
+
+    /// App ID 가 이 스토어와 이어지는지는 **스토어에 등록된 앱**으로 판정한다.
+    ///
+    /// 플랫폼으로는 갈리지 않는다. Apple 에 `filter[platform]=MAC_OS` 를 걸어도 iOS
+    /// 앱의 App ID 가 함께 온다. 번들 ID 접두사로도 갈리지 않는다. 한 조직은 iOS 앱과
+    /// 맥 앱에 같은 접두사를 쓴다. 남는 기준은 "이 스토어가 실제로 다루는 앱인가" 뿐이다.
+    static func split(
+        bundleIDs: [ASCBundleID],
+        covering registered: Set<String>
+    ) -> BundleIDs {
+        var store: [ASCBundleID] = []
+        var other: [ASCBundleID] = []
+        for bundleID in bundleIDs {
+            if registered.contains(where: bundleID.covers) {
+                store.append(bundleID)
+            } else {
+                other.append(bundleID)
+            }
+        }
+        return BundleIDs(store: store, other: other)
+    }
+}
+
 struct CertificateRow: Encodable {
     var name: String
     var type: String
@@ -952,7 +1010,8 @@ struct CertificateRow: Encodable {
         self.daysLeft = days
         self.isDeveloperID = certificate.isDeveloperID
         // 인증서 갱신은 사람의 손이 여러 번 필요한 일이다. 한 달 전에는 알아야 한다.
-        self.needsAttention = certificate.isDeveloperID && (days ?? .max) < 30
+        self.needsAttention =
+            certificate.isDeveloperID && (days ?? .max) < PortalGrouping.expiringSoonDays
     }
 }
 
@@ -980,8 +1039,19 @@ struct StatsPageContext: Encodable {
 struct PortalPageContext: Encodable {
     var page: PageContext
     var isConfigured: Bool
-    var certificates: [CertificateRow]
-    var bundleIDs: [ASCBundleID]
+    /// 서명에 쓰는 인증서. 이 화면의 본론이다.
+    var signingCertificates: [CertificateRow]
+    /// 팀의 나머지 인증서.
+    ///
+    /// **접어둔다.** iOS 개발 인증서는 각자의 Xcode 가 관리하고, 여기서 만료를 봐도
+    /// 이 스토어에서 할 수 있는 일이 없다. 열 몇 줄이 서명용 한 줄을 덮는다.
+    var otherCertificates: [CertificateRow]
+    /// 접어둔 것 중 곧 만료되는 수. 접힌 채로도 그 사실은 알린다.
+    var otherExpiringSoon: Int
+    /// 이 스토어의 앱을 덮는 App ID.
+    var storeBundleIDs: [ASCBundleID]
+    /// 팀의 나머지 App ID. 같은 이유로 접어둔다.
+    var otherBundleIDs: [ASCBundleID]
     /// 스토어 설정의 프리픽스로 만든 와일드카드 제안값.
     var suggestedWildcard: String?
     /// Apple 과 이야기하지 못한 이유.
