@@ -62,6 +62,8 @@ public struct WebController: RouteCollection, Sendable {
     func logout(request: Request) async throws -> Response {
         let response = request.redirect(to: await Self.logoutDestination(on: request))
         response.cookies[sessionCookieName] = .expired
+        // 공급자에게 돌려줬으면 더 들고 있을 이유가 없다.
+        response.cookies[providerIDTokenCookieName] = .expired
         // 다음 로그인에서 공급자에게 다시 물어보게 한다. 이것이 없으면 SSO 세션이
         // 남아 있어 로그인 버튼 한 번으로 같은 계정에 그대로 들어간다.
         response.cookies[reauthenticationCookieName] = HTTPCookies.Value(
@@ -99,7 +101,10 @@ public struct WebController: RouteCollection, Sendable {
                 using: request.client, logger: request.logger
             )
             let provider = OIDCProvider(config: config.oauth, metadata: metadata)
-            return provider.endSessionURL(postLogoutRedirectURI: config.publicBaseURL) ?? "/"
+            return provider.endSessionURL(
+                postLogoutRedirectURI: config.publicBaseURL,
+                idTokenHint: request.cookies[providerIDTokenCookieName]?.string
+            ) ?? "/"
         } catch {
             request.logger.warning("공급자 세션 종료 주소를 알아내지 못했습니다: \(error)")
             return "/"

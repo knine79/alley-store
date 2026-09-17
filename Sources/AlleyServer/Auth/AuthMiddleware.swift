@@ -16,6 +16,15 @@ public let sessionCookieName = "alley_session"
 /// 공급자에게 다시 물어보게 한다. 표시는 그 한 번으로 지운다.
 public let reauthenticationCookieName = "alley_reauth"
 
+/// 공급자가 준 ID 토큰. 로그아웃할 때 그쪽에 돌려주려고 들고 있는다.
+///
+/// **이것 없이 로그아웃 요청을 보내면 공급자가 사람에게 확인을 받는다.** Keycloak 은
+/// "Do you want to log out?" 화면을 띄우고, 거기서 멈추면 세션이 끊기지 않는다.
+/// 규격이 `id_token_hint` 를 "누가 나가려는지"의 증거로 삼기 때문이다.
+///
+/// 공급자 세션까지 끊는 스토어에서만 쓴다 (ADR-0054). 끄면 저장하지 않는다.
+public let providerIDTokenCookieName = "alley_oidc_id"
+
 /// 세션 토큰을 확인하고 요청에 사용자를 붙인다.
 ///
 /// 토큰은 신원만 증명하므로 역할은 여기서 데이터베이스를 읽어 채운다

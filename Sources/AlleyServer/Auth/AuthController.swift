@@ -130,11 +130,22 @@ public struct AuthController: RouteCollection, Sendable {
             // 웹은 세션 토큰을 HttpOnly 쿠키로 받는다. 자바스크립트가 읽지 못하게 한다.
             let token = try await signSession(request: request, userID: userID)
             let response = request.redirect(to: "/")
+            let isSecure = config.publicBaseURL.hasPrefix("https://")
             response.cookies[sessionCookieName] = sessionCookie(
                 token: token,
                 ttl: config.security.sessionTTL,
-                isSecure: config.publicBaseURL.hasPrefix("https://")
+                isSecure: isSecure
             )
+            // 공급자 세션까지 끊는 스토어만 ID 토큰을 들고 있는다. 로그아웃할 때
+            // 공급자에게 돌려주지 않으면 그쪽이 사람에게 확인을 받고, 그 화면에서
+            // 멈추면 세션이 끊기지 않는다 (ADR-0054).
+            if config.oauth.endsProviderSessionOnLogout {
+                response.cookies[providerIDTokenCookieName] = sessionCookie(
+                    token: tokens.idToken,
+                    ttl: config.security.sessionTTL,
+                    isSecure: isSecure
+                )
+            }
             return response
 
         case .app:
