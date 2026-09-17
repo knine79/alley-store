@@ -1,4 +1,5 @@
 import AlleyProcess
+import AlleyShared
 import Foundation
 
 /// 번들이 요구하는 권한과, 그것을 서명할 수 있는지에 대한 판단.
@@ -8,15 +9,14 @@ import Foundation
 public enum Entitlements {
     /// 프로비저닝 프로필이 있어야 쓸 수 있는 권한인지.
     ///
-    /// `com.apple.developer.` 로 시작하는 것들은 Apple 이 팀 단위로 허가하는 기능이라,
-    /// 그 허가를 담은 프로필이 번들 안에 들어 있어야 한다. `com.apple.security.` 로
-    /// 시작하는 샌드박스·하드닝 관련 권한은 프로필 없이도 서명할 수 있다.
+    /// 판정은 `AlleyShared` 에 있다. 서명을 멈추는 쪽과 포털에 App ID 를 권하는 쪽이
+    /// 같은 기준을 써야 하기 때문이다.
     public static func isRestricted(_ key: String) -> Bool {
-        key.hasPrefix("com.apple.developer.")
+        EntitlementsPlist.requiresProvisioningProfile(key)
     }
 
     public static func restricted(in keys: some Sequence<String>) -> [String] {
-        keys.filter(isRestricted).sorted()
+        EntitlementsPlist.requiringProvisioningProfile(in: keys)
     }
 
     /// 번들에 프로비저닝 프로필이 들어 있는지.

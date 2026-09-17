@@ -40,7 +40,7 @@ struct AdminPagesController: RouteCollection, Sendable {
         pages.post("operator-tokens", ":tokenID", "revoke", use: revokeOperatorToken)
         pages.get("stats", use: stats)
         pages.get("portal", use: portal)
-        pages.post("portal", "bundle-ids", use: registerBundleID)
+        pages.post("portal", "bundle-ids", use: registerWildcardBundleID)
     }
 
     /// 관리 화면의 첫 장은 설정이다. 역할 관리는 사람이 들어올 때마다 하는 일이 아니다.
@@ -536,16 +536,29 @@ struct AdminPagesController: RouteCollection, Sendable {
         return try await renderPortal(error: nil, on: request)
     }
 
+    /// 스토어 앱 전체를 덮는 와일드카드 App ID 하나를 만든다.
+    ///
+    /// **값을 묻지 않는다.** 식별자는 앱 등록 규칙이 쓰는 번들 ID 접두사에서 나오고
+    /// (ADR-0005), 이름은 스토어 이름에서 나온다. 손으로 적게 하면 앱 등록 규칙과
+    /// 어긋난 와일드카드가 만들어질 수 있는데, 그것은 Apple 쪽에서 지우기 까다롭다.
     @Sendable
-    func registerBundleID(request: Request) async throws -> Response {
+    func registerWildcardBundleID(request: Request) async throws -> Response {
         let admin = try request.requireAdmin()
-        let values = try request.content.decode(BundleIDFormValues.self)
+        let settings = try await request.storeSettings()
+
+        guard let prefix = settings.bundleIDPrefix, !prefix.isEmpty else {
+            let view = try await renderPortal(
+                error: "번들 ID 접두사가 비어 있습니다. 스토어 설정에서 먼저 정하세요.",
+                on: request
+            )
+            return htmlResponse(view, status: .badRequest)
+        }
 
         do {
             _ = try await PortalRegistration.registerBundleID(
                 RegisterBundleIDRequest(
-                    identifier: values.identifier ?? "",
-                    name: values.name ?? ""
+                    identifier: "\(prefix).*",
+                    name: "\(settings.storeName) 공용"
                 ),
                 using: try request.appStoreConnect(),
                 by: admin,
@@ -582,6 +595,12 @@ struct AdminPagesController: RouteCollection, Sendable {
         let grouped = PortalGrouping.split(certificates: certificates)
         let groupedIDs = PortalGrouping.split(bundleIDs: bundleIDs, covering: registered)
 
+        // 만드는 자리는 만들 것이 있을 때만 그린다. Apple 에게 물어보지 못했으면
+        // 이미 있는지도 모르므로 그리지 않는다. 있는 것을 또 만들면 거절당한다.
+        let wildcard = settings.bundleIDPrefix.map { "\($0).*" }
+        let canRegisterWildcard =
+            connectionError == nil && !bundleIDs.contains { $0.identifier == wildcard }
+
         return try await request.view.render(
             "admin-portal",
             PortalPageContext(
@@ -592,7 +611,7 @@ struct AdminPagesController: RouteCollection, Sendable {
                 otherExpiringSoon: grouped.otherExpiringSoon,
                 storeBundleIDs: groupedIDs.store,
                 otherBundleIDs: groupedIDs.other,
-                suggestedWildcard: settings.bundleIDPrefix.map { "\($0).*" },
+                registerableWildcard: canRegisterWildcard ? wildcard : nil,
                 connectionError: connectionError,
                 error: error
             )
@@ -933,13 +952,6 @@ struct IssuedWorkerToken: Encodable {
     var token: String
 }
 
-struct BundleIDFormValues: Codable {
-    var identifier: String?
-    var name: String?
-}
-
-extension BundleIDFormValues: Content {}
-
 /// 화면에 뿌리는 인증서 한 줄.
 /// 앱 서명 화면이 무엇을 펼치고 무엇을 접을지 가른다.
 ///
@@ -1056,8 +1068,9 @@ struct PortalPageContext: Encodable {
     var storeBundleIDs: [ASCBundleID]
     /// 팀의 나머지 App ID. 같은 이유로 접어둔다.
     var otherBundleIDs: [ASCBundleID]
-    /// 스토어 설정의 프리픽스로 만든 와일드카드 제안값.
-    var suggestedWildcard: String?
+    /// 지금 만들 수 있는 와일드카드. 이미 있거나, 접두사가 없거나, Apple 에게 물어보지
+    /// 못했으면 nil 이고 그때는 만드는 자리를 아예 그리지 않는다.
+    var registerableWildcard: String?
     /// Apple 과 이야기하지 못한 이유.
     var connectionError: String?
     /// 사람이 고칠 수 있는 실패.

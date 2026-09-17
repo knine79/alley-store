@@ -117,8 +117,9 @@
     <h2 class="section-title">App ID</h2>
     <p class="page-lead">
         대부분의 내부 앱은 포털에 등록할 필요가 없습니다. 프로필이 필요하면 와일드카드
-        하나로 묶고, Push·iCloud·App Groups 같은 특수 capability 를 쓰는 앱만 따로
-        등록합니다.
+        하나로 묶습니다. Push·iCloud·App Groups 같은 특수 capability 를 쓰는 앱은 따로
+        등록해야 하는데, 그것은 <strong>그 앱의 상세 화면</strong>에서 합니다. 어떤
+        권한을 쓰는지는 올린 entitlements 를 봐야 알 수 있어서입니다.
     </p>
 
     #if(count(storeBundleIDs) == 0):
@@ -193,25 +194,24 @@
     </details>
     #endif
 
-    <form class="form" method="post" action="/admin/portal/bundle-ids">
-        <label class="field">
-            <span class="field-label">App ID</span>
-            <input class="input" type="text" name="identifier" required
-                   #if(suggestedWildcard):value="#(suggestedWildcard)"#endif
-                   placeholder="com.example.*"
-                   autocapitalize="off" autocorrect="off" spellcheck="false">
-            <span class="field-note">와일드카드는 맨 끝에만 올 수 있습니다.</span>
-        </label>
-        <label class="field">
-            <span class="field-label">이름</span>
-            <input class="input" type="text" name="name" required
-                   placeholder="사내 앱 공용">
-            <span class="field-note">Apple 화면의 목록에서 알아볼 이름입니다.</span>
-        </label>
-        <div class="form-actions">
-            <button class="button button-primary" type="submit">등록</button>
-        </div>
-    </form>
+    <!-- 값을 묻지 않는다. 식별자는 앱 등록 규칙이 쓰는 접두사에서, 이름은 스토어
+         이름에서 나온다. 손으로 적게 하면 앱 등록 규칙과 어긋난 와일드카드가
+         만들어지는데, 그것은 Apple 쪽에서 지우기가 까다롭다. -->
+    #if(registerableWildcard):
+    <div class="section-actions">
+        <form method="post" action="/admin/portal/bundle-ids">
+            <button class="button" type="submit">
+                <code>#(registerableWildcard)</code> 만들기
+            </button>
+        </form>
+    </div>
+    <p class="field-note">
+        <strong>누르면 Apple 개발자 계정에 실제로 만들어집니다.</strong> 이 스토어의
+        기록이 아니라 계정에 남는 항목입니다. 지우는 것은 Apple 화면에서 Account
+        Holder 나 Admin 역할만 할 수 있고, 프로비저닝 프로필이 물려 있으면 그것부터
+        지워야 합니다. 프로필이 필요한 앱이 실제로 생겼을 때 누르세요.
+    </p>
+    #endif
 </section>
 #endif
 #endexport
