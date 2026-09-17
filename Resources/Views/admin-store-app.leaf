@@ -154,6 +154,22 @@
         <span class="fact-label">#if(base.isUploaded):올려둔 번들#else:이 서버의 번들#endif</span>
         <span class="fact-value">#(base.version)#if(base.summary): · #(base.summary)#endif</span>
     </p>
+    <!-- 올리는 길만 있고 무르는 길이 없으면, 잘못 올린 번들을 물리는 방법이
+         데이터베이스를 직접 고치는 것뿐이 된다. -->
+    #if(base.isUploaded):
+    <div class="form-actions form-actions-inline">
+        <form method="post" action="/admin/store-app/base-bundle/remove">
+            <button class="button button-small button-quiet" type="submit">올려둔 번들 비우기</button>
+        </form>
+        <span class="field-note">
+            #if(base.shippedVersion):
+            비우면 이 서버에 들어 있는 번들 #(base.shippedVersion) 로 돌아갑니다.
+            #else:
+            이 서버 이미지에는 번들이 없습니다. 비우면 빌드할 것이 남지 않습니다.
+            #endif
+        </span>
+    </div>
+    #endif
     #else:
     <p class="empty">
         빌드할 번들이 없습니다. 이 서버 이미지에 스토어 앱이 들어 있지 않습니다.

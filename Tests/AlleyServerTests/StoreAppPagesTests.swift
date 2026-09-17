@@ -359,6 +359,100 @@ struct StoreAppPagesTests {
         }
     }
 
+    /// 올리는 길만 있고 무르는 길이 없으면 잘못 올린 번들을 데이터베이스에서 손으로
+    /// 지워야 한다. 비운 뒤에는 이 서버에 들어 있는 것으로 돌아간다 (ADR-0048).
+    @Test("올려둔 번들을 비우면 설정도 오브젝트도 남지 않는다")
+    func removesUploadedBaseBundle() async throws {
+        try await withMigratedApp { app in
+            let (admin, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            let settings = try await StoreAppSettings.loadOrSeed(
+                on: app.db, config: app.alleyConfig, logger: app.logger
+            )
+            let storage = app.useFakeStorage()
+            try await StoreAppBuildService.acceptBaseBundle(
+                version: "0.4.0",
+                data: StoreAppBundleRewriterTests.baseZip(),
+                settings: settings,
+                by: admin,
+                storage: storage,
+                on: app.db,
+                logger: app.logger
+            )
+            let key = try #require(settings.baseBundleKey)
+
+            try await app.testing().test(
+                .POST, "/admin/store-app/base-bundle/remove", headers: .form(cookie: token)
+            ) { response in
+                #expect(response.status == .seeOther)
+                let location = try #require(response.headers.first(name: .location))
+                #expect(!location.contains("error="))
+            }
+
+            let stored = try await StoreAppSettings.loadOrSeed(
+                on: app.db, config: app.alleyConfig, logger: app.logger
+            )
+            #expect(stored.baseBundleKey == nil)
+            #expect(stored.baseBundleVersion == nil)
+            #expect(stored.baseBundleSize == nil)
+            #expect(stored.baseBundleUploadedAt == nil)
+            // 오브젝트를 남기면 아무도 가리키지 않는 번들이 스토리지에 쌓인다.
+            #expect(try await storage.head(key: key) == nil)
+        }
+    }
+
+    @Test("비울 것이 없으면 눌러도 그 자리에 선다")
+    func removingNothingIsHarmless() async throws {
+        try await withMigratedApp { app in
+            let (_, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            _ = app.useFakeStorage()
+
+            try await app.testing().test(
+                .POST, "/admin/store-app/base-bundle/remove", headers: .form(cookie: token)
+            ) { response in
+                #expect(response.status == .seeOther)
+                let location = try #require(response.headers.first(name: .location))
+                #expect(!location.contains("error="))
+            }
+        }
+    }
+
+    @Test("올려둔 번들이 있을 때만 비우기 버튼이 보인다")
+    func showsRemoveButtonOnlyForUploadedBundle() async throws {
+        try await withMigratedApp { app in
+            let (admin, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            let settings = try await StoreAppSettings.loadOrSeed(
+                on: app.db, config: app.alleyConfig, logger: app.logger
+            )
+            let storage = app.useFakeStorage()
+
+            try await app.testing().test(
+                .GET, "/admin/store-app", headers: .sessionCookie(token)
+            ) { response in
+                #expect(!response.body.string.contains("올려둔 번들 비우기"))
+            }
+
+            try await StoreAppBuildService.acceptBaseBundle(
+                version: "0.4.0",
+                data: StoreAppBundleRewriterTests.baseZip(),
+                settings: settings,
+                by: admin,
+                storage: storage,
+                on: app.db,
+                logger: app.logger
+            )
+
+            try await app.testing().test(
+                .GET, "/admin/store-app", headers: .sessionCookie(token)
+            ) { response in
+                let body = response.body.string
+                #expect(body.contains("올려둔 번들 비우기"))
+                // 시험은 이미지에 스토어 앱이 없는 배포로 돈다. 그 상태에서 비우면
+                // 빌드할 것이 남지 않는다는 사실을 누르기 전에 말해야 한다.
+                #expect(body.contains("비우면 빌드할 것이 남지 않습니다"))
+            }
+        }
+    }
+
     struct BaseBundleUpload: Content {
         var version: String
         var bundle: File

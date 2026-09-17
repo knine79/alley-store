@@ -28,6 +28,7 @@ struct StoreAppPagesController: RouteCollection, Sendable {
             body: .collect(maxSize: .init(value: StoreAppBuildService.maximumBaseBundleSize)),
             use: uploadBaseBundle
         )
+        pages.post("base-bundle", "remove", use: removeBaseBundle)
     }
 
     // MARK: - 화면
@@ -76,7 +77,12 @@ struct StoreAppPagesController: RouteCollection, Sendable {
                 page: try await request.pageContext(adminTab: .storeApp),
                 values: values ?? StoreAppFormValues(settings: settings),
                 icon: BrandingSlot.rows(for: [.appIcon], assets: assets).first,
-                base: StoreAppBaseBundle(settings: settings, bundled: base),
+                base: StoreAppBaseBundle(
+                    settings: settings,
+                    bundled: base,
+                    shippedVersion: BundledStoreApp.data(in: request.application.directory) != nil
+                        ? BundledStoreApp.version : nil
+                ),
                 serverURL: request.application.alleyConfig.publicBaseURL,
                 isLocked: shipped,
                 blockers: base == nil ? StoreAppSettings.noBundleBlockers : [],
@@ -187,6 +193,22 @@ struct StoreAppPagesController: RouteCollection, Sendable {
         } catch let abort as any AbortError {
             return Self.back(error: abort.reason, on: request)
         }
+        return Self.back(error: nil, on: request)
+    }
+
+    /// 올려둔 번들을 비우고 이 서버에 들어 있는 것으로 돌아간다.
+    @Sendable
+    func removeBaseBundle(request: Request) async throws -> Response {
+        let admin = try request.requireAdmin()
+        let settings = try await request.storeAppSettings()
+
+        try await StoreAppBuildService.removeBaseBundle(
+            settings: settings,
+            by: admin,
+            storage: request.application.artifactStorage,
+            on: request.db,
+            logger: request.logger
+        )
         return Self.back(error: nil, on: request)
     }
 
@@ -325,11 +347,22 @@ struct StoreAppBaseBundle: Encodable {
     var summary: String?
     /// 사람이 올린 것인가. 아니면 제품에 들어 있던 것이다.
     var isUploaded: Bool
+    /// 올린 것을 비웠을 때 돌아갈 자리. 이 서버 이미지에 번들이 없으면 nil 이다.
+    ///
+    /// 비우기 버튼 옆에 이것을 적지 않으면 무엇이 남는지 모르는 채로 누르게 된다.
+    /// 돌아갈 곳이 없는 서버도 있다 (`BundledStoreApp`).
+    var shippedVersion: String?
 
-    init(settings: StoreAppSettings, bundled: StoreAppBuildService.BaseBundle?) {
+    init(
+        settings: StoreAppSettings,
+        bundled: StoreAppBuildService.BaseBundle?,
+        shippedVersion: String?
+    ) {
         self.isPresent = bundled != nil
         self.version = bundled?.version
         self.isUploaded = bundled?.isUploaded ?? false
+        // 지금 쓰는 것이 올린 번들일 때만 쓸모가 있다.
+        self.shippedVersion = bundled?.isUploaded == true ? shippedVersion : nil
 
         if bundled?.isUploaded == true, let size = settings.baseBundleSize {
             let megabytes = Double(size) / 1024 / 1024
