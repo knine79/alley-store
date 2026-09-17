@@ -43,6 +43,11 @@ struct StoreChrome: Encodable {
     /// 브라우저 탭에 뜨는 그림. 안 올렸으면 nil 이고, 그때 레이아웃은 링크를 아예 넣지
     /// 않는다. 없는 그림을 가리키는 `<link>` 는 요청 하나를 404 로 버리기만 한다.
     var faviconURL: String?
+    /// 스토어 앱의 아이콘.
+    ///
+    /// **지금 쓰는 곳은 `/get` 하나다.** 거기는 그 앱을 받으라고 권하는 화면이라,
+    /// 스토어 로고보다 받을 앱의 그림이 맞다.
+    var appIconURL: String?
     var accentColor: String?
 }
 
@@ -62,6 +67,8 @@ extension StoreSettings {
                 ?? DefaultBranding.path(for: .logo),
             faviconURL: assets[.favicon]?.versionedPath
                 ?? DefaultBranding.path(for: .favicon),
+            appIconURL: assets[.appIcon]?.versionedPath
+                ?? DefaultBranding.path(for: .appIcon),
             accentColor: accentColor
         )
     }
