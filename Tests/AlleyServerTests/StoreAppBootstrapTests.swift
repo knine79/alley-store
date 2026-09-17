@@ -102,16 +102,19 @@ struct StoreAppBootstrapTests {
             let (_, token) = try await app.makeUser(email: "user@example.com", role: .user)
 
             let appPath = "/apps/\(try storeApp.requireID().uuidString)"
-            let downloadPath = "\(appPath)/versions/\(try version.requireID().uuidString)/download"
+            _ = version
 
             try await app.testing().test(.GET, "/apps", headers: .sessionCookie(token)) { response in
                 let html = response.body.string
                 #expect(response.status == .ok)
                 // 목록의 줄(카드)로는 없다. 카드 링크는 주소가 따옴표로 끝난다.
                 #expect(!html.contains("\(appPath)\""))
-                // 받는 자리는 있다.
-                #expect(html.contains("여기서 받으세요"))
-                #expect(html.contains(downloadPath))
+                // 받는 자리는 있다. **공개 페이지 하나를 가리킨다** (ADR-0050).
+                // 버전 경로를 따로 가리키면 그쪽은 zip 을 주고 공개 페이지는 dmg 를
+                // 줘서, 같은 줄에서 누른 것이 어디로 갔느냐에 따라 달라진다.
+                #expect(html.contains("여기서 다운로드 받으세요"))
+                #expect(html.contains("href=\"/get\""))
+                #expect(!html.contains("/versions/"))
             }
         }
     }
@@ -192,13 +195,26 @@ struct StoreAppBootstrapTests {
     func webDownloadIsRecorded() async throws {
         try await withMigratedApp { app in
             let (admin, _) = try await app.makeUser(email: "admin@example.com", role: .admin)
-            let (storeApp, version) = try await Self.makeStoreApp(on: app, owner: admin)
+            // 공개 페이지는 서명본만 내준다 (ADR-0049). 픽스처도 거기까지 맞춘다.
+            let (storeApp, version) = try await StoreAppPublicPageTests.makeSignedStoreApp(
+                on: app, owner: admin
+            )
             let (user, token) = try await app.makeUser(email: "user@example.com", role: .user)
 
+            // 받으러 온 사람은 공개 페이지로 보낸다 (ADR-0050). 옛 주소를 들고
+            // 와도 받는 것은 같아야 한다.
             try await app.testing().test(
                 .GET,
                 "/apps/\(try storeApp.requireID().uuidString)/versions/\(try version.requireID().uuidString)/download",
                 headers: .sessionCookie(token)
+            ) { response in
+                #expect(response.status == .seeOther)
+                #expect(response.headers.first(name: .location) == "/get/download")
+            }
+
+            // 브라우저는 그 리다이렉트를 따라간다. 이력은 거기서 남는다.
+            try await app.testing().test(
+                .GET, "/get/download", headers: .sessionCookie(token)
             ) { #expect($0.status == .seeOther) }
 
             let downloads = try await Download.query(on: app.db).all()

@@ -78,7 +78,7 @@ struct AppPagesController: RouteCollection, Sendable {
             guard appID != storeAppID else { return nil }
             let released = latest[appID]
             // 출시 전인 앱은 손댈 수 있는 사람에게만 보인다 (`AppVisibility`).
-            guard try released != nil || visibility.canSeeUnreleased(app) else { return nil }
+            guard try released != nil || visibility.canTouch(app) else { return nil }
             return try AppRow(app: app, latestReleased: released, rating: ratings[appID])
         }
 
@@ -90,16 +90,18 @@ struct AppPagesController: RouteCollection, Sendable {
            let released = latest[storeAppID],
            let versionID = released.id
         {
+            _ = versionID
             bootstrap = StoreAppBootstrapRow(
                 name: storeApp.name,
                 version: "\(released.shortVersion) (빌드 \(released.buildNumber))",
-                downloadPath:
-                    "/apps/\(storeAppID.uuidString)/versions/\(versionID.uuidString)/download",
-                // 받으러 온 사람에게 알려줄 주소 (ADR-0049). 이 화면은 앱을 올리는
-                // 사람이 보는 곳이라, 여기 적힌 콘솔 주소를 사내 문서에 그대로
-                // 옮기면 받으러 온 사람이 개발자용 화면에 떨어진다.
-                publicURL: request.application.alleyConfig.publicBaseURL
-                    + "/" + StoreAppGetController.path
+                // **받는 자리는 `/get` 하나다** (ADR-0049, ADR-0050). 여기서 버전
+                // 경로를 따로 가리키면 그쪽은 `bestArtifact` 를 주는데, 그것은 zip 이다.
+                // 같은 줄에서 "받으세요" 를 눌렀는데 공개 페이지와 다른 파일이 나온다.
+                //
+                // `bestArtifact` 를 dmg 로 바꿀 수는 없다. 스토어 앱 클라이언트가
+                // 자기 업데이트를 그 값으로 받고, 받은 것을 푸는 코드라 dmg 를 주면
+                // 깨진다 (`Installer`).
+                path: "/" + StoreAppGetController.path
             )
         }
 
@@ -246,6 +248,10 @@ struct AppPagesController: RouteCollection, Sendable {
         let canManage = try app.canManage(user)
         let versions = try await app.visibleVersions(for: user, on: request.db)
 
+        // **상세는 목록보다 넓다** (ADR-0051). 목록은 "내가 맡은 것" 이라 남의 앱을
+        // 빼지만, 상세는 주소를 알고 찾아온 자리다. 출시된 앱이면 보여준다. 별점과
+        // 피드백을 읽는 길이고, 손대는 것은 어차피 따로 막혀 있다(`canManage`).
+        //
         // 출시본이 하나도 없는 앱은 받을 사람에게 보일 이유가 없다.
         guard canUpload || versions.contains(where: { $0.state.isPubliclyVisible }) else {
             throw Abort(.notFound, reason: "앱을 찾을 수 없습니다.")
@@ -387,6 +393,16 @@ struct AppPagesController: RouteCollection, Sendable {
 
         let canUpload = try await app.canUpload(user, on: request.db)
         let isStoreApp = try await request.storeAppSettings().$app.id == app.requireID()
+
+        // **스토어 앱을 받으러 온 사람은 공개 페이지로 보낸다** (ADR-0050). 여기서
+        // 내주면 `bestArtifact` 라 zip 이 나가는데, 공개 페이지는 dmg 를 준다. 같은
+        // 앱을 어디로 왔느냐에 따라 다른 파일로 받게 된다.
+        //
+        // 올릴 권한이 있는 사람은 그대로 둔다. 그 사람들은 특정 버전의 산출물을
+        // 확인하려고 오는 것이지 앱을 설치하려고 오는 것이 아니다.
+        if isStoreApp, !canUpload, version.state.isPubliclyVisible {
+            return request.redirect(to: "/\(StoreAppGetController.path)/download")
+        }
 
         // 화면에 링크를 그리는 조건과 같아야 한다. 화면이 안 그린다고 경로가 막히는
         // 것은 아니라서, 여는 조건은 여기가 기준이다.
@@ -842,9 +858,8 @@ struct AppListContext: Encodable {
 struct StoreAppBootstrapRow: Encodable {
     var name: String
     var version: String
-    var downloadPath: String
-    /// 받으러 온 사람에게 알려줄 공개 주소 (ADR-0049).
-    var publicURL: String
+    /// 받는 자리. 공개 페이지 하나로 모은다 (ADR-0049).
+    var path: String
 }
 
 struct AppFormContext: Encodable {
