@@ -131,7 +131,8 @@ struct OIDCMetadataTests {
 @Suite("OIDC 로그인 주소")
 struct OIDCAuthorizationURLTests {
     static func provider(
-        authorizationEndpoint: String = "https://login.example.com/auth"
+        authorizationEndpoint: String = "https://login.example.com/auth",
+        endSessionEndpoint: String? = nil
     ) -> OIDCProvider {
         OIDCProvider(
             config: AppConfig.OAuthConfig(
@@ -144,7 +145,8 @@ struct OIDCAuthorizationURLTests {
                 issuer: "https://login.example.com",
                 authorizationEndpoint: authorizationEndpoint,
                 tokenEndpoint: "https://login.example.com/token",
-                jwksURI: "https://login.example.com/jwks"
+                jwksURI: "https://login.example.com/jwks",
+                endSessionEndpoint: endSessionEndpoint
             )
         )
     }
@@ -180,6 +182,24 @@ struct OIDCAuthorizationURLTests {
         #expect(try prompt(plain) == "select_account")
         // `login` 은 "세션이 있어도 다시 인증시켜라" 라서 어느 공급자에서나 통한다.
         #expect(try prompt(forced).contains("login"))
+    }
+
+    /// 공급자가 세션 종료 자리를 내주지 않으면(Google 이 그렇다) 끊을 방법이 없다.
+    /// 그때는 우리 쿠키만 지우고 다음 로그인에 재인증을 요구한다.
+    @Test("세션 종료 자리가 없으면 보낼 곳도 없다")
+    func hasNoEndSessionURLWithoutEndpoint() throws {
+        #expect(Self.provider().endSessionURL(postLogoutRedirectURI: "https://store.example.com") == nil)
+    }
+
+    @Test("세션 종료 자리가 있으면 돌아올 주소를 실어 보낸다")
+    func buildsEndSessionURL() throws {
+        let provider = Self.provider(endSessionEndpoint: "https://login.example.com/logout")
+        let url = try #require(provider.endSessionURL(postLogoutRedirectURI: "https://store.example.com"))
+        let items = try #require(URLComponents(string: url)?.queryItems)
+        let values = Dictionary(items.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { a, _ in a })
+
+        #expect(values["client_id"] == "client-id")
+        #expect(values["post_logout_redirect_uri"] == "https://store.example.com")
     }
 
     /// Keycloak 처럼 엔드포인트에 이미 질의가 붙어 오는 공급자가 있다. 덮어쓰면

@@ -13,6 +13,15 @@
 #   OIDC_CLIENT_ID=alley
 #   OIDC_CLIENT_SECRET=alley-dev-secret
 #
+# 계정을 바꿔가며 시험하려면 한 줄을 더 넣습니다. 로그아웃할 때 Keycloak 세션까지
+# 끊어서, 다음 로그인이 빈 화면에서 시작합니다. 이 realm 에는 돌아올 주소가 이미
+# 등록돼 있습니다.
+#
+#   OIDC_LOGOUT_ENDS_PROVIDER_SESSION=true
+#
+# **운영에서는 기본값(끄기)을 권합니다.** 사내 IdP 를 쓰면 같은 세션을 보는 다른
+# 도구에서도 함께 로그아웃됩니다.
+#
 # http 인데도 되는 것은 loopback 이기 때문입니다(`OIDCMetadata.isSafe`).
 # 데이터를 볼륨에 두지 않아서 내리면 전부 사라집니다. 그것이 의도입니다.
 services:
