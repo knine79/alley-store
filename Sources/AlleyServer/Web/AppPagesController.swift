@@ -76,10 +76,11 @@ struct AppPagesController: RouteCollection, Sendable {
         let rows: [AppRow] = try settled.compactMap { app in
             let appID = try app.requireID()
             guard appID != storeAppID else { return nil }
-            let released = latest[appID]
-            // 출시 전인 앱은 손댈 수 있는 사람에게만 보인다 (`AppVisibility`).
-            guard try released != nil || visibility.canTouch(app) else { return nil }
-            return try AppRow(app: app, latestReleased: released, rating: ratings[appID])
+            // **손댈 수 있는 앱만 보인다** (ADR-0051). 여기는 앱을 올리는 사람의
+            // 화면이라 남의 앱은 등록·업로드·토큰·통계 어느 것도 할 수 없으면서 줄만
+            // 차지한다. 받을 수도 없다 (이슈 #17). 카탈로그는 스토어 앱이 그린다.
+            guard try visibility.canTouch(app) else { return nil }
+            return try AppRow(app: app, latestReleased: latest[appID], rating: ratings[appID])
         }
 
         // 스토어 앱이 없는 사람에게는 이것이 유일한 입구다 (이슈 #17). 목록에서

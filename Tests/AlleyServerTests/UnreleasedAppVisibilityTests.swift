@@ -104,4 +104,59 @@ struct UnreleasedAppVisibilityTests {
             }
         }
     }
+
+    /// **출시됐어도 남의 앱은 웹 목록에 서지 않는다** (ADR-0051).
+    ///
+    /// 콘솔은 앱을 **올리는** 사람의 화면이다. 남의 앱은 등록·업로드·토큰·통계 어느
+    /// 것도 할 수 없으면서 줄만 차지하고, 웹에서는 받지도 못한다 (이슈 #17).
+    /// 카탈로그는 스토어 앱이 그린다.
+    @Test("출시된 남의 앱도 웹 목록에는 나오지 않는다")
+    func releasedAppsOfOthersAreAlsoHiddenFromTheConsole() async throws {
+        try await withMigratedApp { app in
+            let seeded = try await seed(on: app)
+
+            // 남의 앱을 출시까지 밀어둔다.
+            let version = try await app.seedVersion(
+                appID: try seeded.secret.requireID(),
+                short: "1.0.0", build: 1, state: .released, by: seeded.owner
+            )
+            _ = version
+
+            try await app.testing().test(
+                .GET, "/apps", headers: .sessionCookie(seeded.viewerToken)
+            ) { response in
+                #expect(response.status == .ok)
+                let html = response.body.string
+                #expect(!html.contains("아직안알린앱"))
+                // 목록이 통째로 빈 것이 아니라 남의 것만 빠진 것이어야 한다.
+                #expect(html.contains("내가만든앱"))
+            }
+
+            // **API 는 그대로 준다.** 스토어 앱이 그리는 카탈로그라 여기까지 좁히면
+            // 받을 앱 목록이 빈다 (ADR-0051).
+            try await app.testing().test(
+                .GET, APIPath.apps, headers: .sessionCookie(seeded.viewerToken)
+            ) { response in
+                #expect(response.status == .ok)
+                let names = try response.content.decode([AppDTO].self).map(\.name)
+                #expect(names.contains("아직안알린앱"))
+            }
+        }
+    }
+
+    /// 관리자는 전부 본다. 워커가 실패했을 때 찾아갈 길이 필요하고, 어차피 모든 앱을
+    /// 수정할 권한이 있어서 감추는 것이 보호가 되지 않는다.
+    @Test("관리자 목록에는 남의 앱도 남는다")
+    func adminsStillSeeEverything() async throws {
+        try await withMigratedApp { app in
+            let seeded = try await seed(on: app)
+
+            try await app.testing().test(
+                .GET, "/apps", headers: .sessionCookie(seeded.adminToken)
+            ) { response in
+                #expect(response.status == .ok)
+                #expect(response.body.string.contains("아직안알린앱"))
+            }
+        }
+    }
 }
