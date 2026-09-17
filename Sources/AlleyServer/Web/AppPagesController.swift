@@ -25,6 +25,7 @@ struct AppPagesController: RouteCollection, Sendable {
         pages.get(":appID", use: detail)
         pages.post(":appID", "edit", use: submitEdit)
         pages.post(":appID", "delete", use: deleteApp)
+        pages.post(":appID", "portal-app-id", use: registerPortalAppID)
         pages.post(":appID", "deploy-tokens", use: issueDeployToken)
         pages.post(":appID", "deploy-tokens", ":tokenID", "revoke", use: revokeDeployToken)
         pages.get(":appID", "versions", ":versionID", "download", use: download)
@@ -239,7 +240,9 @@ struct AppPagesController: RouteCollection, Sendable {
         issuedToken: IssuedDeployToken?,
         issuedFeed: IssuedFeedToken? = nil,
         notificationError: String? = nil,
-        feedError: String? = nil
+        feedError: String? = nil,
+        portalError: String? = nil,
+        portalNotice: String? = nil
     ) async throws -> View {
         let user = try request.requireUser()
         let app = try await request.findApp()
@@ -332,6 +335,15 @@ struct AppPagesController: RouteCollection, Sendable {
             viewer: user,
             on: request
         )
+
+        // 프로필이 필요한 권한을 쓰는 앱만 포털에 App ID 가 있어야 한다 (ADR-0005).
+        // 그 판단은 올린 entitlements 가 들어온 뒤에야 할 수 있어서, 앱을 만드는
+        // 화면이 아니라 여기에 둔다.
+        let profileEntitlements = canManage
+            ? EntitlementsPlist.requiringProvisioningProfile(
+                in: Set(versions.compactMap(\.entitlements).flatMap(EntitlementsPlist.keys(of:)))
+            )
+            : []
         return try await request.view.render(
             "app-detail",
             AppDetailContext(
@@ -367,6 +379,11 @@ struct AppPagesController: RouteCollection, Sendable {
                 entitlementsWhereToFind: EntitlementsGuidance.whereToFind,
                 entitlementsElectronTemplate: EntitlementsGuidance.electronTemplate,
                 entitlementsElectronNotes: EntitlementsGuidance.electronTemplateNotes,
+                profileEntitlements: profileEntitlements,
+                // 연동이 없으면 눌러도 안 되는 버튼이라 아예 그리지 않는다.
+                isPortalConfigured: request.application.alleyConfig.appStoreConnect != nil,
+                portalError: portalError,
+                portalNotice: portalNotice,
                 removal: RemovalCostRow(try await AppRemoval.cost(of: app, on: request.db))
             )
         ).get()
@@ -448,6 +465,43 @@ struct AppPagesController: RouteCollection, Sendable {
             on: request.db
         )
         return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
+    }
+
+    // MARK: - 포털 App ID
+
+    /// 이 앱의 번들 ID 로 Apple 포털에 explicit App ID 를 만든다 (ADR-0005).
+    ///
+    /// **값을 묻지 않는다.** 번들 ID 와 이름은 앱을 등록할 때 이미 받았다. 다시 적게
+    /// 하면 오타가 그대로 Apple 계정에 남고, 거기서 지우는 것은 Account Holder 나
+    /// Admin 만 할 수 있다.
+    ///
+    /// 앱 화면에 두는 이유는 판단 시점 때문이다. 프로필이 필요한지는 entitlements 를
+    /// 봐야 아는데, 그것은 버전을 올릴 때 들어온다. 앱을 만드는 화면에는 아직 없다.
+    @Sendable
+    func registerPortalAppID(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        try app.requireManageAccess(for: user)
+
+        do {
+            let registered = try await PortalRegistration.registerBundleID(
+                RegisterBundleIDRequest(identifier: app.bundleID, name: app.name),
+                using: try request.appStoreConnect(),
+                by: user,
+                logger: request.logger
+            )
+            let view = try await renderDetail(
+                on: request,
+                issuedToken: nil,
+                portalNotice: "'\(registered.identifier)' 를 Apple 계정에 만들었습니다."
+            )
+            return htmlResponse(view, status: .created)
+        } catch let abort as any AbortError where abort.status.code < 500 {
+            let view = try await renderDetail(
+                on: request, issuedToken: nil, portalError: abort.reason
+            )
+            return htmlResponse(view, status: abort.status)
+        }
     }
 
     // MARK: - 배포 토큰
@@ -902,6 +956,17 @@ struct AppDetailContext: Encodable {
     var entitlementsElectronTemplate: String
     /// 본보기를 그대로 쓰기 전에 알아야 할 것.
     var entitlementsElectronNotes: String
+    /// 이 앱이 쓰는 권한 중 프로비저닝 프로필을 요구하는 것들 (ADR-0005).
+    ///
+    /// 비어 있으면 포털에 App ID 를 만들 이유가 없고, 그 자리를 그리지 않는다.
+    /// 관리할 수 없는 사람에게는 늘 비어 있다.
+    var profileEntitlements: [String]
+    /// App Store Connect 연동이 서 있는가.
+    var isPortalConfigured: Bool
+    /// App ID 를 만들다 막힌 이유.
+    var portalError: String?
+    /// 만들었거나 이미 있었다는 알림.
+    var portalNotice: String?
     /// 지우면 무엇이 사라지는지 (ADR-0041).
     var removal: RemovalCostRow
 }
