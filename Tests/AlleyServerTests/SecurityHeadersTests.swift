@@ -83,10 +83,39 @@ struct SecurityHeadersTests {
                 #expect(policy["style-src"] == "'self' 'unsafe-inline'")
                 // 로고와 피드백 스크린샷이 바깥 호스트다.
                 #expect(policy["img-src"]?.contains("https:") == true)
-                #expect(policy["form-action"] == "'self'")
+                // 로그아웃 폼의 응답이 공급자로 리다이렉트한다. 그 자리가 빠지면
+                // 브라우저가 이동을 막고, 화면은 아무 일도 없었던 것처럼 남는다.
+                #expect(policy["form-action"]?.hasPrefix("'self'") == true)
                 #expect(policy["base-uri"] == "'none'")
             }
         }
+    }
+
+    /// 이것이 빠지면 로그아웃 폼이 공급자로 가지 못한다. 쿠키는 지워졌는데 화면은
+    /// 그대로라, 사람 눈에는 "로그아웃 버튼이 안 먹는다" 로 보인다.
+    @Test("로그인 공급자 주소를 form-action 에 연다")
+    func opensProviderOriginForLogoutForm() async throws {
+        try await withConfiguredApp(
+            overrides: ["OIDC_ISSUER": "http://localhost:8081/realms/alley"]
+        ) { app in
+            try await app.testing().test(.GET, "/") { response in
+                let action = try #require(directives(response)["form-action"])
+                #expect(action.contains("http://localhost:8081"))
+                // 경로는 빼고 출처만 연다.
+                #expect(!action.contains("/realms/alley"))
+            }
+        }
+    }
+
+    @Test("issuer 에서 출처만 뽑는다")
+    func extractsProviderOrigin() throws {
+        let config = try TestSupport.config(
+            overrides: ["OIDC_ISSUER": "https://login.example.com/realms/alley"]
+        )
+        #expect(
+            SecurityHeadersMiddleware.providerOrigin(for: config.oauth)
+                == "https://login.example.com"
+        )
     }
 
     @Test("로컬 MinIO 주소를 CSP 에 연다")

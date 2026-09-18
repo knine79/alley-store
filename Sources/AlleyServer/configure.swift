@@ -162,7 +162,8 @@ private func configureMiddleware(_ app: Application, config: AppConfig) {
     app.middleware = .init()
     app.middleware.use(
         SecurityHeadersMiddleware(
-            storageOrigin: SecurityHeadersMiddleware.storageOrigin(for: config.storage)
+            storageOrigin: SecurityHeadersMiddleware.storageOrigin(for: config.storage),
+            providerOrigin: SecurityHeadersMiddleware.providerOrigin(for: config.oauth)
         )
     )
     app.middleware.use(ConsoleErrorMiddleware())
