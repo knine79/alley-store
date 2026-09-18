@@ -5,6 +5,7 @@
      것이기 때문이다. 설정 항목 하나로 화면 중간에 두면 그 사실이 가려진다. -->
 <div class="identity">
     #if(icon):
+    <div class="icon-stack">
     <form class="icon-form" method="post" action="/admin/settings/branding/#(icon.kind)"
           enctype="multipart/form-data">
         <input type="hidden" name="returnPath" value="/admin/store-app">
@@ -19,6 +20,15 @@
              스크립트가 없을 때는 이것이 유일한 올리는 길이다. -->
         <button class="button button-small icon-well-submit" type="submit">올리기</button>
     </form>
+    <!-- 올린 것이 있을 때만. 지우면 제품에 딸려 오는 기본 아이콘으로 돌아간다.
+         이것이 없으면 잘못 올린 아이콘을 물릴 길이 데이터베이스뿐이다. -->
+    #if(!icon.isDefault):
+    <form method="post" action="/admin/settings/branding/#(icon.kind)/remove">
+        <input type="hidden" name="returnPath" value="/admin/store-app">
+        <button class="button button-small button-quiet" type="submit">지우기</button>
+    </form>
+    #endif
+    </div>
     #endif
 
     <div class="identity-body">
