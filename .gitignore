@@ -37,6 +37,11 @@ AuthKey_*.p8
 # 워커 작업 디렉터리
 .alley-work/
 
+# 이미지에 딸려 보내는 베이스 번들 (ADR-0048). CI 가 이미지를 만들 때 이 자리에
+# 넣고, 로컬에서도 같은 자리에 두고 굴려본다. macOS 에서 컴파일한 500KB 바이너리라
+# 커밋하지 않는다.
+Resources/StoreAppBundle/*.zip
+
 # macOS
 .DS_Store
 .AppleDouble
