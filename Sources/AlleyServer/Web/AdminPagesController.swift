@@ -40,7 +40,7 @@ struct AdminPagesController: RouteCollection, Sendable {
         pages.post("operator-tokens", ":tokenID", "revoke", use: revokeOperatorToken)
         pages.get("stats", use: stats)
         pages.get("portal", use: portal)
-        pages.post("portal", "bundle-ids", use: registerBundleID)
+        pages.post("portal", "bundle-ids", use: registerWildcardBundleID)
     }
 
     /// 관리 화면의 첫 장은 설정이다. 역할 관리는 사람이 들어올 때마다 하는 일이 아니다.
@@ -524,7 +524,7 @@ struct AdminPagesController: RouteCollection, Sendable {
         ).get()
     }
 
-    // MARK: - 개발자 포털
+    // MARK: - 앱 서명 (Apple 개발자 포털 현황)
 
     /// 인증서 만료와 App ID 현황.
     ///
@@ -536,16 +536,29 @@ struct AdminPagesController: RouteCollection, Sendable {
         return try await renderPortal(error: nil, on: request)
     }
 
+    /// 스토어 앱 전체를 덮는 와일드카드 App ID 하나를 만든다.
+    ///
+    /// **값을 묻지 않는다.** 식별자는 앱 등록 규칙이 쓰는 번들 ID 접두사에서 나오고
+    /// (ADR-0005), 이름은 스토어 이름에서 나온다. 손으로 적게 하면 앱 등록 규칙과
+    /// 어긋난 와일드카드가 만들어질 수 있는데, 그것은 Apple 쪽에서 지우기 까다롭다.
     @Sendable
-    func registerBundleID(request: Request) async throws -> Response {
+    func registerWildcardBundleID(request: Request) async throws -> Response {
         let admin = try request.requireAdmin()
-        let values = try request.content.decode(BundleIDFormValues.self)
+        let settings = try await request.storeSettings()
+
+        guard let prefix = settings.bundleIDPrefix, !prefix.isEmpty else {
+            let view = try await renderPortal(
+                error: "번들 ID 접두사가 비어 있습니다. 스토어 설정에서 먼저 정하세요.",
+                on: request
+            )
+            return htmlResponse(view, status: .badRequest)
+        }
 
         do {
             _ = try await PortalRegistration.registerBundleID(
                 RegisterBundleIDRequest(
-                    identifier: values.identifier ?? "",
-                    name: values.name ?? ""
+                    identifier: "\(prefix).*",
+                    name: "\(settings.storeName) 공용"
                 ),
                 using: try request.appStoreConnect(),
                 by: admin,
@@ -578,14 +591,27 @@ struct AdminPagesController: RouteCollection, Sendable {
         }
 
         let settings = try await request.storeSettings()
+        let registered = Set(try await App.query(on: request.db).all().map(\.bundleID))
+        let grouped = PortalGrouping.split(certificates: certificates)
+        let groupedIDs = PortalGrouping.split(bundleIDs: bundleIDs, covering: registered)
+
+        // 만드는 자리는 만들 것이 있을 때만 그린다. Apple 에게 물어보지 못했으면
+        // 이미 있는지도 모르므로 그리지 않는다. 있는 것을 또 만들면 거절당한다.
+        let wildcard = settings.bundleIDPrefix.map { "\($0).*" }
+        let canRegisterWildcard =
+            connectionError == nil && !bundleIDs.contains { $0.identifier == wildcard }
+
         return try await request.view.render(
             "admin-portal",
             PortalPageContext(
                 page: try await request.pageContext(adminTab: .portal),
                 isConfigured: request.application.alleyConfig.appStoreConnect != nil,
-                certificates: certificates,
-                bundleIDs: bundleIDs,
-                suggestedWildcard: settings.bundleIDPrefix.map { "\($0).*" },
+                signingCertificates: grouped.signing,
+                otherCertificates: grouped.other,
+                otherExpiringSoon: grouped.otherExpiringSoon,
+                storeBundleIDs: groupedIDs.store,
+                otherBundleIDs: groupedIDs.other,
+                registerableWildcard: canRegisterWildcard ? wildcard : nil,
                 connectionError: connectionError,
                 error: error
             )
@@ -926,14 +952,62 @@ struct IssuedWorkerToken: Encodable {
     var token: String
 }
 
-struct BundleIDFormValues: Codable {
-    var identifier: String?
-    var name: String?
+/// 화면에 뿌리는 인증서 한 줄.
+/// 앱 서명 화면이 무엇을 펼치고 무엇을 접을지 가른다.
+///
+/// 화면 밖에 두는 이유는 시험 때문이다. Apple 과 이야기하지 않고도 분류만 따로
+/// 확인할 수 있어야 한다.
+enum PortalGrouping {
+    /// 이만큼 남았으면 갱신을 시작해야 한다. 인증서 갱신은 사람의 손이 여러 번 든다.
+    static let expiringSoonDays = 30
+
+    struct Certificates {
+        var signing: [CertificateRow]
+        var other: [CertificateRow]
+        /// 접어둔 것 중 곧 만료되는 수. 접힌 채로도 그 사실은 알려야 한다.
+        var otherExpiringSoon: Int
+    }
+
+    static func split(certificates: [CertificateRow]) -> Certificates {
+        let other = certificates.filter { !$0.isDeveloperID }
+        return Certificates(
+            signing: certificates.filter(\.isDeveloperID),
+            other: other,
+            otherExpiringSoon: other.count { ($0.daysLeft ?? .max) < expiringSoonDays }
+        )
+    }
+
+    struct BundleIDs {
+        var store: [ASCBundleID]
+        var other: [ASCBundleID]
+    }
+
+    /// App ID 가 이 스토어와 이어지는지는 **스토어에 등록된 앱**으로 판정한다.
+    ///
+    /// 플랫폼으로는 갈리지 않는다. Apple 에 `filter[platform]=MAC_OS` 를 걸어도 iOS
+    /// 앱의 App ID 가 함께 온다. 번들 ID 접두사로도 갈리지 않는다. 한 조직은 iOS 앱과
+    /// 맥 앱에 같은 접두사를 쓴다. 남는 기준은 "이 스토어가 실제로 다루는 앱인가" 뿐이다.
+    static func split(
+        bundleIDs: [ASCBundleID],
+        covering registered: Set<String>
+    ) -> BundleIDs {
+        var store: [ASCBundleID] = []
+        var other: [ASCBundleID] = []
+        for bundleID in bundleIDs {
+            // **`*` 하나는 빼고 본다.** 그것은 무엇이든 덮으므로 어떤 기준을 들어도
+            // 늘 통과한다. Xcode 가 만들어두는 항목이라 이 스토어를 위해 만든 것도
+            // 아니다. 통과시키면 "이 스토어의 App ID" 라는 말이 뜻을 잃는다.
+            let coversEverything = bundleID.identifier == "*"
+            if !coversEverything, registered.contains(where: bundleID.covers) {
+                store.append(bundleID)
+            } else {
+                other.append(bundleID)
+            }
+        }
+        return BundleIDs(store: store, other: other)
+    }
 }
 
-extension BundleIDFormValues: Content {}
-
-/// 화면에 뿌리는 인증서 한 줄.
 struct CertificateRow: Encodable {
     var name: String
     var type: String
@@ -952,7 +1026,8 @@ struct CertificateRow: Encodable {
         self.daysLeft = days
         self.isDeveloperID = certificate.isDeveloperID
         // 인증서 갱신은 사람의 손이 여러 번 필요한 일이다. 한 달 전에는 알아야 한다.
-        self.needsAttention = certificate.isDeveloperID && (days ?? .max) < 30
+        self.needsAttention =
+            certificate.isDeveloperID && (days ?? .max) < PortalGrouping.expiringSoonDays
     }
 }
 
@@ -980,10 +1055,22 @@ struct StatsPageContext: Encodable {
 struct PortalPageContext: Encodable {
     var page: PageContext
     var isConfigured: Bool
-    var certificates: [CertificateRow]
-    var bundleIDs: [ASCBundleID]
-    /// 스토어 설정의 프리픽스로 만든 와일드카드 제안값.
-    var suggestedWildcard: String?
+    /// 서명에 쓰는 인증서. 이 화면의 본론이다.
+    var signingCertificates: [CertificateRow]
+    /// 팀의 나머지 인증서.
+    ///
+    /// **접어둔다.** iOS 개발 인증서는 각자의 Xcode 가 관리하고, 여기서 만료를 봐도
+    /// 이 스토어에서 할 수 있는 일이 없다. 열 몇 줄이 서명용 한 줄을 덮는다.
+    var otherCertificates: [CertificateRow]
+    /// 접어둔 것 중 곧 만료되는 수. 접힌 채로도 그 사실은 알린다.
+    var otherExpiringSoon: Int
+    /// 이 스토어의 앱을 덮는 App ID.
+    var storeBundleIDs: [ASCBundleID]
+    /// 팀의 나머지 App ID. 같은 이유로 접어둔다.
+    var otherBundleIDs: [ASCBundleID]
+    /// 지금 만들 수 있는 와일드카드. 이미 있거나, 접두사가 없거나, Apple 에게 물어보지
+    /// 못했으면 nil 이고 그때는 만드는 자리를 아예 그리지 않는다.
+    var registerableWildcard: String?
     /// Apple 과 이야기하지 못한 이유.
     var connectionError: String?
     /// 사람이 고칠 수 있는 실패.

@@ -34,7 +34,9 @@ public struct OIDCProvider: Sendable {
     }
 
     /// 사용자를 보낼 로그인 주소.
-    public func authorizationURL(state: String) -> String {
+    /// - Parameter forcesReauthentication: 공급자에게 인증을 다시 시킬지. 방금
+    ///   로그아웃한 사람이 다시 들어올 때 참이다 (`reauthenticationCookieName`).
+    public func authorizationURL(state: String, forcesReauthentication: Bool = false) -> String {
         var components = URLComponents(string: metadata.authorizationEndpoint)!
         var items: [URLQueryItem] = [
             .init(name: "client_id", value: config.clientID),
@@ -46,12 +48,50 @@ public struct OIDCProvider: Sendable {
         // 어느 계정으로 들어갈지 고르게 한다. 여러 계정을 쓰는 사람이 많고, 이것이
         // 없으면 브라우저가 기억하는 계정으로 조용히 들어간다. 강제력은 없어서
         // 실제 판단은 돌아온 ID 토큰을 보고 서버가 한다.
-        items.append(.init(name: "prompt", value: "select_account"))
+        //
+        // **`select_account` 는 공급자마다 다르게 다뤄진다.** Google 은 계정 고르는
+        // 화면을 띄우지만 Keycloak 은 그런 화면이 없어 무시한다. 그래서 방금 로그아웃한
+        // 사람에게는 `login` 을 함께 보낸다. 그쪽은 "세션이 있어도 다시 인증시켜라" 라서
+        // 어느 공급자에서나 같은 뜻으로 통한다.
+        items.append(
+            .init(name: "prompt", value: forcesReauthentication ? "login select_account" : "select_account")
+        )
 
         // 기존 질의 항목을 지우지 않는다. Keycloak 처럼 endpoint 에 이미 질의가
         // 붙어 있는 공급자가 있다.
         components.queryItems = (components.queryItems ?? []) + items
         return components.url!.absoluteString
+    }
+
+    /// 공급자 세션까지 끝내고 돌아올 주소. 공급자가 그 자리를 내주지 않으면 nil.
+    ///
+    /// **`idTokenHint` 를 함께 보낸다.** 규격은 그것을 "누가 나가려는지" 의 증거로
+    /// 삼고, 없으면 공급자가 사람에게 확인을 받아도 된다고 한다. Keycloak 은 실제로
+    /// "Do you want to log out?" 화면을 띄우는데, 거기서 멈추면 세션이 끊기지 않고
+    /// 우리 화면으로 돌아오지도 않는다 (ADR-0054).
+    ///
+    /// 돌아올 주소는 공급자에 등록돼 있어야 한다. Keycloak 은 클라이언트의
+    /// `post.logout.redirect.uris`, Entra 와 Okta 는 각자의 로그아웃 URI 목록이다.
+    public func endSessionURL(
+        postLogoutRedirectURI: String,
+        idTokenHint: String?
+    ) -> String? {
+        guard let endpoint = metadata.endSessionEndpoint,
+              var components = URLComponents(string: endpoint)
+        else {
+            return nil
+        }
+        var items: [URLQueryItem] = [
+            .init(name: "client_id", value: config.clientID),
+            .init(name: "post_logout_redirect_uri", value: postLogoutRedirectURI),
+        ]
+        // 없을 수 있다. 이 기능을 켜기 전에 로그인한 사람은 들고 있는 것이 없다.
+        // 그때는 확인 화면을 만나게 되지만, 한 번 다시 로그인하면 풀린다.
+        if let idTokenHint {
+            items.append(.init(name: "id_token_hint", value: idTokenHint))
+        }
+        components.queryItems = (components.queryItems ?? []) + items
+        return components.url?.absoluteString
     }
 
     /// 인가 코드를 토큰으로 교환한다. 서버에서 공급자로 직접 나간다.
@@ -120,19 +160,32 @@ public struct OIDCMetadata: Codable, Sendable, Equatable {
     public var authorizationEndpoint: String
     public var tokenEndpoint: String
     public var jwksURI: String
+    /// 공급자 세션을 끝내는 자리. 규격에서 선택이라 없는 공급자가 있다.
+    ///
+    /// **Google 은 이것을 내주지 않는다.** 그쪽에서는 우리 쿠키만 지우고 다음 로그인에
+    /// 재인증을 요구하는 것으로 끝낸다 (`reauthenticationCookieName`).
+    public var endSessionEndpoint: String?
 
     enum CodingKeys: String, CodingKey {
         case issuer
         case authorizationEndpoint = "authorization_endpoint"
         case tokenEndpoint = "token_endpoint"
         case jwksURI = "jwks_uri"
+        case endSessionEndpoint = "end_session_endpoint"
     }
 
-    public init(issuer: String, authorizationEndpoint: String, tokenEndpoint: String, jwksURI: String) {
+    public init(
+        issuer: String,
+        authorizationEndpoint: String,
+        tokenEndpoint: String,
+        jwksURI: String,
+        endSessionEndpoint: String? = nil
+    ) {
         self.issuer = issuer
         self.authorizationEndpoint = authorizationEndpoint
         self.tokenEndpoint = tokenEndpoint
         self.jwksURI = jwksURI
+        self.endSessionEndpoint = endSessionEndpoint
     }
 
     /// discovery 문서가 있는 자리.

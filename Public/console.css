@@ -283,6 +283,16 @@ code {
     margin-bottom: var(--space-5);
 }
 
+/* 아이콘과 그 아래 "지우기". `.identity` 가 가로 배치라 묶지 않으면 지우기가 제목
+   옆에 끼어든다. 지우기는 올린 것이 있을 때만 나온다. */
+.icon-stack {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+}
+
 /* 바꿀 수 없는 아이콘. 앱 아이콘은 번들에서 뽑으므로 여기서는 보여주기만 한다.
    누를 수 있는 `.icon-well` 과 달리 커서도 테두리 반응도 없어야 한다. */
 .identity-icon {
@@ -902,6 +912,20 @@ a.tab:hover {
 
 .table-fill {
     width: auto;
+}
+
+/* 번들 ID 처럼 띄어쓰기 없는 식별자가 들어가는 칸.
+   `code` 에 `overflow-wrap: anywhere` 가 걸려 있어서(위쪽 `code` 규칙) 브라우저가
+   이 칸의 최소 폭을 한 글자로 계산한다. 옆 칸이 `nowrap` 이면 그쪽이 폭을 다
+   가져가고, 식별자가 `ai.` / `comm` / `onsp` 처럼 네 글자씩 쪼개져 내려갔다.
+   여기서만 되돌려 한 줄로 세운다. */
+.table-code {
+    width: 1%;
+    white-space: nowrap;
+}
+
+.table-code code {
+    overflow-wrap: normal;
 }
 
 .table-strong {

@@ -216,6 +216,103 @@ struct PortalPageTests {
     }
 }
 
+/// 팀 하나의 Apple 계정에는 이 스토어와 무관한 것이 훨씬 많다. 실제 운영 계정에서
+/// 서명용 인증서 한 줄이 iOS 개발 인증서 열한 줄에 묻혔다.
+@Suite("앱 서명 화면 분류")
+struct PortalGroupingTests {
+    private func certificate(
+        _ name: String, type: String, daysLeft: Int?
+    ) -> CertificateRow {
+        CertificateRow(
+            certificate: ASCCertificate(
+                id: name,
+                name: name,
+                type: type,
+                expiresAt: daysLeft.map {
+                    Date().addingTimeInterval(TimeInterval($0) * 24 * 60 * 60 + 60)
+                }
+            )
+        )
+    }
+
+    @Test("서명용만 펼치고 나머지는 접는다")
+    func splitsSigningCertificates() throws {
+        let rows = [
+            certificate("Developer ID Application", type: "DEVELOPER_ID_APPLICATION_G2", daysLeft: 400),
+            certificate("Apple Development: 누군가", type: "DEVELOPMENT", daysLeft: 120),
+            certificate("Apple Distribution", type: "DISTRIBUTION", daysLeft: 180),
+        ]
+
+        let grouped = PortalGrouping.split(certificates: rows)
+
+        #expect(grouped.signing.map(\.name) == ["Developer ID Application"])
+        #expect(grouped.other.count == 2)
+    }
+
+    @Test("접어둔 것 중 곧 만료되는 수를 센다")
+    func countsExpiringSoonAmongCollapsed() throws {
+        let rows = [
+            certificate("Developer ID Application", type: "DEVELOPER_ID_APPLICATION", daysLeft: 400),
+            certificate("Apple Development: 하나", type: "DEVELOPMENT", daysLeft: 3),
+            certificate("Apple Development: 둘", type: "DEVELOPMENT", daysLeft: 29),
+            certificate("Apple Development: 셋", type: "DEVELOPMENT", daysLeft: 120),
+        ]
+
+        let grouped = PortalGrouping.split(certificates: rows)
+
+        // 접은 것을 완전히 숨기지 않는 이유가 이 숫자다. 펼치지 않아도 알 수 있어야 한다.
+        #expect(grouped.otherExpiringSoon == 2)
+    }
+
+    private func bundleID(_ identifier: String) -> ASCBundleID {
+        ASCBundleID(id: identifier, identifier: identifier, name: identifier, platform: "MAC_OS")
+    }
+
+    @Test("스토어에 등록된 앱을 덮는 것만 펼친다")
+    func splitsBundleIDsByRegisteredApps() throws {
+        let registered: Set<String> = ["com.example.tool", "com.example.store"]
+
+        let grouped = PortalGrouping.split(
+            bundleIDs: [
+                bundleID("com.example.tool"),
+                bundleID("com.example.*"),
+                // 접두사가 같아도 이 스토어가 다루는 앱이 아니면 접는다. 한 조직은
+                // iOS 앱과 맥 앱에 같은 접두사를 쓴다.
+                bundleID("com.example.ios-only"),
+                bundleID("ai.other.app"),
+            ],
+            covering: registered
+        )
+
+        #expect(grouped.store.map(\.identifier) == ["com.example.tool", "com.example.*"])
+        #expect(grouped.other.map(\.identifier) == ["com.example.ios-only", "ai.other.app"])
+    }
+
+    @Test("어느 앱도 덮지 못하는 와일드카드는 접는다")
+    func collapsesWildcardThatCoversNothing() throws {
+        let grouped = PortalGrouping.split(
+            bundleIDs: [bundleID("ai.other.*")],
+            covering: ["com.example.tool"]
+        )
+
+        #expect(grouped.store.isEmpty)
+        #expect(grouped.other.count == 1)
+    }
+
+    /// 실제 계정에 Xcode 가 만들어둔 `*` 가 있었다. 무엇이든 덮으니 어떤 기준을 들어도
+    /// 통과해서, 이 스토어와 아무 상관이 없는데도 펼쳐진 쪽에 섰다.
+    @Test("모든 것을 덮는 와일드카드는 이 스토어 것으로 보지 않는다")
+    func collapsesCatchAllWildcard() throws {
+        let grouped = PortalGrouping.split(
+            bundleIDs: [bundleID("*"), bundleID("com.example.*")],
+            covering: ["com.example.tool"]
+        )
+
+        #expect(grouped.store.map(\.identifier) == ["com.example.*"])
+        #expect(grouped.other.map(\.identifier) == ["*"])
+    }
+}
+
 /// 아무것도 하지 않는 Vapor 클라이언트.
 ///
 /// 토큰을 만드는 부분만 확인하므로 실제로 보낼 곳이 없다.

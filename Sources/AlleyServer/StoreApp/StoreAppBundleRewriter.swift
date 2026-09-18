@@ -9,7 +9,7 @@ import Vapor
 /// | 무엇 | 어떻게 |
 /// | --- | --- |
 /// | 번들 이름 (`Alley Store.app`) | zip 항목의 경로를 갈아끼운다 |
-/// | 실행 파일 이름 | 같은 방법. `CFBundleExecutable` 과 이름이 같아야 한다 |
+/// | 실행 파일 이름 | 같은 방법. **원본 이름은 `Contents/MacOS/` 에서 찾는다.** 번들 이름과 다르다 |
 /// | `Info.plist` | 설정값으로 새로 쓴다 |
 /// | `AppIcon.icns` | 올린 PNG 를 담아 넣는다 (`ICNSWriter`) |
 /// | 임시 서명 | 통째로 버린다. 워커가 진짜 서명을 붙이며 다시 만든다 |
@@ -64,9 +64,15 @@ enum StoreAppBundleRewriter {
         let source = try topLevelAppName(in: entries)
 
         let destination = "\(branding.appName).app"
-        // 원본의 실행 파일 이름은 원본 번들 이름과 같다(`CFBundleExecutable`).
-        // 그 규칙 위에서 이름 하나만 갈아끼운다.
-        let sourceExecutable = "\(source)/Contents/MacOS/\(String(source.dropLast(4)))"
+        // **실행 파일 이름을 번들 이름에서 유추하지 않는다.** 원본은 `Alley Store.app`
+        // 안에 `AlleyStore` 를 담는다. 번들 이름에는 공백이 있고 실행 파일에는 없다.
+        // 유추하면 없는 경로를 찾게 되고, 그러면 파일 이름은 그대로인 채 `Info.plist`
+        // 만 새 이름으로 바뀐다. macOS 는 그 번들을 앱으로 보지 않는다
+        // ("응용 프로그램이 손상되었거나 완전하지 않기 때문에 열 수 없습니다").
+        //
+        // 조용히 어긋나는 실패라 여기서 찾아야 한다. 서명도 공증도 통과하고, 받은
+        // 사람이 열 때가 되어서야 드러난다.
+        let sourceExecutable = try Self.executablePath(in: entries, bundle: source)
         let destinationExecutable =
             "\(destination)/Contents/MacOS/\(Self.executableName(for: branding.appName))"
 
@@ -110,6 +116,44 @@ enum StoreAppBundleRewriter {
         }
 
         return ZipArchive.write(output)
+    }
+
+    /// 번들의 실행 파일이 zip 안 어디에 있는지 찾는다.
+    ///
+    /// `Contents/MacOS/` 아래 파일 하나가 실행 파일이다. 이름은 번들 이름과 다를 수
+    /// 있어서(`Alley Store.app` 안의 `AlleyStore`) 경로에서 읽어야 한다.
+    ///
+    /// 그 아래 파일이 여럿이면 어느 것이 주 실행 파일인지 여기서는 알 수 없다.
+    /// `Info.plist` 를 읽어야 하는데 그것은 압축돼 있고, 압축을 풀지 않는 것이 이
+    /// 타입의 전제다. 그런 번들은 스토어 앱이 아니므로 거절한다.
+    static func executablePath(in entries: [ZipArchive.Entry], bundle: String) throws -> String {
+        let prefix = "\(bundle)/Contents/MacOS/"
+        let candidates = entries.lazy
+            .map(\.name)
+            .filter { $0.hasPrefix(prefix) && !$0.hasSuffix("/") }
+            // 하위 디렉터리에 든 것은 주 실행 파일이 아니다.
+            .filter { !$0.dropFirst(prefix.count).contains("/") }
+            // 맥에서 zip 을 만들면 `._이름` 이 나란히 들어온다. 그것까지 세면 실행
+            // 파일이 둘로 보인다.
+            .filter { !isAppleDoubleJunk($0) }
+            .sorted()
+
+        switch candidates.count {
+        case 1: return candidates[0]
+        case 0:
+            throw Abort(
+                .badRequest,
+                reason: "번들 안에 실행 파일이 없습니다. \(prefix) 아래가 비어 있습니다."
+            )
+        default:
+            throw Abort(
+                .badRequest,
+                reason: """
+                    번들의 `Contents/MacOS/` 에 파일이 여럿입니다. 어느 것이 주 실행 \
+                    파일인지 정할 수 없습니다: \(candidates.map { String($0.dropFirst(prefix.count)) }.joined(separator: ", "))
+                    """
+            )
+        }
     }
 
     /// zip 최상위의 `.app` 이름을 찾는다.
