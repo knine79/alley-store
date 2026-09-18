@@ -22,10 +22,22 @@ public struct SecurityHeadersMiddleware: AsyncMiddleware {
     /// 일어나지 않아서, 왜 업로드가 안 되는지 한참 헤매게 된다.
     private let storageOrigin: String?
 
-    /// - Parameter storageOrigin: `scheme://host[:port]` 형태.
-    ///   ``storageOrigin(for:)`` 로 만든다.
-    public init(storageOrigin: String? = nil) {
+    /// 로그인 공급자의 출처.
+    ///
+    /// **로그아웃 폼이 이리로 간다.** 로그아웃은 `POST` 인데(누르지 않아도 되는 링크로
+    /// 두지 않으려고), 그 응답이 공급자의 세션 종료 주소로 리다이렉트한다. `form-action`
+    /// 은 폼이 끝나는 자리까지 보므로, 여기가 비어 있으면 브라우저가 그 이동을 막는다.
+    ///
+    /// 막혀도 화면에는 아무 일도 일어나지 않는다. 쿠키는 이미 지워졌으니 "로그아웃은
+    /// 됐는데 화면이 그대로" 로 보이고, 위반은 콘솔에만 찍힌다.
+    private let providerOrigin: String?
+
+    /// - Parameters:
+    ///   - storageOrigin: `scheme://host[:port]` 형태. ``storageOrigin(for:)`` 로 만든다.
+    ///   - providerOrigin: 같은 형태. ``providerOrigin(for:)`` 로 만든다.
+    public init(storageOrigin: String? = nil, providerOrigin: String? = nil) {
         self.storageOrigin = storageOrigin
+        self.providerOrigin = providerOrigin
     }
 
     public func respond(
@@ -65,6 +77,7 @@ public struct SecurityHeadersMiddleware: AsyncMiddleware {
     /// 템플릿을 읽고 맞춘 값이다. 화면을 고칠 때 여기도 같이 봐야 한다.
     private var policy: String {
         let storage = storageOrigin.map { " \($0)" } ?? ""
+        let provider = providerOrigin.map { " \($0)" } ?? ""
 
         return [
             // 아래에서 따로 열지 않은 것은 전부 막는다. 새 종류의 자원을 쓰기 시작하면
@@ -93,7 +106,12 @@ public struct SecurityHeadersMiddleware: AsyncMiddleware {
             // 여기서는 https 를 통째로 열지 않는다.
             "connect-src 'self'\(storage)",
             // 폼은 전부 우리 경로로 간다. 주입된 폼이 밖으로 값을 보내는 것을 막는다.
-            "form-action 'self'",
+            //
+            // 로그인 공급자만 예외다. 로그아웃 폼의 응답이 공급자의 세션 종료 주소로
+            // 리다이렉트하는데(ADR-0054), `form-action` 은 폼이 끝나는 자리까지 본다.
+            // 값을 보내는 것이 아니라 사람을 보내는 것이고, 그 자리는 우리가 설정에서
+            // 아는 한 곳뿐이다.
+            "form-action 'self'\(provider)",
             // 우리 화면을 다른 사이트가 iframe 으로 덮지 못하게 한다. 이 미들웨어를
             // 만든 이유다.
             "frame-ancestors 'none'",
@@ -121,6 +139,24 @@ extension SecurityHeadersMiddleware {
             return nil
         }
         if let port = base.port {
+            return "\(scheme)://\(host):\(port)"
+        }
+        return "\(scheme)://\(host)"
+    }
+
+    /// 로그인 공급자의 출처를 issuer 에서 뽑는다.
+    ///
+    /// issuer 는 공급자를 가리키는 값이고(ADR-0047), 인가·토큰·세션 종료 주소가 모두
+    /// 거기서 나온다. discovery 문서를 기다리지 않고 설정만으로 계산할 수 있어야 한다.
+    /// 미들웨어는 요청마다 도는 자리라 네트워크를 타면 안 된다.
+    static func providerOrigin(for config: AppConfig.OAuthConfig) -> String? {
+        guard let components = URLComponents(string: config.issuer),
+              let scheme = components.scheme,
+              let host = components.host
+        else {
+            return nil
+        }
+        if let port = components.port {
             return "\(scheme)://\(host):\(port)"
         }
         return "\(scheme)://\(host)"
