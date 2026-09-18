@@ -21,9 +21,22 @@ public final class ShutdownSignal: Sendable {
         var openPolls = 0
     }
 
+    /// 신호원을 담아두는 상자.
+    ///
+    /// **`DispatchSourceSignal` 은 리눅스에서 `Sendable` 이 아니다.** 맥의 Dispatch
+    /// 오버레이에는 그 표시가 붙어 있고 corelibs-libdispatch 에는 없어서, 이 파일은
+    /// 맥에서만 컴파일이 통과했다. 서버가 도는 곳은 리눅스다.
+    ///
+    /// 여기서 하는 일은 만들어서 붙잡아두는 것뿐이다. 넣고 꺼내는 것은 모두 아래
+    /// 잠금 안에서 일어나고, `DispatchSource` 자체도 여러 스레드에서 다뤄도 되는
+    /// 물건이다. 그래서 검사를 끄고 지나간다.
+    private struct Sources: @unchecked Sendable {
+        var all: [DispatchSourceSignal] = []
+    }
+
     private let state = NIOLockedValueBox(State())
     /// 신호원을 잡아둔다. 놓으면 취소되어 더 이상 신호를 받지 못한다.
-    private let sources = NIOLockedValueBox<[DispatchSourceSignal]>([])
+    private let sources = NIOLockedValueBox(Sources())
 
     public init() {}
 
@@ -87,7 +100,7 @@ public final class ShutdownSignal: Sendable {
             source.resume()
             return source
         }
-        self.sources.withLockedValue { $0.append(contentsOf: made) }
+        self.sources.withLockedValue { $0.all.append(contentsOf: made) }
     }
 }
 
