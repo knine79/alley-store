@@ -3,7 +3,11 @@
 <!-- 로그인 없이 보는 화면이다 (ADR-0049). 받으러 온 사람이 하려는 일은 하나뿐이라
      다른 길을 늘어놓지 않는다. -->
 <section class="hero">
-    #if(page.store.logoURL):
+    <!-- 받을 앱의 아이콘을 쓴다. 스토어 로고가 아니다. 이 화면에서 사람이 보는
+         것은 "내가 받을 앱" 이고, 스토어 브랜드는 머리와 로그인 화면이 말한다. -->
+    #if(page.store.appIconURL):
+    <img class="hero-logo" src="#(page.store.appIconURL)" alt="">
+    #elseif(page.store.logoURL):
     <img class="hero-logo" src="#(page.store.logoURL)" alt="">
     #endif
 

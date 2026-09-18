@@ -114,10 +114,15 @@ public enum BrandingAssetKind: String, Codable, Sendable, CaseIterable {
     /// 파비콘과 로고는 브라우저가 알아서 줄여 그리니 하한만 본다. 앱 아이콘만
     /// 딱 맞아야 하는데, `.icns` 에는 정해진 크기의 자리만 있고 서버는 그림을
     /// 줄이지 못하기 때문이다 (`ICNSWriter`).
+    ///
+    /// **로고 하한은 64px 이었다.** 줄여 그리는 것만 생각한 값이다. 그런데 로그인
+    /// 화면은 로고를 96px 자리에 놓고, 배율 화면에서는 그 두세 배가 필요하다. 64px
+    /// 짜리를 올린 스토어에서 그 자리가 흐릿하게 늘어났다. 권하는 값이 이미 512px
+    /// 이니 하한도 늘려 그리지 않을 만큼은 받는다.
     public var sizeRule: BrandingSizeRule {
         switch self {
         case .favicon: .atLeast(32)
-        case .logo: .atLeast(64)
+        case .logo: .atLeast(256)
         case .appIcon: .exactly(ICNSWriter.acceptedEdges)
         }
     }

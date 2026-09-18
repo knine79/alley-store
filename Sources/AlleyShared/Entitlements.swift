@@ -68,6 +68,26 @@ public enum EntitlementsPlist {
     public static func keys(of xml: String) -> [String] {
         (try? validate(xml)) ?? []
     }
+
+    /// 프로비저닝 프로필이 있어야 쓸 수 있는 권한인지.
+    ///
+    /// `com.apple.developer.` 로 시작하는 것들은 Apple 이 팀 단위로 허가하는 기능이라,
+    /// 그 허가를 담은 프로필이 번들 안에 들어 있어야 한다. `com.apple.security.` 로
+    /// 시작하는 샌드박스·하드닝 권한은 프로필 없이도 서명된다.
+    ///
+    /// **서명하는 쪽과 화면이 같은 기준을 써야 해서 여기 둔다.** 워커는 이것으로
+    /// 서명을 멈출지 정하고(`Entitlements.validate`), 콘솔은 이것으로 포털에 App ID 를
+    /// 등록하라고 권할지 정한다. 기준이 갈리면 "서명은 막혔는데 화면은 아무 말도
+    /// 안 하는" 자리가 생긴다.
+    public static func requiresProvisioningProfile(_ key: String) -> Bool {
+        key.hasPrefix("com.apple.developer.")
+    }
+
+    public static func requiringProvisioningProfile(
+        in keys: some Sequence<String>
+    ) -> [String] {
+        keys.filter(requiresProvisioningProfile).sorted()
+    }
 }
 
 /// entitlements 를 두고 사람에게 하는 말을 한 군데 모은다.

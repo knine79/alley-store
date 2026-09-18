@@ -90,9 +90,13 @@ public struct CreateUserRoleEnum: AsyncMigration {
     public init() {}
 
     public func prepare(on database: any Database) async throws {
+        // **값을 여기 그대로 적는다.** `allCases` 를 순회하면 이 마이그레이션이 코드를
+        // 따라 움직인다. 역할을 하나 더하는 순간 새 데이터베이스는 그 값을 갖고
+        // 시작하는데, 옛 데이터베이스를 위해 뒤에 붙인 마이그레이션은 이미 있는 값을
+        // 또 넣으려다 죽는다. `artifact_kind` 가 그렇게 터졌다 (`CreateArtifact`).
         var builder = database.enum("user_role")
-        for role in UserRole.allCases {
-            builder = builder.case(role.rawValue)
+        for role in ["user", "developer", "admin"] {
+            builder = builder.case(role)
         }
         _ = try await builder.create()
     }

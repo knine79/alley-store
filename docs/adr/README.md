@@ -60,6 +60,9 @@
 | [0050](0050-store-app-ships-as-a-disk-image.md) | 스토어 앱만 dmg 로도 내보낸다 | 수락됨 | 2026-09-16 |
 | [0051](0051-console-lists-only-what-you-can-touch.md) | 웹 콘솔 목록은 손댈 수 있는 앱만 보여준다 | 수락됨 | 2026-09-17 |
 | [0051](0051-unique-names-among-usable-tokens.md) | 쓸 수 있는 토큰끼리는 이름이 겹치지 않게 한다 | 수락됨 | 2026-09-16 |
+| [0052](0052-tell-long-polls-that-shutdown-started.md) | 종료가 시작됐다는 것을 긴 폴링에 알린다 | 수락됨 | 2026-09-17 |
+| [0053](0053-make-app-ids-where-they-are-needed.md) | 포털 App ID 는 그것이 필요해진 자리에서 만든다 | 수락됨 | 2026-09-17 |
+| [0054](0054-logging-out-of-the-provider-is-a-choice.md) | 공급자 세션까지 끊을지는 조직이 정한다 | 수락됨 | 2026-09-17 |
 
 ## 언제 쓰나
 

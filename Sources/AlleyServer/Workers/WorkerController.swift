@@ -71,7 +71,17 @@ public struct WorkerController: RouteCollection, Sendable {
             TimeInterval(max(0, min(requested, Self.maximumPollSeconds)))
         )
 
+        // 서버가 내려가는 중이라는 것을 여기서 알 수 있어야 한다. 모르고 기다리면
+        // 이미 닫힌 데이터베이스를 잡고 프로세스가 죽는다 (`ShutdownSignal`).
+        let shutdown = request.application.shutdownSignal
+        shutdown.enter()
+        defer { shutdown.leave() }
+
         while true {
+            // 빈손으로 끝낸다. 워커는 잡이 없는 응답을 늘 받으므로 이것을 특별히
+            // 다루지 않아도 되고, 다음 폴링에서 새 서버에 다시 묻는다.
+            if shutdown.isShuttingDown { return Response(status: .noContent) }
+
             if let job = try await claimJob(for: worker, on: request) {
                 let response = Response(status: .ok)
                 try response.content.encode(job)

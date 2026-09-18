@@ -40,9 +40,18 @@ public struct AuthController: RouteCollection, Sendable {
         let metadata = try await request.application.oidcDirectory.metadata(
             using: request.client, logger: request.logger
         )
+        // 방금 로그아웃한 사람이면 공급자에게 다시 물어보게 한다.
+        let reauthenticate = request.cookies[reauthenticationCookieName] != nil
         let url = OIDCProvider(config: config.oauth, metadata: metadata)
-            .authorizationURL(state: state)
-        return request.redirect(to: url)
+            .authorizationURL(state: state, forcesReauthentication: reauthenticate)
+
+        let response = request.redirect(to: url)
+        // 표시는 한 번 쓰고 지운다. 남겨두면 그 뒤로 로그인할 때마다 비밀번호를
+        // 다시 묻게 되고, 그것은 로그아웃을 누른 사람이 시킨 일이 아니다.
+        if reauthenticate {
+            response.cookies[reauthenticationCookieName] = .expired
+        }
+        return response
     }
 
     // MARK: - 공급자 콜백
@@ -121,11 +130,22 @@ public struct AuthController: RouteCollection, Sendable {
             // 웹은 세션 토큰을 HttpOnly 쿠키로 받는다. 자바스크립트가 읽지 못하게 한다.
             let token = try await signSession(request: request, userID: userID)
             let response = request.redirect(to: "/")
+            let isSecure = config.publicBaseURL.hasPrefix("https://")
             response.cookies[sessionCookieName] = sessionCookie(
                 token: token,
                 ttl: config.security.sessionTTL,
-                isSecure: config.publicBaseURL.hasPrefix("https://")
+                isSecure: isSecure
             )
+            // 공급자 세션까지 끊는 스토어만 ID 토큰을 들고 있는다. 로그아웃할 때
+            // 공급자에게 돌려주지 않으면 그쪽이 사람에게 확인을 받고, 그 화면에서
+            // 멈추면 세션이 끊기지 않는다 (ADR-0054).
+            if config.oauth.endsProviderSessionOnLogout {
+                response.cookies[providerIDTokenCookieName] = sessionCookie(
+                    token: tokens.idToken,
+                    ttl: config.security.sessionTTL,
+                    isSecure: isSecure
+                )
+            }
             return response
 
         case .app:
