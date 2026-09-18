@@ -55,11 +55,19 @@ struct StoreAppBundleRewriterTests {
     ///
     /// 임시 서명(`_CodeSignature`)까지 넣는 것은 그것이 실제로 들어 있고, 조립이
     /// 그것을 버리는지가 이 시험의 핵심 중 하나이기 때문이다.
-    static func baseZip(appName: String = "Alley Store") -> Data {
+    ///
+    /// **실행 파일 이름은 번들 이름과 다르다.** `scripts/build-store-app.sh` 가
+    /// `Alley Store.app` 안에 `AlleyStore` 를 담는다. 이 픽스처가 둘을 같게 두는 바람에
+    /// 조립이 실행 파일을 못 찾는 것을 오래 놓쳤고, 그렇게 만들어진 앱은 서명과 공증을
+    /// 통과한 뒤 받은 사람의 맥에서 열리지 않았다.
+    static func baseZip(
+        appName: String = "Alley Store",
+        executableName: String = "AlleyStore"
+    ) -> Data {
         ZipArchive.write([
             ZipArchive.stored(name: "\(appName).app/", data: Data(), mode: 0o755),
             ZipArchive.stored(
-                name: "\(appName).app/Contents/MacOS/\(appName)",
+                name: "\(appName).app/Contents/MacOS/\(executableName)",
                 data: Data("실행 파일이라고 치자".utf8), mode: 0o755
             ),
             ZipArchive.stored(
@@ -193,6 +201,51 @@ struct StoreAppBundleRewriterTests {
         #expect(!names.contains { $0.contains("__MACOSX") })
         #expect(!names.contains { ($0.split(separator: "/").last ?? "").hasPrefix("._") })
         #expect(names.contains("우리 스토어.app/Contents/MacOS/AlleyStore"))
+    }
+
+    /// **이것이 깨진 채로 운영에 나갔다.** 서버가 실행 파일 이름을 번들 이름에서
+    /// 유추해서 `Alley Store.app/Contents/MacOS/Alley Store` 를 찾았는데, 실제 번들은
+    /// 그 자리에 `AlleyStore` 를 담는다. 못 찾으니 파일 이름은 그대로인 채 `Info.plist`
+    /// 만 새 이름으로 바뀌었고, 받은 사람의 맥에서 "응용 프로그램이 손상되었거나
+    /// 완전하지 않기 때문에 열 수 없습니다" 가 떴다. 서명도 공증도 통과한 뒤였다.
+    @Test("실행 파일 이름과 plist 가 언제나 같은 것을 가리킨다", arguments: [
+        ("Alley Store", "AlleyStore"),
+        ("Alley Store", "Alley Store"),
+        ("AlleyStore", "AlleyStore"),
+    ])
+    func keepsExecutableNameAndPlistInSync(_ bundle: String, _ executable: String) throws {
+        let output = try StoreAppBundleRewriter.rewrite(
+            baseZip: Self.baseZip(appName: bundle, executableName: executable),
+            branding: Self.branding(appName: "Example Alley Store")
+        )
+        let entries = try ZipArchive.entries(in: output)
+
+        let binary = try #require(
+            entries.first { $0.name.contains("/Contents/MacOS/") && !$0.name.hasSuffix("/") }
+        )
+        let onDisk = String(binary.name.split(separator: "/").last ?? "")
+
+        let plist = try #require(entries.first { $0.name.hasSuffix("/Contents/Info.plist") })
+        let text = String(decoding: plist.compressedData, as: UTF8.self)
+        let declared = try #require(
+            text.components(separatedBy: "<key>CFBundleExecutable</key>").last?
+                .components(separatedBy: "<string>").dropFirst().first?
+                .components(separatedBy: "</string>").first
+        )
+
+        #expect(onDisk == declared)
+    }
+
+    @Test("실행 파일이 없으면 무엇이 잘못됐는지 알려준다")
+    func rejectsBundleWithoutExecutable() throws {
+        let empty = ZipArchive.write([
+            ZipArchive.stored(name: "Alley Store.app/", data: Data(), mode: 0o755),
+            ZipArchive.stored(name: "Alley Store.app/Contents/Info.plist", data: Data("x".utf8)),
+        ])
+
+        #expect(throws: (any Error).self) {
+            try StoreAppBundleRewriter.rewrite(baseZip: empty, branding: Self.branding())
+        }
     }
 
     @Test("실행 파일 내용과 권한을 그대로 옮긴다")
