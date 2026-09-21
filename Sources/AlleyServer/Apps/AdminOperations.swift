@@ -119,6 +119,10 @@ enum AdminOperations {
 
         let previous = target.role
         target.role = role
+        // 여기를 지나면 자동 승격이 이 계정을 건너뛴다 (ADR-0056). 이 표시가 없으면
+        // `user` 로 내려둔 계정이 다음 웹 로그인에 다시 `developer` 가 되어, 누르기는
+        // 하는데 아무것도 바뀌지 않는 버튼이 된다.
+        target.roleSetByAdmin = true
         try await target.save(on: database)
 
         logger.notice(
