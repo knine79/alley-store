@@ -190,8 +190,8 @@ struct NotifierTests {
 
             let channel = RecordingChannel()
             let notifier = Notifier(database: app.db, channels: [channel], logger: app.logger)
-            await notifier.notify(
-                app: try mine.requireID(),
+            await notifier.notifyChannels(
+                of: try mine.requireID(),
                 message: NotificationMessage(title: "새 피드백")
             )
 

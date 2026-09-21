@@ -59,13 +59,13 @@ struct NotificationRoutingTests {
         }
     }
 
-    @Test("관리자 개인을 고르면 채널로는 가지 않는다")
-    func adminsExcludeChannel() async throws {
+    @Test("개별 전송을 고르면 채널로는 가지 않는다")
+    func peopleExcludeChannel() async throws {
         try await withMigratedApp { app in
             _ = try await app.makeUser(email: "admin@example.com", role: .admin)
             try await seedGlobalTarget(on: app)
             let stored = try await settings(on: app)
-            stored.operationalAlerts = .admins
+            stored.operationalAlerts = .people
             try await stored.save(on: app.db)
 
             let channel = RecordingChannel(kind: .slack)
@@ -89,7 +89,7 @@ struct NotificationRoutingTests {
             _ = try await app.makeUser(email: "b@example.com", role: .admin)
             _ = try await app.makeUser(email: "dev@example.com", role: .developer)
             let stored = try await settings(on: app)
-            stored.operationalAlerts = .admins
+            stored.operationalAlerts = .people
             try await stored.save(on: app.db)
 
             let dm = RecordingChannel(kind: .slackDirectMessage)
@@ -101,9 +101,9 @@ struct NotificationRoutingTests {
         }
     }
 
-    /// 알 수 없는 값은 관리자 개인으로 접는다. 채널은 등록해 둔 것이 있어야 닿고
-    /// 개인은 설정 없이 닿는다. 알 수 없는 상태에서는 닿는 쪽이 맞다.
-    @Test("모르는 값은 관리자 개인으로 접는다")
+    /// 알 수 없는 값은 개별 전송으로 접는다. 채널은 등록해 둔 것이 있어야 닿고
+    /// 개별은 설정 없이 닿는다. 알 수 없는 상태에서는 닿는 쪽이 맞다.
+    @Test("모르는 값은 개별 전송으로 접는다")
     func unknownValueFallsBackToAdmins() async throws {
         try await withMigratedApp { app in
             _ = try await app.makeUser(email: "admin@example.com", role: .admin)
@@ -111,21 +111,21 @@ struct NotificationRoutingTests {
             stored.operationalAlertsRaw = "이런 값은 없다"
             try await stored.save(on: app.db)
 
-            #expect(stored.operationalAlerts == .admins)
+            #expect(stored.operationalAlerts == .people)
         }
     }
 
     // MARK: - 개인 알림
 
-    /// 기본값이 서로 다르다. 서명 실패는 내가 올린 것만 오므로 켜두고, 피드백은
-    /// 앱 하나를 여럿이 맡으면 여러 통이 가므로 꺼둔다.
-    @Test("새 계정의 기본값은 서명 실패만 켜져 있다")
+    /// **둘 다 켜짐이다** (ADR-0059). 기본이 꺼짐인 알림은 그 알림이 필요한 순간에
+    /// 꺼져 있다. 소음을 겪은 사람이 끄면 되고, 그 사람은 끄는 자리를 찾아간다.
+    @Test("새 계정은 둘 다 켜져 있다")
     func defaultPreferences() async throws {
         try await withMigratedApp { app in
             let (user, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
             let saved = try #require(try await User.find(try user.requireID(), on: app.db))
             #expect(saved.notifySigningFailure)
-            #expect(!saved.notifyFeedback)
+            #expect(saved.notifyFeedback)
         }
     }
 
@@ -169,14 +169,14 @@ struct NotificationRoutingTests {
     }
 
     /// 같은 이유로 운영 알림도 막는다. 골라뒀으니 받고 있다고 믿게 두면 안 된다.
-    @Test("보낼 수단이 없으면 관리자 개인을 고를 수 없다")
+    @Test("보낼 수단이 없으면 개별 전송을 고를 수 없다")
     func cannotChooseAdminsWithoutBot() async throws {
         try await withMigratedApp { app in
             let (_, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
             try await app.testing().test(
                 .POST, "/admin/notifications/target",
                 headers: .form(cookie: token),
-                beforeRequest: { try $0.content.encode(["target": "admins"], as: .urlEncodedForm) }
+                beforeRequest: { try $0.content.encode(["target": "people"], as: .urlEncodedForm) }
             ) { response in
                 #expect(response.status == .conflict)
                 // 오류 화면이 아니라 그 화면에 이유가 붙는다.
@@ -420,11 +420,13 @@ struct NotificationRoutingTests {
         }
     }
 
-    /// 메일 설정이 없으면 메일 주소를 등록해도 갈 곳이 없다. 화면도 칸을 그리지
-    /// 않는다.
-    @Test("메일 설정이 없으면 앱에 메일 주소를 달 수 없다")
-    func cannotAttachMailWithoutSMTP() async throws {
-        try await withMigratedApp { app in
+    /// **앱 대상은 웹훅만 받는다** (ADR-0059). 사람에게 보내는 길은 개별 전송이
+    /// 맡고, 그쪽은 받는 사람이 각자 수단을 정하므로 등록할 주소가 없다.
+    @Test("앱 대상에 메일 주소를 넣을 수 없다")
+    func appTargetsTakeWebhooksOnly() async throws {
+        try await withMigratedApp(
+            overrides: ["SMTP_HOST": "smtp.example.com", "SMTP_FROM": "alley@example.com"]
+        ) { app in
             let (user, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
             let mine = try await app.seedApp(
                 bundleID: "com.example.mine", name: "내 앱", owner: user
@@ -439,9 +441,9 @@ struct NotificationRoutingTests {
                         as: .urlEncodedForm
                     )
                 }
-            ) { response in
-                #expect(response.status == .conflict)
-            }
+            ) { #expect($0.status == .badRequest) }
+
+            #expect(try await NotificationTarget.query(on: app.db).count() == 0)
         }
     }
 
