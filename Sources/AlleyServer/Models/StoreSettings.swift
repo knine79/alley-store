@@ -219,10 +219,13 @@ public struct AddOperationalAlertsSetting: AsyncMigration {
         guard let sql = database as? any SQLDatabase else {
             throw MigrationError.needsSQLDatabase
         }
+        // **다시 돌려도 되게 둔다.** 아래 UPDATE 가 실패하면 이 마이그레이션은
+        // 기록되지 않는데 칸은 이미 생겨 있다. 그 상태에서 다시 돌리면 "이미 있다"
+        // 로 죽어서, 고칠 것도 없는데 서버가 뜨지 않는다.
         try await sql.raw(
             """
             ALTER TABLE store_settings
-            ADD COLUMN operational_alerts text NOT NULL DEFAULT 'admins'
+            ADD COLUMN IF NOT EXISTS operational_alerts text NOT NULL DEFAULT 'admins'
             """
         ).run()
         // 앱에 묶이지 않은 알림 대상이 전역 대상이다.
@@ -234,9 +237,15 @@ public struct AddOperationalAlertsSetting: AsyncMigration {
         ).run()
     }
 
+    /// 만드는 쪽이 원 SQL 이라 되돌리는 쪽도 그렇게 둔다. 한쪽만 Fluent 로 두면
+    /// 칸이 이미 없을 때 `DROP` 이 죽는다. 되돌리기가 죽으면 그 뒤 마이그레이션이
+    /// 전부 멈춘다.
     public func revert(on database: any Database) async throws {
-        try await database.schema(StoreSettings.schema)
-            .deleteField("operational_alerts")
-            .update()
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+        try await sql.raw(
+            "ALTER TABLE store_settings DROP COLUMN IF EXISTS operational_alerts"
+        ).run()
     }
 }

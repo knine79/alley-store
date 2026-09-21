@@ -133,7 +133,9 @@ struct NotificationRoutingTests {
     /// 읽지 않으면 한 번 켠 설정을 영영 못 끈다.
     @Test("보내지 않은 체크박스는 끈 것으로 읽는다")
     func missingCheckboxMeansOff() async throws {
-        try await withMigratedApp { app in
+        // 봇이 없으면 화면이 칸을 그리지 않고 서버도 거절한다. 여기서 보려는 것은
+        // 값이 없을 때 어떻게 읽는가이므로 받을 수 있는 상태로 둔다.
+        try await withMigratedApp(overrides: ["SLACK_BOT_TOKEN": "xoxb-test"]) { app in
             let (user, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
 
             try await app.testing().test(
@@ -150,7 +152,40 @@ struct NotificationRoutingTests {
         }
     }
 
-    /// 관리자가 남의 알림 설정을 대신 켜고 끌 자리는 없다. 화면이 자기 것만 읽고
+    /// 화면이 칸을 그리지 않는 상태다. 여기까지 오는 길은 폼을 손으로 만드는
+    /// 것뿐이고, 받아 봐야 켜도 아무 일이 없는 값이 저장된다.
+    @Test("봇이 없으면 개인 알림을 정할 수 없다")
+    func cannotChooseWithoutBot() async throws {
+        try await withMigratedApp { app in
+            let (_, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            try await app.testing().test(
+                .POST, "/me/notifications",
+                headers: .form(cookie: token),
+                beforeRequest: { try $0.content.encode(["feedback": "on"], as: .urlEncodedForm) }
+            ) { response in
+                #expect(response.status == .conflict)
+            }
+        }
+    }
+
+    /// 같은 이유로 운영 알림도 막는다. 골라뒀으니 받고 있다고 믿게 두면 안 된다.
+    @Test("봇이 없으면 관리자 DM 을 고를 수 없다")
+    func cannotChooseAdminsWithoutBot() async throws {
+        try await withMigratedApp { app in
+            let (_, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            try await app.testing().test(
+                .POST, "/admin/notifications/target",
+                headers: .form(cookie: token),
+                beforeRequest: { try $0.content.encode(["target": "admins"], as: .urlEncodedForm) }
+            ) { response in
+                #expect(response.status == .conflict)
+                // 오류 화면이 아니라 그 화면에 이유가 붙는다.
+                #expect(response.body.string.contains("Slack 봇이 연결되어 있지 않아"))
+            }
+        }
+    }
+
+    /// 관리자가 남의 알림 설정을 대신 켤 자리는 없다. 화면이 자기 것만 읽고
     /// 쓴다는 것을 경로로 확인한다.
     @Test("로그인하지 않으면 내 알림 화면에 들어갈 수 없다")
     func mySettingsNeedLogin() async throws {

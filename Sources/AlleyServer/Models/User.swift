@@ -240,10 +240,13 @@ public struct AddRoleSetByAdminToUser: AsyncMigration {
         guard let sql = database as? any SQLDatabase else {
             throw MigrationError.needsSQLDatabase
         }
+        // **다시 돌려도 되게 둔다.** 아래 기본값 바꾸기가 실패하면 이 마이그레이션은
+        // 기록되지 않는데 칸은 이미 생겨 있다. 되돌리기 쪽도 마찬가지로, 칸이 없는데
+        // 기록만 남은 상태에서 죽으면 그 뒤 마이그레이션이 전부 멈춘다.
         try await sql.raw(
             """
             ALTER TABLE users
-            ADD COLUMN role_set_by_admin boolean NOT NULL DEFAULT true
+            ADD COLUMN IF NOT EXISTS role_set_by_admin boolean NOT NULL DEFAULT true
             """
         ).run()
         // 기본값은 이미 있는 행을 채우려고 뒀다. 남겨두면 앞으로 만들어지는 계정도
@@ -257,7 +260,7 @@ public struct AddRoleSetByAdminToUser: AsyncMigration {
         guard let sql = database as? any SQLDatabase else {
             throw MigrationError.needsSQLDatabase
         }
-        try await sql.raw("ALTER TABLE users DROP COLUMN role_set_by_admin").run()
+        try await sql.raw("ALTER TABLE users DROP COLUMN IF EXISTS role_set_by_admin").run()
     }
 }
 

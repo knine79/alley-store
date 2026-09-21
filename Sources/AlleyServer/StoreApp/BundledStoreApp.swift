@@ -23,6 +23,14 @@ enum BundledStoreApp {
     /// 한 번 읽으면 들고 있는다. 500KB 남짓이고 빌드할 때마다 읽힌다.
     private static let cache = NIOLockedValueBox<Data??>(nil)
 
+    /// 이 자리를 찾을 밑동. **시험에서만 바꾼다.**
+    ///
+    /// 바꿀 수 있게 둔 이유가 있다. 예전에는 시험이 레포의 실제 디렉터리에 번들을
+    /// 써 넣고 지웠다. 그러면 **그 자리에 파일을 두고 개발할 수 없다.** 운영과 같은
+    /// 화면을 보려고 넣어두면 "이미지에 번들이 없을 때" 를 보는 시험 넷이 깨지고,
+    /// CI 는 그 자리가 늘 비어 있어서 아무도 모른다.
+    private static let rootOverride = NIOLockedValueBox<String?>(nil)
+
     /// 이미지에 들어 있는 번들. 없으면 nil 이다.
     ///
     /// 없을 수 있는 이유는 두 가지다. 로컬에서 `docker build` 를 그냥 돌렸거나,
@@ -30,9 +38,25 @@ enum BundledStoreApp {
     static func data(in directory: DirectoryConfiguration) -> Data? {
         if let cached = cache.withLockedValue({ $0 }) { return cached }
 
-        let data = FileManager.default.contents(atPath: directory.workingDirectory + path)
+        let root = rootOverride.withLockedValue { $0 } ?? directory.workingDirectory
+        let data = FileManager.default.contents(atPath: root + path)
         cache.withLockedValue { $0 = .some(data) }
         return data
+    }
+
+    /// 번들을 찾을 자리를 갈아끼운다. **시험에서만 쓴다.**
+    ///
+    /// nil 을 주면 원래대로 실행 디렉터리를 본다. 자리를 바꾸면 들고 있던 것도
+    /// 함께 버린다. 안 버리면 앞 시험이 읽어둔 것이 그대로 나온다.
+    static func useRootForTesting(_ root: String?) {
+        rootOverride.withLockedValue { $0 = root }
+        forgetCacheForTesting()
+    }
+
+    /// 지금 가리키고 있는 자리. **시험에서만 쓴다.** 그 자리에 파일을 놓으려면
+    /// 어디인지 알아야 한다.
+    static var rootForTesting: String {
+        rootOverride.withLockedValue { $0 } ?? ""
     }
 
     /// 들고 있던 것을 버린다. **시험에서만 쓴다.**

@@ -1,0 +1,25 @@
+<!-- 등록된 운영 채널 목록. 두 자리에서 같은 것을 보여줘서 따로 뺐다.
+     봇이 있으면 라디오 안에, 없으면 그 자리에 바로 선다. -->
+#if(count(targets) == 0):
+<p class="field-note">
+    등록된 채널이 없습니다.
+    #if(target == "channel"):
+    <strong>지금 설정으로는 운영 알림이 아무 데도 가지 않습니다.</strong>
+    #endif
+</p>
+#else:
+<ul class="person-list">
+    #for(item in targets):
+    <li class="person">
+        <span class="person-name">#(item.name)</span>
+        <span class="person-email">
+            #if(item.lastSentAt):마지막 발송 #(item.lastSentAt)#else:보낸 적 없음#endif
+        </span>
+        <!-- 아무도 안 받고 있는데 잘 되는 줄 아는 상태를 만들지 않는다. -->
+        #if(item.lastError):
+        <span class="person-email">#(item.lastError)</span>
+        #endif
+    </li>
+    #endfor
+</ul>
+#endif
