@@ -147,6 +147,9 @@ private func configureMigrations(_ app: Application) {
     // 스토어 앱은 dmg 로도 나간다 (ADR-0050).
     app.migrations.add(AddDiskImageArtifactKind())
     app.migrations.add(AddSigningJobDiskImage())
+
+    // 웹 콘솔로 들어온 사람은 스스로 개발자가 된다 (ADR-0056).
+    app.migrations.add(AddRoleSetByAdminToUser())
 }
 
 /// 미들웨어 스택.

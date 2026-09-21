@@ -121,7 +121,8 @@ public struct AuthController: RouteCollection, Sendable {
             subject: identity.subject.value,
             email: email,
             name: identity.name ?? email,
-            avatarURL: identity.picture
+            avatarURL: identity.picture,
+            target: state.target
         )
         let userID = try user.requireID()
 
@@ -224,13 +225,32 @@ public struct AuthController: RouteCollection, Sendable {
     ///
     /// 조회 기준은 이메일이 아니라 `sub` 다. 이메일은 조직 안에서 바뀔 수 있다.
     /// **`sub` 는 공급자 안에서만 유일하므로** issuer 와 함께 본다.
+    /// 웹 콘솔로 들어온 사람은 개발자로 둔다 (ADR-0056).
+    ///
+    /// **어디로 들어왔는지가 곧 무엇을 하러 왔는지다.** 스토어 앱은 앱을 받는 도구라
+    /// 거기만 쓰는 사람은 `user` 로 충분하다. 웹 콘솔은 앱을 등록하고 올리는 화면
+    /// 뿐이고, 받으러 오는 사람은 로그인이 필요 없는 `/get` 으로 간다. 그 주소까지
+    /// 찾아와 로그인한 사람에게 "등록 버튼이 없습니다" 를 보이고 관리자를 찾아가게
+    /// 하는 것은 문턱이 아니라 그냥 막힌 길이었다.
+    ///
+    /// 관리자가 손으로 정한 역할은 건드리지 않는다(`roleSetByAdmin`). 그러지 않으면
+    /// 내려둔 계정이 다음 로그인에 다시 올라간다.
+    /// 올렸으면 true. 시험이 이 판정만 따로 부른다 - 로그인 왕복은 재현할 수 없고,
+    /// 이 기능의 전부가 여기 세 줄이다.
+    func promoteIfConsoleVisitor(_ user: User, target: OAuthStateToken.Target) -> Bool {
+        guard target == .web, !user.roleSetByAdmin, user.role == .user else { return false }
+        user.role = .developer
+        return true
+    }
+
     private func upsertUser(
         request: Request,
         issuer: String,
         subject: String,
         email: String,
         name: String,
-        avatarURL: String?
+        avatarURL: String?,
+        target: OAuthStateToken.Target
     ) async throws -> User {
         let config = request.application.alleyConfig
 
@@ -243,6 +263,9 @@ public struct AuthController: RouteCollection, Sendable {
             existing.name = name
             existing.avatarURL = avatarURL
             existing.lastLoginAt = Date()
+            if promoteIfConsoleVisitor(existing, target: target) {
+                request.logger.notice("웹 콘솔로 들어와 개발자가 됐습니다 [\(email)]")
+            }
             try await existing.save(on: request.db)
             return existing
         }
@@ -265,19 +288,23 @@ public struct AuthController: RouteCollection, Sendable {
             rebound.name = name
             rebound.avatarURL = avatarURL
             rebound.lastLoginAt = Date()
+            _ = promoteIfConsoleVisitor(rebound, target: target)
             try await rebound.save(on: request.db)
             return rebound
         }
 
-        // 최초 로그인. 설정에 적힌 계정만 관리자로 시작하고 나머지는 일반 사용자다.
+        // 최초 로그인. 설정에 적힌 계정은 관리자로 시작하고, 나머지는 어디로 들어왔는지
+        // 를 따른다 (ADR-0056). 웹 콘솔은 앱을 올리러 오는 화면이고, 스토어 앱은 받으러
+        // 쓰는 도구다.
         let isInitialAdmin = config.store.initialAdminEmails.contains(email)
+        let role: UserRole = isInitialAdmin ? .admin : (target == .web ? .developer : .user)
         let user = User(
             issuer: issuer,
             subject: subject,
             email: email,
             name: name,
             avatarURL: avatarURL,
-            role: isInitialAdmin ? .admin : .user
+            role: role
         )
         user.lastLoginAt = Date()
         try await user.save(on: request.db)
