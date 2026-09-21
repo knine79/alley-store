@@ -292,12 +292,12 @@
             <span class="person-name">#(member.user.name)</span>
             <span class="person-email">#(member.user.email)</span>
             #if(member.isOwner):<span class="badge">오너</span>#endif
-            <!-- 오너는 표에 없어도 언제나 올릴 수 있다. 거둘 것이 없는데 버튼을
+            <!-- 오너는 표에 없어도 언제나 올릴 수 있다. 회수할 것이 없는데 버튼을
                  두면 눌러도 아무 일이 없다. -->
             #if(canManage):#if(!member.isOwner):
             <form class="person-action" method="post"
                   action="/apps/#(app.id)/members/#(member.user.id)/remove">
-                <button class="button button-small button-quiet" type="submit">거두기</button>
+                <button class="button button-small button-quiet" type="submit">권한 회수</button>
             </form>
             #endif#endif
         </li>
