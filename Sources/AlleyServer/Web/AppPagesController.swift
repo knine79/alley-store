@@ -28,6 +28,7 @@ struct AppPagesController: RouteCollection, Sendable {
         pages.post(":appID", "portal-app-id", use: registerPortalAppID)
         pages.post(":appID", "deploy-tokens", use: issueDeployToken)
         pages.post(":appID", "deploy-tokens", ":tokenID", "revoke", use: revokeDeployToken)
+        pages.get(":appID", "member-candidates", use: memberCandidates)
         pages.post(":appID", "members", use: addMember)
         pages.post(":appID", "members", ":userID", "remove", use: removeMember)
         pages.get(":appID", "versions", ":versionID", "download", use: download)
@@ -280,7 +281,7 @@ struct AppPagesController: RouteCollection, Sendable {
         if canManage, let memberQuery, !memberQuery.isEmpty {
             let found = try await findMemberCandidates(
                 matching: memberQuery,
-                excluding: members,
+                excluding: Set(members.map(\.user.id)),
                 on: request.db
             )
             memberSearchOverflowed = found.count > MemberSearch.limit
@@ -572,6 +573,36 @@ struct AppPagesController: RouteCollection, Sendable {
     /// 고른 사람에게 이 앱을 올릴 권한을 준다.
     ///
     /// 화면은 `AppController.addMember` 와 같은 규칙을 쓴다. 한 번이라도 로그인한
+    /// 치는 동안 후보를 돌려준다.
+    ///
+    /// **화면을 다시 그리는 것과 같은 것을 본다.** 스크립트가 없으면 폼이 그대로
+    /// 제출되고 서버가 같은 결과를 HTML 로 그린다. 그쪽이 사라지는 것이 아니라,
+    /// 여기가 그 일을 한 조각만 떼어 빨리 하는 것이다.
+    @Sendable
+    func memberCandidates(request: Request) async throws -> MemberCandidatesResponse {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        // 누가 이 앱을 올릴 수 있는지는 관리하는 사람만 본다. 목록을 그리는 쪽과
+        // 같은 조건이다.
+        try app.requireManageAccess(for: user)
+
+        let query = (request.query[String.self, at: "q"] ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            return MemberCandidatesResponse(candidates: [], overflowed: false)
+        }
+
+        let found = try await findMemberCandidates(
+            matching: query,
+            excluding: try await uploaderIDs(of: app, on: request.db),
+            on: request.db
+        )
+        return MemberCandidatesResponse(
+            candidates: Array(found.prefix(MemberSearch.limit)),
+            overflowed: found.count > MemberSearch.limit
+        )
+    }
+
     /// 계정만 넣을 수 있고, 오너는 이미 올릴 수 있으므로 표에 넣지 않는다.
     @Sendable
     func addMember(request: Request) async throws -> Response {
@@ -890,10 +921,9 @@ struct AppPagesController: RouteCollection, Sendable {
     /// 이미 올릴 수 있는 사람은 뺀다. 눌러도 아무 일이 없는 줄을 보여줄 이유가 없다.
     private func findMemberCandidates(
         matching query: String,
-        excluding members: [AppMemberDTO],
+        excluding already: Set<UUID>,
         on database: any Database
     ) async throws -> [MemberCandidateRow] {
-        let already = Set(members.map(\.user.id))
         let needle = "%\(query.lowercased())%"
 
         return try await User.query(on: database)
@@ -917,6 +947,19 @@ struct AppPagesController: RouteCollection, Sendable {
                     name: user.name
                 )
             }
+    }
+
+    /// 이 앱에 이미 올릴 수 있는 사람들의 id.
+    ///
+    /// **`loadMembers` 를 쓰지 않는다.** 그쪽은 오너를 미리 읽어둔 앱을 전제한다
+    /// (`app.owner`). 화면을 그리는 길은 그렇게 읽지만 다른 길은 아니라서, 거기서
+    /// 부르면 관계를 안 읽었다고 죽는다. 여기는 id 만 있으면 된다.
+    private func uploaderIDs(of app: App, on database: any Database) async throws -> Set<UUID> {
+        let members = try await AppMember.query(on: database)
+            .filter(\.$app.$id == app.requireID())
+            .all()
+            .map(\.$user.id)
+        return Set(members + [app.$owner.id])
     }
 
     private func loadMembers(of app: App, on database: any Database) async throws -> [AppMemberDTO] {
@@ -1262,6 +1305,21 @@ struct MemberCandidateRow: Encodable {
     var id: String
     var email: String
     var name: String
+}
+
+/// 치는 동안 돌려주는 후보들.
+///
+/// 내보내기만 한다. 받을 일이 없어서 `Decodable` 은 달지 않는다.
+struct MemberCandidatesResponse: Encodable, AsyncResponseEncodable {
+    var candidates: [MemberCandidateRow]
+    /// 화면에 세울 수보다 많았나. 그러면 더 좁혀 치라고 알린다.
+    var overflowed: Bool
+
+    func encodeResponse(for request: Request) async throws -> Response {
+        let response = Response(status: .ok)
+        try response.content.encode(self, as: .json)
+        return response
+    }
 }
 
 struct MemberFormValues: Codable {

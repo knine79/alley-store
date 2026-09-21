@@ -313,7 +313,14 @@
          "그런 계정이 없습니다" 로 돌아오고, 그게 오타인지 정말 로그인한 적이 없는
          것인지 구분이 안 된다. 찾아서 고르면 둘이 갈린다 - 안 나오면 아직 한 번도
          들어온 적이 없는 사람이다. -->
-    <form class="form-inline" method="get" action="/apps/#(app.id)">
+    <!-- 치는 동안 찾는다 (`member-search.js`). **스크립트는 왕복을 줄일 뿐이다.**
+         없으면 이 폼이 그대로 제출되고 서버가 아래를 같은 모양으로 그린다. 그래서
+         버튼도 그대로 둔다. -->
+    <form class="form-inline" method="get" action="/apps/#(app.id)"
+          data-candidates-url="/apps/#(app.id)/member-candidates"
+          data-grant-url="/apps/#(app.id)/members"
+          data-results="member-results"
+          data-server-results="member-results-server">
         <label class="field">
             <span class="field-label">사람 찾기</span>
             <input class="input" type="search" name="member" value="#(memberQuery)"
@@ -322,6 +329,10 @@
         <button class="button" type="submit">찾기</button>
     </form>
 
+    <!-- 스크립트가 그리는 자리. 스크립트가 없으면 끝까지 비어 있다. -->
+    <div id="member-results"></div>
+
+    <div id="member-results-server">
     #if(memberQuery):
     #if(count(memberCandidates) > 0):
     <ul class="person-list">
@@ -348,6 +359,7 @@
     </p>
     #endif
     #endif
+    </div>
     #endif
 </section>
 #endif
@@ -757,6 +769,11 @@
 </dialog>
 
 <script src="/confirm.js?v=#(page.assetVersion)" defer></script>
+#endif
+
+<!-- 업로드 권한을 줄 사람을 치는 동안 찾는다. 없어도 폼이 그대로 굴러간다. -->
+#if(canUpload):
+<script src="/member-search.js?v=#(page.assetVersion)" defer></script>
 #endif
 #endexport
 #endextend
