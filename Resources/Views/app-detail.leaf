@@ -475,8 +475,11 @@
     <!-- 표 바로 아래에 칸이 붙어 서면 그 칸들이 표의 일부로 읽힌다. 새로 만드는
          자리라는 것을 제목으로 먼저 말한다. -->
     <form class="form" method="post" action="/apps/#(app.id)/notification-targets">
-        <div class="form-group">
-            <h3 class="form-group-title">대상 추가</h3>
+        <!-- `fieldset` + `legend` 로 둔다. `legend` 는 grid 항목이 아니라서 묶음의
+             `gap` 이 걸리지 않고 자기 아래 여백만 갖는다. `h3` 로 뒀더니 그 여백에
+             `gap` 이 한 번 더 붙어 제목과 첫 칸이 멀어졌다. -->
+        <fieldset class="form-group">
+            <legend class="form-group-title">대상 추가</legend>
 
             <!-- **방식을 먼저 고른다.** 그래야 아래 칸에 무엇을 넣는지가 정해진다.
                  이름을 맨 위에 뒀더니 무엇의 이름인지 알 수 없는 칸이 첫 줄에 섰다.
@@ -503,28 +506,43 @@
                     자격증명이라 저장하면 다시 보여주지 않습니다.
                 </span>
             </label>
+
+            <!-- **메일에는 이름을 묻지 않는다.** 주소가 곧 받는 곳이라 목록에서 그것으로
+                 알아본다. 이름을 또 받으면 같은 것을 두 번 적게 된다.
+
+                 스크립트가 없으면 이 칸이 그대로 서지만 비워도 된다. 그때는 서버가
+                 주소를 이름으로 쓴다. -->
+            <label class="field" data-name-field>
+                <span class="field-label">채널 이름</span>
+                <input class="input" type="text" name="name" placeholder="팀 채널"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+                <span class="field-note">
+                    웹훅 주소는 저장하면 보이지 않으니, 목록에서 어느 채널인지 알아볼
+                    이름을 적습니다. 메일은 비워두면 주소를 그대로 씁니다.
+                </span>
+            </label>
             #else:
             <label class="field">
-                <span class="field-label">받을 곳</span>
+                <span class="field-label">Slack 웹훅 주소</span>
                 <input class="input" type="url" name="endpoint" required
                        placeholder="https://hooks.slack.com/services/..."
                        autocapitalize="off" autocorrect="off" spellcheck="false">
                 <span class="field-note">
-                    Slack 채널 설정에서 받은 Incoming Webhook 주소입니다. 그 자체가
-                    채널에 글을 쓸 수 있는 자격증명이라 저장하면 다시 보여주지 않습니다.
+                    채널 설정에서 받은 Incoming Webhook 주소입니다. 그 자체가 채널에
+                    글을 쓸 수 있는 자격증명이라 저장하면 다시 보여주지 않습니다.
                 </span>
             </label>
-            #endif
-
             <label class="field">
-                <span class="field-label">이름</span>
+                <span class="field-label">채널 이름</span>
                 <input class="input" type="text" name="name" required placeholder="팀 채널"
                        autocapitalize="off" autocorrect="off" spellcheck="false">
                 <span class="field-note">
-                    위 목록에서 알아보려고 붙이는 이름입니다. 여기로 보내지는 않습니다.
+                    위 주소는 저장하면 보이지 않으니, 목록에서 어느 채널인지 알아볼
+                    이름을 적습니다.
                 </span>
             </label>
-        </div>
+            #endif
+        </fieldset>
 
         <div class="form-actions">
             <button class="button button-primary" type="submit">추가</button>
