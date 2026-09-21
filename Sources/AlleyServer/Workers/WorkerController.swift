@@ -502,6 +502,8 @@ public struct WorkerController: RouteCollection, Sendable {
             request.logger.notice("올린 사람을 찾지 못해 실패 알림을 건너뜁니다 [버전: \(job.$version.id)]")
             return
         }
+        // 끈 사람에게는 보내지 않는다. 기본은 켜짐이다 (`User.notifySigningFailure`).
+        guard uploader.notifySigningFailure else { return }
         let app = (try? await job.version.$app.get(on: request.db))
         let name = app?.name ?? "앱"
         let appID = job.version.$app.id

@@ -38,8 +38,8 @@ public enum WorkerWatchdog {
             let last = worker.lastSeenAt.map { DateStyle.minute.string(from: $0) } ?? "한 번도 없음"
             logger.warning("워커가 조용합니다 [이름: \(worker.name), 마지막 접속: \(last)]")
 
-            await notifier.notifyGlobal(
-                message: NotificationMessage(
+            await notifier.notifyOperators(
+                NotificationMessage(
                     title: "서명 워커 '\(worker.name)' 가 조용합니다",
                     body: """
                         마지막 접속: \(last)

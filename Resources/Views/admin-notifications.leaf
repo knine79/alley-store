@@ -1,0 +1,132 @@
+#extend("layout"):
+#export("content"):
+<h1 class="page-title">알림</h1>
+<p class="page-lead">
+    워커가 조용해지거나 인증서가 만료될 때 보내는 알림입니다. 앱 하나가 아니라 스토어
+    전체가 멈추는 종류라 관리자가 받습니다.
+</p>
+
+<!-- 여기서 정하지 않는 것들을 먼저 말한다. 알림이 셋이라 "왜 내 앱 설정이 여기
+     없지" 로 헤매기 쉽다. -->
+<p class="field-note">
+    앱마다 보내는 알림은 <strong>앱 상세의 알림</strong> 에서, 나에게 오는 알림은
+    <a href="/me/notifications">내 알림</a> 에서 정합니다.
+</p>
+
+#if(error):
+<p class="notice notice-error">#(error)</p>
+#endif
+
+<section class="section">
+    <h2 class="section-title">어디로 보내나</h2>
+
+    <!-- **둘 중 하나만 고른다.** 함께 보내는 선택지를 두지 않는 이유는, 같은 알림이
+         두 번 오면 한 번 오는 것보다 빨리 무시당하기 때문이다. -->
+    <form class="form" method="post" action="/admin/notifications/target">
+        <fieldset class="choice-group">
+            <legend class="visually-hidden">운영 알림을 받을 곳</legend>
+
+            <label class="choice">
+                <input type="radio" name="target" value="channel"
+                       #if(target == "channel"):checked#endif>
+                <span>
+                    <span class="choice-name">Slack 채널</span>
+                    <span class="choice-note">
+                        여러 명이 보고 이력이 남습니다. 아래에 등록한 채널로 갑니다.
+                    </span>
+                </span>
+            </label>
+
+            <label class="choice">
+                <input type="radio" name="target" value="admins"
+                       #if(target == "admins"):checked#endif>
+                <span>
+                    <span class="choice-name">관리자 DM</span>
+                    <span class="choice-note">
+                        지금 관리자 #(adminCount)명 에게 각각 보냅니다. 등록할 것이 없어
+                        설정을 잊어도 닿습니다.
+                        #if(!isBotConfigured):
+                        <strong>Slack 봇이 연결되어 있지 않아 지금은 가지 않습니다.</strong>
+                        #endif
+                    </span>
+                </span>
+            </label>
+        </fieldset>
+
+        <div class="form-actions">
+            <button class="button button-primary" type="submit">저장</button>
+        </div>
+    </form>
+</section>
+
+<section class="section">
+    <h2 class="section-title">Slack 채널</h2>
+    <p class="page-lead">
+        Slack 채널 설정에서 Incoming Webhook 주소를 받아 넣으세요.
+    </p>
+
+    #if(count(targets) == 0):
+    <div class="empty">
+        <p>
+            등록된 채널이 없습니다.
+            #if(target == "channel"):
+            <strong>지금 설정으로는 운영 알림이 아무 데도 가지 않습니다.</strong>
+            #endif
+        </p>
+    </div>
+    #else:
+    <table class="table">
+        <thead>
+            <tr>
+                <th class="table-fill">이름</th>
+                <th class="table-tight">마지막 발송</th>
+                <th class="table-tight"><span class="visually-hidden">지우기</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            #for(item in targets):
+            <tr>
+                <td class="table-fill">
+                    <span class="table-strong">#(item.name)</span>
+                    <!-- 아무도 안 받고 있는데 잘 되는 줄 아는 상태를 만들지 않는다. -->
+                    #if(item.lastError):
+                    <span class="table-note">#(item.lastError)</span>
+                    #endif
+                </td>
+                <td class="table-tight table-muted">
+                    #if(item.lastSentAt):#(item.lastSentAt)#else:—#endif
+                </td>
+                <td class="table-tight">
+                    <form class="row-form" method="post"
+                          action="/admin/notifications/targets/#(item.id)/remove">
+                        <button class="button button-small button-quiet" type="submit">지우기</button>
+                    </form>
+                </td>
+            </tr>
+            #endfor
+        </tbody>
+    </table>
+    #endif
+
+    <form class="form card-form" method="post" action="/admin/notifications/targets">
+        <label class="field">
+            <span class="field-label">이름</span>
+            <input class="input" type="text" name="name" placeholder="운영 채널" required>
+        </label>
+        <label class="field">
+            <span class="field-label">Slack 웹훅 주소</span>
+            <input class="input" type="url" name="endpoint"
+                   placeholder="https://hooks.slack.com/services/..." required>
+            <span class="field-note">
+                저장하면 다시 보이지 않습니다. 이 주소 자체가 채널에 글을 쓸 수 있는
+                자격증명입니다.
+            </span>
+        </label>
+        <div class="form-actions">
+            <button class="button button-primary" type="submit">추가</button>
+        </div>
+    </form>
+</section>
+
+#endexport
+#endextend

@@ -55,13 +55,13 @@ struct AdminPageAccessTests {
 @Suite("관리자 화면 탭")
 struct AdminNavTests {
     /// 화면마다 다른 부분집합을 링크로 놓던 것을 하나로 모았다. 그래서 확인할 것은
-    /// "여섯 칸이 어느 화면에서나 같은 순서로 있는가" 다. 여기 적힌 순서가 곧 기대값이고,
+    /// "같은 칸이 어느 화면에서나 같은 순서로 있는가" 다. 여기 적힌 순서가 곧 기대값이고,
     /// 근거는 `AdminTab` 에 있다.
     static let expectedOrder = [
-        "스토어 설정", "스토어 앱", "역할 관리", "서명 워커", "앱 서명", "통계",
+        "스토어 설정", "스토어 앱", "역할 관리", "서명 워커", "앱 서명", "알림", "통계",
     ]
 
-    @Test("여섯 화면 전부에서 같은 순서로 나오고 지금 있는 곳이 표시된다", arguments: AdminTab.allCases)
+    @Test("모든 화면에서 같은 순서로 나오고 지금 있는 곳이 표시된다", arguments: AdminTab.allCases)
     func tabsAreIdenticalOnEveryAdminPage(_ current: AdminTab) async throws {
         try await withMigratedApp { app in
             let (_, token) = try await app.makeUser(email: "admin@example.com", role: .admin)

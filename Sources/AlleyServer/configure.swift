@@ -150,6 +150,10 @@ private func configureMigrations(_ app: Application) {
 
     // 웹 콘솔로 들어온 사람은 스스로 개발자가 된다 (ADR-0056).
     app.migrations.add(AddRoleSetByAdminToUser())
+
+    // 알림을 어디로 받을지. 운영 알림은 스토어가 정하고 개인 알림은 각자 정한다.
+    app.migrations.add(AddOperationalAlertsSetting())
+    app.migrations.add(AddNotificationPreferencesToUser())
 }
 
 /// 미들웨어 스택.

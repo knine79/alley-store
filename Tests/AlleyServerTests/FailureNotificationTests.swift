@@ -107,7 +107,7 @@ struct FailureNotificationTests {
     func postRejectionIsReported() async throws {
         let channel = SlackDirectMessageChannel(
             client: StubSlackClient(
-                lookup: #"{"ok":true,"user":{"id":"U1"}}"#,
+                lookup: #"{"ok":true,"user":{"id":"U1","name":"dev","real_name":"개발자"}}"#,
                 post: #"{"ok":false,"error":"channel_not_found"}"#
             ),
             botToken: "xoxb-test"
@@ -124,7 +124,7 @@ struct FailureNotificationTests {
     @Test("찾아서 보내면 통과한다")
     func happyPath() async throws {
         let stub = StubSlackClient(
-            lookup: #"{"ok":true,"user":{"id":"U1"}}"#,
+            lookup: #"{"ok":true,"user":{"id":"U1","name":"dev","real_name":"개발자"}}"#,
             post: #"{"ok":true}"#
         )
         let channel = SlackDirectMessageChannel(client: stub, botToken: "xoxb-test")
@@ -138,6 +138,33 @@ struct FailureNotificationTests {
         #expect(stub.calls.count == 2)
         #expect(stub.calls[0].contains("users.lookupByEmail"))
         #expect(stub.calls[1].contains("chat.postMessage"))
+    }
+
+    /// 설정 화면이 "켜면 누구에게 가는가" 를 그 자리에서 보여준다. 보내지 않고
+    /// 찾기만 한다.
+    @Test("누구에게 가는지 미리 알려준다")
+    func findsRecipientWithoutSending() async throws {
+        let stub = StubSlackClient(
+            lookup: #"{"ok":true,"user":{"id":"U1","name":"dev","real_name":"개발자"}}"#
+        )
+        let channel = SlackDirectMessageChannel(client: stub, botToken: "xoxb-test")
+
+        let who = try await channel.findRecipient(email: "dev@example.com")
+
+        #expect(who == "개발자 (@dev)")
+        // 찾기만 한다. 확인하려고 열었는데 DM 이 오면 안 된다.
+        #expect(stub.calls.count == 1)
+    }
+
+    /// 표시 이름이 없는 계정이 있다. 그때는 핸들만 보여준다.
+    @Test("표시 이름이 없으면 핸들만 보여준다")
+    func handleOnlyWhenNoRealName() async throws {
+        let channel = SlackDirectMessageChannel(
+            client: StubSlackClient(lookup: #"{"ok":true,"user":{"id":"U1","name":"dev"}}"#),
+            botToken: "xoxb-test"
+        )
+
+        #expect(try await channel.findRecipient(email: "dev@example.com") == "@dev")
     }
 }
 

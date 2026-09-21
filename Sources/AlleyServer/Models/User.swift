@@ -58,6 +58,21 @@ public final class User: Model, @unchecked Sendable {
     @Field(key: "role_set_by_admin")
     public var roleSetByAdmin: Bool
 
+    /// 내가 올린 버전의 서명이 실패했을 때 DM 을 받을지.
+    ///
+    /// **기본이 켜짐이다.** 내가 올린 것만 오므로 소음이 아니고, 실패를 모른 채로
+    /// 두는 것이 이 알림을 만든 이유다. 끄고 싶은 사람만 끈다.
+    @Field(key: "notify_signing_failure")
+    public var notifySigningFailure: Bool
+
+    /// 내가 올릴 수 있는 앱에 피드백이 왔을 때 DM 을 받을지.
+    ///
+    /// **기본이 꺼짐이다.** 앱 하나를 여럿이 맡으면 피드백 하나에 DM 이 여러 통
+    /// 간다. 앱에 붙이는 채널이 이미 그 일을 하고 있어서, 개인이 따로 받고 싶을
+    /// 때만 켠다.
+    @Field(key: "notify_feedback")
+    public var notifyFeedback: Bool
+
     public init() {}
 
     public init(
@@ -68,7 +83,9 @@ public final class User: Model, @unchecked Sendable {
         name: String,
         avatarURL: String? = nil,
         role: UserRole,
-        roleSetByAdmin: Bool = false
+        roleSetByAdmin: Bool = false,
+        notifySigningFailure: Bool = true,
+        notifyFeedback: Bool = false
     ) {
         self.id = id
         self.issuer = issuer
@@ -78,6 +95,8 @@ public final class User: Model, @unchecked Sendable {
         self.avatarURL = avatarURL
         self.role = role
         self.roleSetByAdmin = roleSetByAdmin
+        self.notifySigningFailure = notifySigningFailure
+        self.notifyFeedback = notifyFeedback
     }
 }
 
@@ -247,5 +266,27 @@ public enum MigrationError: Error, CustomStringConvertible {
 
     public var description: String {
         "이 마이그레이션은 SQL 데이터베이스에서만 돌릴 수 있습니다."
+    }
+}
+
+/// 개인 알림 선호를 담을 칸 둘.
+///
+/// 기본값이 서로 다르다. 서명 실패는 내가 올린 것만 오므로 켜두고, 피드백은 앱
+/// 하나를 여럿이 맡으면 여러 통이 가므로 꺼둔다. 그 판단은 모델 주석에 적었다.
+public struct AddNotificationPreferencesToUser: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        try await database.schema(User.schema)
+            .field("notify_signing_failure", .bool, .required, .sql(.default(true)))
+            .field("notify_feedback", .bool, .required, .sql(.default(false)))
+            .update()
+    }
+
+    public func revert(on database: any Database) async throws {
+        try await database.schema(User.schema)
+            .deleteField("notify_signing_failure")
+            .deleteField("notify_feedback")
+            .update()
     }
 }
