@@ -1064,7 +1064,7 @@ struct PortalPageContext: Encodable {
     var otherCertificates: [CertificateRow]
     /// 접어둔 것 중 곧 만료되는 수. 접힌 채로도 그 사실은 알린다.
     var otherExpiringSoon: Int
-    /// 이 스토어의 앱을 덮는 App ID.
+    /// 이 스토어에 올라온 앱에 해당하는 App ID.
     var storeBundleIDs: [ASCBundleID]
     /// 팀의 나머지 App ID. 같은 이유로 접어둔다.
     var otherBundleIDs: [ASCBundleID]

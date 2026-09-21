@@ -124,7 +124,7 @@
 
     #if(count(storeBundleIDs) == 0):
     <div class="empty">
-        <p>이 스토어의 앱을 덮는 App ID 가 없습니다.</p>
+        <p>이 스토어에 올라온 앱에 해당하는 App ID 가 없습니다.</p>
         <p class="empty-note">그대로 두어도 서명과 공증만으로 배포됩니다.</p>
     </div>
     #else:
