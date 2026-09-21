@@ -160,13 +160,17 @@
             </tr>
             #if(job.failureTitle):
             <tr>
-                <td class="table-muted" colspan="5">
-                    <strong>#(job.failureTitle)</strong>
-                    <code class="failure-code">#(job.failureCode)</code>
-                    <span class="table-note">#(job.failureAdvice)</span>
-                    #if(job.note):
-                    <span class="table-note">#(job.note)</span>
-                    #endif
+                <td colspan="5">
+                    <div class="failure">
+                        <p class="failure-head">
+                            <strong class="failure-title">#(job.failureTitle)</strong>
+                            <code class="failure-code">#(job.failureCode)</code>
+                        </p>
+                        #if(job.note):
+                        <p class="failure-reason">#(job.note)</p>
+                        #endif
+                        <p class="failure-advice">#(job.failureAdvice)</p>
+                    </div>
                     #if(job.log):
                     <details class="log">
                         <summary>서명 로그</summary>

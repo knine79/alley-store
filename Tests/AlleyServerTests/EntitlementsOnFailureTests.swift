@@ -111,11 +111,19 @@ struct EntitlementsOnFailureTests {
 
     /// ADR-0036 이 새 버전 화면의 파일 칸을 없앴다. 안내가 계속 그 칸을 가리키면
     /// 실패한 사람이 없는 것을 찾으러 간다. 붙일 자리는 그 실패 바로 아래에 있다.
+    ///
+    /// **그 자리를 글로 다시 설명하지도 않는다.** 칸과 버튼이 같은 화면에 보이는데
+    /// "아래 칸에 넣고 이 버튼을 누르세요" 를 한 문단 더 읽게 하면, 정작 무엇이
+    /// 걸렸는지가 그만큼 뒤로 밀린다. 게다가 이 문장은 붙이는 칸이 없는 화면(워커 잡
+    /// 목록, 스토어 앱)도 함께 쓴다. 거기서는 없는 칸을 가리키는 말이 된다.
     @Test("안내가 없어진 새 버전 화면 칸을 가리키지 않는다")
     func adviceDoesNotPointAtRemovedField() {
         let advice = SigningFailureGuidance.whatToDo(.entitlementsRejected)
         #expect(!advice.contains("새 버전 화면"))
-        #expect(advice.contains("붙여서 다시 시도"))
+        #expect(advice.contains("entitlements"))
+        // 화면이 칸과 버튼으로 말한다. 그 조작을 글로 다시 적지 않는다.
+        #expect(!advice.contains("누르세요"))
+        #expect(!advice.contains("아래"))
     }
 
     /// 인증서 만료처럼 파일과 상관없는 실패에는 칸이 나오지 않는다. 올린 사람이

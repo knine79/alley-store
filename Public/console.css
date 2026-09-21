@@ -24,6 +24,8 @@
     --ok-text: #2f6b41;
     /* 되돌릴 수 없는 동작의 색. 흰 글자를 얹는 자리라 충분히 어두워야 한다. */
     --danger: #c0392b;
+    /* 실패한 것에 긋는 색. 바탕 위에 선과 글자로만 쓰므로 `--danger` 보다 밝다. */
+    --failed: #d05252;
 
     /* 글자 크기. 한 군데서 키우고 줄인다. */
     --font-xs: 13px;
@@ -86,6 +88,7 @@
         --ok-border: #3f6b4c;
         --ok-text: #8fcfa3;
         --danger: #c4483c;
+        --failed: #e07a7a;
         /* 어두운 바탕에서는 그림자가 "더 어두워지는" 것으로 보이지 않는다.
            검정을 그대로 쓰면 카드가 배경에 파묻히므로 더 짙게 깐다. */
         --shadow-ink: #000000;
@@ -851,8 +854,8 @@ a.tab:hover {
 }
 
 .badge-failed {
-    border-color: #d05252;
-    color: #d05252;
+    border-color: var(--failed);
+    color: var(--failed);
 }
 
 /* ── 표 ──────────────────────────────────────────────────── */
@@ -1399,8 +1402,8 @@ textarea.input {
 }
 
 .notice-error {
-    border-color: #d0525266;
-    background: #d0525214;
+    border-color: color-mix(in srgb, var(--failed) 40%, transparent);
+    background: color-mix(in srgb, var(--failed) 8%, transparent);
     color: #b23c3c;
 }
 
@@ -1854,10 +1857,70 @@ textarea.input {
     color: var(--text-muted);
 }
 
+/* ── 실패 ────────────────────────────────────────────────── */
+
+/* 실패 이야기가 차지하는 줄. 바로 위 버전 줄에 딸린 것이라 둘 사이의 선을 지운다.
+   선이 있으면 별개의 버전처럼 읽힌다. */
+.failure-row > td {
+    padding-top: 0;
+}
+
+.table tbody tr:not(.failure-row) + .failure-row {
+    /* 위 줄의 아래 선은 남기지 않는다. 위아래를 한 덩어리로 보이게 한다. */
+    border-top: none;
+}
+
+.table tbody tr:has(+ .failure-row) > td {
+    border-bottom: none;
+}
+
+/* 실패한 줄에서 읽을 것을 한 덩어리로 세운다.
+   왼쪽 막대 하나로 "여기부터 여기까지가 그 실패 이야기" 를 긋는다. 표 안의
+   다른 작은 글씨와 섞이지 않게 하는 것이 목적이라 배경은 깔지 않는다. */
+.failure {
+    padding-left: var(--space-3);
+    /* 배지와 같은 붉은색. 표를 훑을 때 이 막대만 보고 실패한 줄을 찾는다. */
+    border-left: 3px solid var(--failed);
+    /* 줄 전체를 쓰면 한 줄이 너무 길어져 눈이 다음 줄 첫 글자를 놓친다. */
+    max-width: 44rem;
+}
+
+.failure p {
+    margin: 0;
+}
+
+.failure p + p {
+    margin-top: var(--space-1);
+}
+
+.failure-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+}
+
+/* 갈래 이름. 먼저 눈에 들어와야 하는 한 줄이다. */
+.failure-title {
+    font-size: var(--font-md);
+}
+
+/* 무엇이 걸렸는지. **흐리게 쓰지 않는다.** 이 줄을 읽으러 온다. */
+.failure-reason {
+    font-size: var(--font-sm);
+    /* 워커가 줄바꿈으로 단락을 나눠 보낸다. 한 덩어리로 흘리면 문장이 붙는다. */
+    white-space: pre-line;
+}
+
+/* 무엇을 하면 되는지. 원인보다 한 단계 뒤로 물린다. */
+.failure-advice {
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+}
+
 /* 지원 문의에 적을 오류 코드. 사람이 읽는 문장 옆에 작게 둔다.
    이것만 크게 보여줘도 무엇을 해야 하는지는 알 수 없다. */
 .failure-code {
-    margin-left: var(--space-2);
     padding: 1px 6px;
     border: 1px solid var(--border);
     border-radius: var(--radius-small);

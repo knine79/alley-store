@@ -258,11 +258,13 @@
                 <td class="table-fill">
                     <span class="badge badge-#(build.state)">#(build.stateLabel)</span>
                     #if(build.failureTitle):
-                    <span class="table-note">
-                        <strong>#(build.failureTitle)</strong>
-                        <code class="failure-code">#(build.failureCode)</code>
-                    </span>
-                    <span class="table-note">#(build.failureAdvice)</span>
+                    <div class="failure">
+                        <p class="failure-head">
+                            <strong class="failure-title">#(build.failureTitle)</strong>
+                            <code class="failure-code">#(build.failureCode)</code>
+                        </p>
+                        <p class="failure-advice">#(build.failureAdvice)</p>
+                    </div>
                     #endif
                     #if(build.log):
                     <details class="log">

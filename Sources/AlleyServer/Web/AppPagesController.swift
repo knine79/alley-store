@@ -377,8 +377,10 @@ struct AppPagesController: RouteCollection, Sendable {
                 canUpload: canUpload,
                 canManage: canManage,
                 entitlementsWhereToFind: EntitlementsGuidance.whereToFind,
+                entitlementsWhyItWorksLocally: EntitlementsGuidance.whyItWorksLocally,
                 entitlementsElectronTemplate: EntitlementsGuidance.electronTemplate,
                 entitlementsElectronNotes: EntitlementsGuidance.electronTemplateNotes,
+                entitlementsElectronCaveat: EntitlementsGuidance.electronTemplateCaveat,
                 profileEntitlements: profileEntitlements,
                 // 연동이 없으면 눌러도 안 되는 버튼이라 아예 그리지 않는다.
                 isPortalConfigured: request.application.alleyConfig.appStoreConnect != nil,
@@ -820,6 +822,11 @@ struct VersionRow: Encodable {
     var failureAdvice: String?
     /// 지원 문의에 적을 코드. 문장 옆에 작게 보여준다.
     var failureCode: String?
+    /// 이 줄에 실패 이야기를 펼칠 것이 있나.
+    ///
+    /// 화면이 `failureTitle` 과 `failureReason` 을 각각 물어 두 번 갈라지지 않게 한다.
+    /// 갈래를 모르는 옛 잡은 제목 없이 원문만 있어서, 한쪽만 보면 그 줄을 놓친다.
+    var hasFailure: Bool
     var canRetry: Bool
     /// 권한이 모자라 실패했나. 그때만 재시도 자리에 entitlements 칸을 낸다 (ADR-0036).
     var needsEntitlements: Bool
@@ -864,6 +871,7 @@ struct VersionRow: Encodable {
         self.failureTitle = report?.failureCode.map(SigningFailureGuidance.title)
         self.failureAdvice = report?.failureCode.map(SigningFailureGuidance.whatToDo)
         self.failureCode = report?.failureCode?.rawValue
+        self.hasFailure = self.failureTitle != nil || self.failureReason != nil
         self.canRetry = version.state == .failed
         self.needsEntitlements = version.state == .failed
             && report?.failureCode == .entitlementsRejected
@@ -952,10 +960,15 @@ struct AppDetailContext: Encodable {
     var canManage: Bool
     /// 권한이 모자라 실패한 버전 옆에 붙일 안내. 그 파일을 어디서 구하나 (ADR-0036).
     var entitlementsWhereToFind: String
+    /// 왜 내 맥에서는 되는데 여기서는 안 되나. 멀쩡히 쓰던 앱이라 이 줄이 없으면
+    /// 실패가 오진처럼 읽힌다.
+    var entitlementsWhyItWorksLocally: String
     /// 그 파일이 아예 없는 사람을 위한 본보기. Electron 앱 기준이다.
     var entitlementsElectronTemplate: String
-    /// 본보기를 그대로 쓰기 전에 알아야 할 것.
+    /// 본보기 앞에 세우는 한 줄. 이것이 무엇이고 무엇을 하면 되는지.
     var entitlementsElectronNotes: String
+    /// 본보기 뒤에 붙는 한 줄. 그대로 쓰면 안 되는 경우.
+    var entitlementsElectronCaveat: String
     /// 이 앱이 쓰는 권한 중 프로비저닝 프로필을 요구하는 것들 (ADR-0005).
     ///
     /// 비어 있으면 포털에 App ID 를 만들 이유가 없고, 그 자리를 그리지 않는다.

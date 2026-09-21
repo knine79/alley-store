@@ -62,10 +62,18 @@ struct ElectronJITTests {
             try pipeline.requireJITForElectron(bundle: bundle, declaredKeys: [])
             Issue.record("막았어야 합니다.")
         } catch {
-            // "권한이 필요합니다" 로 끝나면 읽은 사람이 다음에 무엇을 할지 모른다.
+            // 어느 키가 없는지 말한다. "권한이 필요합니다" 로 끝나면 읽은 사람이
+            // 무엇을 채워야 하는지 모른다.
             let message = String(describing: error)
             #expect(message.contains(EntitlementsGuidance.jitKey))
-            #expect(message.contains("--entitlements"))
+            // **무엇을 하면 되는지는 여기 적지 않는다.** 그것은 갈래별 안내 몫이고,
+            // 화면은 둘을 나란히 낸다. 양쪽에 적으면 실패한 사람이 같은 말을 두 번
+            // 읽고, 정작 무엇이 걸렸는지가 그만큼 뒤로 밀린다.
+            #expect(!message.contains("--entitlements"))
+            #expect(
+                SigningFailureGuidance.whatToDo(.entitlementsRejected)
+                    .contains("entitlements")
+            )
         }
     }
 
