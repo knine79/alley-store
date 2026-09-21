@@ -440,25 +440,25 @@
     <table class="table">
         <thead>
             <tr>
-                <th class="table-tight">이름</th>
+                <th class="table-fill">받는 곳</th>
                 <th class="table-tight">방식</th>
-                <th class="table-fill">어디로</th>
                 <th class="table-tight"><span class="visually-hidden">삭제</span></th>
             </tr>
         </thead>
         <tbody>
             #for(target in notificationTargets):
             <tr>
-                <td class="table-tight table-strong">#(target.name)</td>
-                <td class="table-tight table-muted">
-                    #if(target.kind == "email"):메일#else:Slack 채널#endif
-                </td>
+                <!-- 메일은 주소가 곧 받는 곳이다. 웹훅은 주소를 가려야 해서 등록할 때
+                     받아둔 이름이 그 자리를 대신한다. -->
                 <td class="table-fill">
                     #if(target.endpoint):
                     <code>#(target.endpoint)</code>
                     #else:
-                    <span class="table-muted">저장한 뒤에는 보이지 않습니다</span>
+                    <span class="table-strong">#(target.name)</span>
                     #endif
+                </td>
+                <td class="table-tight table-muted">
+                    #if(target.kind == "email"):메일#else:Slack 채널#endif
                 </td>
                 <td class="table-tight">
                     <form class="row-form" method="post"
@@ -488,14 +488,28 @@
                  없으면 메일 주소를 넣어도 갈 곳이 없다. 그때는 칸을 그리지 않고
                  서버가 웹훅으로 읽는다. -->
             #if(canUseEmailTarget):
+            <!-- 고른 방식에 따라 아래 칸의 이름과 예시가 바뀐다
+                 (`notification-target-form.js`). 무엇을 넣는지는 방식마다 아주 다른데,
+                 둘을 아우르는 말로 적으면 어느 쪽에도 맞지 않는 안내가 된다.
+
+                 바뀔 말은 여기 `data-` 에 둔다. 스크립트가 한국어를 들고 있으면 문구를
+                 다듬을 때 화면과 따로 놀기 시작한다. -->
             <label class="field">
                 <span class="field-label">방식</span>
-                <select class="input" name="kind">
-                    <option value="slack">Slack 채널</option>
-                    <option value="email">메일</option>
+                <select class="input" name="kind" data-target-kind>
+                    <option value="slack"
+                            data-endpoint-label="Slack 웹훅 주소"
+                            data-endpoint-placeholder="https://hooks.slack.com/services/..."
+                            data-endpoint-note="채널 설정에서 받은 Incoming Webhook 주소입니다. 그 자체가 채널에 글을 쓸 수 있는 자격증명이라 저장하면 다시 보여주지 않습니다."
+                            data-needs-name="1">Slack 채널</option>
+                    <option value="email"
+                            data-endpoint-label="받을 메일 주소"
+                            data-endpoint-placeholder="team@example.com"
+                            data-endpoint-note="이 주소로 바로 보냅니다. 여러 명이 봐야 하면 팀 메일링 리스트 주소를 넣으세요."
+                            data-needs-name="">메일</option>
                 </select>
             </label>
-            <label class="field">
+            <label class="field" data-endpoint-field>
                 <span class="field-label">받을 곳</span>
                 <input class="input" type="text" name="endpoint" required
                        placeholder="https://hooks.slack.com/services/... 또는 team@example.com"
@@ -793,5 +807,10 @@
 #if(canUpload):
 <script src="/member-search.js?v=#(page.assetVersion)" defer></script>
 #endif
+
+<!-- 고른 방식에 알림 대상 칸을 맞춘다. 고를 것이 하나뿐이면 맞출 것도 없다. -->
+#if(canManage):#if(canUseEmailTarget):
+<script src="/notification-target-form.js?v=#(page.assetVersion)" defer></script>
+#endif#endif
 #endexport
 #endextend

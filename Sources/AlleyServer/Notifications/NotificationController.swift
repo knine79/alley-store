@@ -126,13 +126,17 @@ enum NotificationTargets {
         on database: any Database,
         logger: Logger
     ) async throws -> NotificationTarget {
-        let name = payload.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let endpoint = payload.endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        try validate(endpoint: endpoint, kind: payload.kind)
 
+        // **메일에는 이름을 묻지 않는다.** 주소가 곧 받는 곳이라 목록에서 그것으로
+        // 알아본다. 따로 받으면 같은 것을 두 번 적게 된다. 웹훅은 주소를 가려야 해서
+        // 이름이 그 자리를 대신하고, 그래서 그쪽만 비울 수 없다.
+        let given = payload.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = given.isEmpty && payload.kind == .email ? endpoint : given
         guard !name.isEmpty else {
             throw Abort(.badRequest, reason: "이름이 비어 있습니다. 어느 채널인지 알아볼 이름을 적으세요.")
         }
-        try validate(endpoint: endpoint, kind: payload.kind)
 
         let target = NotificationTarget(
             appID: appID,
