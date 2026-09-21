@@ -287,6 +287,12 @@ struct AppPagesController: RouteCollection, Sendable {
             memberCandidates = Array(found.prefix(MemberSearch.limit))
         }
 
+        // 피드 주소를 내주는 화면과 같은 조건이다. 거기서만 쓴다.
+        var sparkle: SparkleReadinessRow?
+        if canManage {
+            sparkle = try await SparkleReadinessRow.of(app: app, on: request.db)
+        }
+
         // 배포 토큰은 앱을 관리하는 사람만 본다. 멤버에게는 있는지조차 알릴 이유가 없다.
         var feedTokens: [DeployTokenRow] = []
         if canManage {
@@ -396,6 +402,7 @@ struct AppPagesController: RouteCollection, Sendable {
                 feedTokens: feedTokens,
                 issuedFeed: issuedFeed,
                 feedError: feedError,
+                sparkle: sparkle,
                 notificationTargets: targets,
                 feedback: feedback,
                 notificationError: notificationError,
@@ -1118,6 +1125,8 @@ struct AppDetailContext: Encodable {
     var feedTokens: [DeployTokenRow]
     var issuedFeed: IssuedFeedToken?
     var feedError: String?
+    /// Sparkle 을 실제로 쓸 수 있는 상태인가 (ADR-0057). 관리 권한이 없으면 nil.
+    var sparkle: SparkleReadinessRow?
     var notificationTargets: [NotificationTargetDTO]
     var feedback: [FeedbackRow]
     /// 지금 사람이 피드백을 남길 수 있는 버전들. 받아본 것만 들어온다.

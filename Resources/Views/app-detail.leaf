@@ -474,6 +474,25 @@
         <strong>사용자별 다운로드 이력이 남지 않습니다.</strong>
     </p>
 
+    <!-- 서명이 없으면 피드가 내려와도 Sparkle 이 조용히 아무것도 하지 않는다.
+         주소만 알려주고 이 말을 안 하면 그대로 따라 하다 막힌다 (ADR-0057). -->
+    #if(sparkle):
+    #if(sparkle.blocker):
+    <p class="notice notice-warn">#(sparkle.blocker)</p>
+    #endif
+
+    #if(sparkle.publicKey):
+    <div class="token-box">
+        <p class="token-title">이 앱의 <code>SUPublicEDKey</code></p>
+        <code class="token-value">#(sparkle.publicKey)</code>
+        <p class="token-note">
+            앱의 <code>Info.plist</code> 에 이 값을 넣으세요. Sparkle 은 이것으로
+            업데이트가 우리가 만든 것인지 확인합니다. 공개키라 숨길 값은 아닙니다.
+        </p>
+    </div>
+    #endif
+    #endif
+
     #if(feedError):
     <p class="notice notice-error">#(feedError)</p>
     #endif

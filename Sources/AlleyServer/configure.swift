@@ -154,6 +154,9 @@ private func configureMigrations(_ app: Application) {
     // 알림을 어디로 받을지. 운영 알림은 스토어가 정하고 개인 알림은 각자 정한다.
     app.migrations.add(AddOperationalAlertsSetting())
     app.migrations.add(AddNotificationPreferencesToUser())
+
+    // 워커가 Sparkle 공개키를 알린다 (ADR-0057).
+    app.migrations.add(AddWorkerSparklePublicKey())
 }
 
 /// 미들웨어 스택.

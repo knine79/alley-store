@@ -41,6 +41,17 @@ public final class Worker: Model, @unchecked Sendable {
     @OptionalField(key: "current_job_id")
     public var currentJobID: UUID?
 
+    /// 이 워커가 Sparkle 서명에 쓰는 공개키 (ADR-0057).
+    ///
+    /// 개인키는 서버에 오지 않는다. 이 값은 앱의 `SUPublicEDKey` 에 그대로 들어가는
+    /// 공개 정보이고, 앱을 만드는 사람에게 화면으로 알려주려고 받아둔다.
+    ///
+    /// **워커마다 다르면 안 된다.** 잡은 놀고 있는 워커가 집어가는데 앱은
+    /// `SUPublicEDKey` 를 문자열 하나로만 읽는다. 키가 갈리면 같은 앱이 어느 워커에
+    /// 걸렸느냐에 따라 업데이트가 되고 안 되고가 나뉜다. 화면이 그것을 잡는다.
+    @OptionalField(key: "sparkle_public_key")
+    public var sparklePublicKey: String?
+
     /// 폐기 시각. 행을 지우지 않는 이유는 잡 이력이 이 워커를 가리키기 때문이다.
     @OptionalField(key: "revoked_at")
     public var revokedAt: Date?
@@ -166,6 +177,26 @@ struct AddWorkerVersion: AsyncMigration {
     func revert(on database: any Database) async throws {
         try await database.schema(Worker.schema)
             .deleteField("worker_version")
+            .update()
+    }
+}
+
+/// 워커가 Sparkle 공개키를 알리게 한다 (ADR-0057).
+///
+/// 없으면 앱을 만드는 사람이 `SUPublicEDKey` 에 넣을 값을 알 길이 없다. 개인키를
+/// 가진 워커 관리자를 찾아가 물어보는 수밖에 없었다.
+public struct AddWorkerSparklePublicKey: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        try await database.schema(Worker.schema)
+            .field("sparkle_public_key", .string)
+            .update()
+    }
+
+    public func revert(on database: any Database) async throws {
+        try await database.schema(Worker.schema)
+            .deleteField("sparkle_public_key")
             .update()
     }
 }

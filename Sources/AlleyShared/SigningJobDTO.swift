@@ -208,16 +208,27 @@ public struct WorkerHeartbeat: Codable, Sendable {
     /// 워커는 nil 로 남고, 화면은 "모름" 으로 그린다. 모름이 곧 낡았다는 뜻이라
     /// 그 자체로 쓸모가 있다.
     public var workerVersion: String?
+    /// 이 워커가 Sparkle 서명에 쓰는 **공개키** (ADR-0057).
+    ///
+    /// **개인키는 보내지 않는다.** 공개키는 개인키에서 계산한 값이고, 앱의
+    /// `SUPublicEDKey` 에 그대로 들어가는 공개 정보다. 서버가 이것을 알아야 앱을
+    /// 만드는 사람에게 "이 값을 넣으세요" 라고 화면에서 말해줄 수 있다.
+    ///
+    /// 키를 안 넣은 워커는 nil 을 보낸다. 그 상태가 곧 "이 워커가 서명한 것은
+    /// Sparkle 이 거부한다" 는 뜻이라, nil 자체가 알려야 할 정보다.
+    public var sparklePublicKey: String?
 
     public init(
         workerName: String,
         osVersion: String,
         currentJobID: UUID? = nil,
-        workerVersion: String? = WorkerVersion.current
+        workerVersion: String? = WorkerVersion.current,
+        sparklePublicKey: String? = nil
     ) {
         self.workerName = workerName
         self.osVersion = osVersion
         self.workerVersion = workerVersion
+        self.sparklePublicKey = sparklePublicKey
         self.currentJobID = currentJobID
         self.workerVersion = workerVersion
     }
