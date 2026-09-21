@@ -31,7 +31,7 @@ struct AdminNotificationPagesController: RouteCollection, Sendable {
         return try await render(error: nil, on: request)
     }
 
-    /// 채널이냐 관리자 DM 이냐.
+    /// 채널이냐 관리자 개인이냐.
     @Sendable
     func submitTarget(request: Request) async throws -> Response {
         let admin = try request.requireAdmin()
@@ -41,9 +41,9 @@ struct AdminNotificationPagesController: RouteCollection, Sendable {
         }
         // 받아 봐야 아무 데도 가지 않는 설정이 저장되고, 관리자는 골라뒀으니 받고
         // 있다고 믿는다. 오류 화면으로 보내지 않고 이 화면에 이유만 띄운다.
-        if target == .admins, request.application.alleyConfig.slackBotToken == nil {
+        if target == .admins, !request.application.canReachPeople {
             let view = try await render(
-                error: "Slack 봇이 연결되어 있지 않아 관리자 DM 을 고를 수 없습니다.",
+                error: "Slack 봇도 메일도 연결되어 있지 않아 관리자 개인에게 보낼 수 없습니다.",
                 on: request
             )
             let response = Response(status: .conflict)
@@ -116,12 +116,22 @@ struct AdminNotificationPagesController: RouteCollection, Sendable {
                 target: settings.operationalAlerts.rawValue,
                 targets: targets,
                 adminCount: adminCount,
-                // 봇이 없으면 관리자 DM 을 골라도 아무 데도 가지 않는다. 고르기
-                // 전에 알려야 한다.
-                isBotConfigured: request.application.alleyConfig.slackBotToken != nil,
+                // 사람에게 보낼 수단이 없으면 관리자 개인을 골라도 아무 데도 가지
+                // 않는다. 고르기 전에 알려야 한다.
+                canReachAdmins: request.application.canReachPeople,
                 error: error
             )
         ).get()
+    }
+}
+
+extension Application {
+    /// 사람 한 명에게 보낼 방법이 하나라도 있나.
+    ///
+    /// 봇 토큰이든 메일 설정이든 하나면 된다. 어느 쪽으로 갈지는 받는 사람이 정한다
+    /// (`User.notifyVia`).
+    var canReachPeople: Bool {
+        alleyConfig.slackBotToken != nil || alleyConfig.smtp != nil
     }
 }
 
@@ -131,10 +141,10 @@ struct AdminNotificationsContext: Encodable {
     var target: String
     /// 등록된 전역 채널들.
     var targets: [NotificationTargetDTO]
-    /// DM 을 고르면 몇 명에게 가는지.
+    /// 관리자 개인을 고르면 몇 명에게 가는지.
     var adminCount: Int
-    /// 봇 토큰이 있나. 없으면 DM 을 골라도 가지 않는다.
-    var isBotConfigured: Bool
+    /// 사람에게 보낼 수단이 있나. 없으면 관리자 개인을 골라도 가지 않는다.
+    var canReachAdmins: Bool
     var error: String?
 }
 

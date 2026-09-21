@@ -58,20 +58,44 @@ public final class User: Model, @unchecked Sendable {
     @Field(key: "role_set_by_admin")
     public var roleSetByAdmin: Bool
 
-    /// 내가 올린 버전의 서명이 실패했을 때 DM 을 받을지.
+    /// 내가 올린 버전의 서명이 실패했을 때 받을지.
     ///
     /// **기본이 켜짐이다.** 내가 올린 것만 오므로 소음이 아니고, 실패를 모른 채로
     /// 두는 것이 이 알림을 만든 이유다. 끄고 싶은 사람만 끈다.
     @Field(key: "notify_signing_failure")
     public var notifySigningFailure: Bool
 
-    /// 내가 올릴 수 있는 앱에 피드백이 왔을 때 DM 을 받을지.
+    /// 내가 올릴 수 있는 앱에 피드백이 왔을 때 받을지.
     ///
-    /// **기본이 꺼짐이다.** 앱 하나를 여럿이 맡으면 피드백 하나에 DM 이 여러 통
+    /// **기본이 꺼짐이다.** 앱 하나를 여럿이 맡으면 피드백 하나에 알림이 여러 통
     /// 간다. 앱에 붙이는 채널이 이미 그 일을 하고 있어서, 개인이 따로 받고 싶을
     /// 때만 켠다.
     @Field(key: "notify_feedback")
     public var notifyFeedback: Bool
+
+    /// 나에게 오는 알림을 무엇으로 받을지.
+    ///
+    /// **개인이 정한다.** Slack 을 안 쓰는 사람이 있고, 봇 토큰을 받지 못한 스토어도
+    /// 있다. 관리자가 정해두면 그 둘 중 한쪽은 알림을 못 받는다.
+    ///
+    /// 스토어가 그 수단을 갖추지 않았으면 고른 값이 그대로 있어도 쓸 수 있는 쪽으로
+    /// 간다 (`Notifier.notify(person:)`). 고를 때는 없던 수단이 나중에 생기기도
+    /// 하고, 있던 수단이 사라지기도 한다.
+    @Field(key: "notify_via")
+    public var notifyViaName: String
+
+    public var notifyVia: NotificationChannelKind {
+        get {
+            let stored = NotificationChannelKind(rawValue: notifyViaName)
+            // 사람에게 보낼 수 없는 값이 들어와 있으면 기본으로 되돌린다. 웹훅
+            // 주소로는 그 사람에게만 보낼 수 없다.
+            guard let stored, NotificationChannelKind.personal.contains(stored) else {
+                return .slackDirectMessage
+            }
+            return stored
+        }
+        set { notifyViaName = newValue.rawValue }
+    }
 
     public init() {}
 
@@ -85,7 +109,8 @@ public final class User: Model, @unchecked Sendable {
         role: UserRole,
         roleSetByAdmin: Bool = false,
         notifySigningFailure: Bool = true,
-        notifyFeedback: Bool = false
+        notifyFeedback: Bool = false,
+        notifyVia: NotificationChannelKind = .slackDirectMessage
     ) {
         self.id = id
         self.issuer = issuer
@@ -97,6 +122,7 @@ public final class User: Model, @unchecked Sendable {
         self.roleSetByAdmin = roleSetByAdmin
         self.notifySigningFailure = notifySigningFailure
         self.notifyFeedback = notifyFeedback
+        self.notifyViaName = notifyVia.rawValue
     }
 }
 
@@ -290,6 +316,32 @@ public struct AddNotificationPreferencesToUser: AsyncMigration {
         try await database.schema(User.schema)
             .deleteField("notify_signing_failure")
             .deleteField("notify_feedback")
+            .update()
+    }
+}
+
+/// 나에게 오는 알림을 무엇으로 받을지 (ADR-0058).
+///
+/// 기본값을 Slack DM 으로 둔다. 이 칸이 생기기 전에는 그것뿐이었으므로, 이미 켜둔
+/// 사람의 받는 곳을 마이그레이션이 바꾸지 않는다. 메일만 갖춘 스토어에서는 값이
+/// 그대로여도 메일로 간다 (`Notifier.notify(person:)`).
+public struct AddNotifyViaToUser: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        try await database.schema(User.schema)
+            .field(
+                "notify_via",
+                .string,
+                .required,
+                .sql(.default(NotificationChannelKind.slackDirectMessage.rawValue))
+            )
+            .update()
+    }
+
+    public func revert(on database: any Database) async throws {
+        try await database.schema(User.schema)
+            .deleteField("notify_via")
             .update()
     }
 }

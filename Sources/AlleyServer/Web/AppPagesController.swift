@@ -404,6 +404,7 @@ struct AppPagesController: RouteCollection, Sendable {
                 feedError: feedError,
                 sparkle: sparkle,
                 notificationTargets: targets,
+                canUseEmailTarget: request.application.alleyConfig.smtp != nil,
                 feedback: feedback,
                 notificationError: notificationError,
                 canUpload: canUpload,
@@ -758,7 +759,7 @@ struct AppPagesController: RouteCollection, Sendable {
             .all()) ?? []
 
         for watcher in watchers {
-            await request.notifier.notify(person: watcher.email, message: message)
+            await request.notifier.notify(person: watcher, message: message)
         }
     }
 
@@ -817,9 +818,19 @@ struct AppPagesController: RouteCollection, Sendable {
         try app.requireManageAccess(for: user)
 
         let values = try request.content.decode(NotificationTargetFormValues.self)
+        // 폼에 칸이 없으면 웹훅이다. 메일 설정이 없는 스토어는 고르는 칸을 그리지
+        // 않는다.
+        let kind = values.kind.flatMap(NotificationChannelKind.init(rawValue:)) ?? .slack
         do {
+            guard NotificationChannelKind.selectable.contains(kind) else {
+                throw Abort(.badRequest, reason: "알림 대상으로 고를 수 없는 방식입니다.")
+            }
+            guard kind != .email || request.application.alleyConfig.smtp != nil else {
+                throw Abort(.conflict, reason: "메일 설정이 없어 메일 주소를 등록할 수 없습니다.")
+            }
             _ = try await NotificationTargets.create(
                 CreateNotificationTargetRequest(
+                    kind: kind,
                     name: values.name ?? "",
                     endpoint: values.endpoint ?? ""
                 ),
@@ -1128,6 +1139,8 @@ struct AppDetailContext: Encodable {
     /// Sparkle 을 실제로 쓸 수 있는 상태인가 (ADR-0057). 관리 권한이 없으면 nil.
     var sparkle: SparkleReadinessRow?
     var notificationTargets: [NotificationTargetDTO]
+    /// 메일 주소도 등록할 수 있나. 스토어에 메일 설정이 없으면 웹훅뿐이다.
+    var canUseEmailTarget: Bool
     var feedback: [FeedbackRow]
     /// 지금 사람이 피드백을 남길 수 있는 버전들. 받아본 것만 들어온다.
     /// 익명 체크박스를 띄울지. 스토어 설정에서 온다.
@@ -1191,6 +1204,8 @@ extension FeedbackFormValues: Content {}
 struct NotificationTargetFormValues: Codable {
     var name: String?
     var endpoint: String?
+    /// `NotificationChannelKind` 의 rawValue. 고를 것이 하나뿐인 화면에서는 오지 않는다.
+    var kind: String?
 }
 
 extension NotificationTargetFormValues: Content {}

@@ -67,7 +67,7 @@ public final class StoreSettings: Model, @unchecked Sendable {
     @Field(key: "operational_alerts")
     public var operationalAlertsRaw: String
 
-    /// 위 값을 갈래로 읽는다. 모르는 값은 관리자 DM 으로 접는다.
+    /// 위 값을 갈래로 읽는다. 모르는 값은 관리자 개인으로 접는다.
     ///
     /// 접는 쪽을 DM 으로 두는 이유는, 채널은 등록해 둔 것이 있어야 닿고 DM 은
     /// 설정 없이 닿기 때문이다. 알 수 없는 상태에서는 닿는 쪽이 맞다.
@@ -207,7 +207,7 @@ public struct AddAnonymousFeedbackSetting: AsyncMigration {
 /// 운영 알림을 어디로 보낼지 정하는 칸을 만든다.
 ///
 /// **이미 도는 스토어의 동작을 바꾸지 않는다.** 지금까지 운영 알림은 전역 알림
-/// 대상(채널)으로만 갔다. 기본값을 관리자 DM 으로 깔면, 채널을 등록해 두고 그것을
+/// 대상(채널)으로만 갔다. 기본값을 관리자 개인으로 깔면, 채널을 등록해 두고 그것을
 /// 보던 조직이 어느 날부터 채널에서 못 받는다.
 ///
 /// 그래서 전역 대상이 하나라도 있으면 `channel`, 없으면 `admins` 로 채운다. 전자는

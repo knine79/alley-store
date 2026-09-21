@@ -11,8 +11,8 @@ import VaporTesting
 /// 갈래가 셋이고 받는 사람도 정하는 사람도 다르다. 어느 하나가 다른 쪽 길로 새면
 /// 받아야 할 사람이 못 받거나 받지 않아야 할 사람이 받는다.
 ///
-///     운영 알림   관리자        스토어가 정한다 (채널 **또는** DM)
-///     개인 알림   나            내가 정한다 (DM 만)
+///     운영 알림   관리자        스토어가 정한다 (채널 **또는** 관리자 개인)
+///     개인 알림   나            내가 정한다 (Slack DM 또는 메일)
 ///     앱 소식     그 채널       앱마다 정한다
 @Suite("알림이 정한 곳으로만 간다")
 struct NotificationRoutingTests {
@@ -59,7 +59,7 @@ struct NotificationRoutingTests {
         }
     }
 
-    @Test("관리자 DM 을 고르면 채널로는 가지 않는다")
+    @Test("관리자 개인을 고르면 채널로는 가지 않는다")
     func adminsExcludeChannel() async throws {
         try await withMigratedApp { app in
             _ = try await app.makeUser(email: "admin@example.com", role: .admin)
@@ -101,9 +101,9 @@ struct NotificationRoutingTests {
         }
     }
 
-    /// 알 수 없는 값은 DM 으로 접는다. 채널은 등록해 둔 것이 있어야 닿고 DM 은
-    /// 설정 없이 닿는다. 알 수 없는 상태에서는 닿는 쪽이 맞다.
-    @Test("모르는 값은 관리자 DM 으로 접는다")
+    /// 알 수 없는 값은 관리자 개인으로 접는다. 채널은 등록해 둔 것이 있어야 닿고
+    /// 개인은 설정 없이 닿는다. 알 수 없는 상태에서는 닿는 쪽이 맞다.
+    @Test("모르는 값은 관리자 개인으로 접는다")
     func unknownValueFallsBackToAdmins() async throws {
         try await withMigratedApp { app in
             _ = try await app.makeUser(email: "admin@example.com", role: .admin)
@@ -154,7 +154,7 @@ struct NotificationRoutingTests {
 
     /// 화면이 칸을 그리지 않는 상태다. 여기까지 오는 길은 폼을 손으로 만드는
     /// 것뿐이고, 받아 봐야 켜도 아무 일이 없는 값이 저장된다.
-    @Test("봇이 없으면 개인 알림을 정할 수 없다")
+    @Test("보낼 수단이 없으면 개인 알림을 정할 수 없다")
     func cannotChooseWithoutBot() async throws {
         try await withMigratedApp { app in
             let (_, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
@@ -169,7 +169,7 @@ struct NotificationRoutingTests {
     }
 
     /// 같은 이유로 운영 알림도 막는다. 골라뒀으니 받고 있다고 믿게 두면 안 된다.
-    @Test("봇이 없으면 관리자 DM 을 고를 수 없다")
+    @Test("보낼 수단이 없으면 관리자 개인을 고를 수 없다")
     func cannotChooseAdminsWithoutBot() async throws {
         try await withMigratedApp { app in
             let (_, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
@@ -180,7 +180,7 @@ struct NotificationRoutingTests {
             ) { response in
                 #expect(response.status == .conflict)
                 // 오류 화면이 아니라 그 화면에 이유가 붙는다.
-                #expect(response.body.string.contains("Slack 봇이 연결되어 있지 않아"))
+                #expect(response.body.string.contains("Slack 봇도 메일도 연결되어 있지 않아"))
             }
         }
     }
@@ -206,6 +206,125 @@ struct NotificationRoutingTests {
                 .GET, "/admin/notifications", headers: .sessionCookie(token)
             ) { response in
                 #expect(response.status == .forbidden)
+            }
+        }
+    }
+
+    // MARK: - 메일 (ADR-0058)
+
+    /// 고른 수단이 스토어에 없으면 있는 것으로 간다. 고를 당시에 없던 수단이 나중에
+    /// 생기고, 있던 수단이 사라진다. 그때 알림이 사라지면 끄지도 않은 알림이 조용히
+    /// 멎는다.
+    @Test("고른 수단이 없으면 있는 것으로 보낸다")
+    func fallsBackToTheOnlyWayAvailable() async throws {
+        try await withMigratedApp { app in
+            let (user, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            // 기본값은 Slack DM 이다. 이 스토어에는 메일뿐이다.
+            #expect(user.notifyVia == .slackDirectMessage)
+
+            let mail = RecordingChannel(kind: .email)
+            let notifier = Notifier(database: app.db, channels: [mail], logger: app.logger)
+
+            await notifier.notify(person: user, message: NotificationMessage(title: "서명이 실패했습니다"))
+
+            #expect(mail.endpoints == ["dev@example.com"])
+        }
+    }
+
+    /// 둘 다 있으면 고른 대로 간다. 양쪽에 보내지 않는 이유는 운영 알림과 같다.
+    @Test("둘 다 있으면 고른 쪽으로만 간다")
+    func chosenWayWins() async throws {
+        try await withMigratedApp { app in
+            let (user, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            user.notifyVia = .email
+            try await user.save(on: app.db)
+
+            let dm = RecordingChannel(kind: .slackDirectMessage)
+            let mail = RecordingChannel(kind: .email)
+            let notifier = Notifier(database: app.db, channels: [dm, mail], logger: app.logger)
+
+            await notifier.notify(person: user, message: NotificationMessage(title: "서명이 실패했습니다"))
+
+            #expect(mail.messages.count == 1)
+            #expect(dm.messages.isEmpty)
+        }
+    }
+
+    /// 사람에게 보낼 수 없는 값이 들어와 있으면 기본으로 되돌린다. 웹훅 주소로는
+    /// 그 사람에게만 보낼 수 없다.
+    @Test("사람에게 못 쓰는 수단은 기본으로 되돌린다")
+    func nonPersonalWayFoldsBack() async throws {
+        try await withMigratedApp { app in
+            let (user, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            user.notifyViaName = NotificationChannelKind.slack.rawValue
+            #expect(user.notifyVia == .slackDirectMessage)
+        }
+    }
+
+    /// 봇이 없어도 메일이 있으면 정할 수 있다. 하나뿐이면 화면이 고르게 하지 않으므로
+    /// `via` 없이 온다.
+    @Test("메일만 있어도 개인 알림을 정할 수 있다")
+    func mailAloneIsEnoughToChoose() async throws {
+        try await withMigratedApp(
+            overrides: ["SMTP_HOST": "smtp.example.com", "SMTP_FROM": "alley@example.com"]
+        ) { app in
+            let (user, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+
+            try await app.testing().test(
+                .POST, "/me/notifications",
+                headers: .form(cookie: token),
+                beforeRequest: { try $0.content.encode(["feedback": "on"], as: .urlEncodedForm) }
+            ) { response in
+                #expect(response.status == .ok)
+            }
+
+            let saved = try #require(try await User.find(try user.requireID(), on: app.db))
+            #expect(saved.notifyFeedback)
+        }
+    }
+
+    /// 메일만 있는 스토어에서 Slack DM 을 고르면 아무 데도 가지 않는다. 화면이
+    /// 그리지 않는 값이라 여기까지 오는 길은 폼을 손으로 만드는 것뿐이다.
+    @Test("갖추지 않은 수단은 고를 수 없다")
+    func cannotChooseAWayTheStoreLacks() async throws {
+        try await withMigratedApp(
+            overrides: ["SMTP_HOST": "smtp.example.com", "SMTP_FROM": "alley@example.com"]
+        ) { app in
+            let (_, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+
+            try await app.testing().test(
+                .POST, "/me/notifications",
+                headers: .form(cookie: token),
+                beforeRequest: {
+                    try $0.content.encode(["via": "slack_dm"], as: .urlEncodedForm)
+                }
+            ) { response in
+                #expect(response.status == .conflict)
+            }
+        }
+    }
+
+    /// 메일 설정이 없으면 메일 주소를 등록해도 갈 곳이 없다. 화면도 칸을 그리지
+    /// 않는다.
+    @Test("메일 설정이 없으면 앱에 메일 주소를 달 수 없다")
+    func cannotAttachMailWithoutSMTP() async throws {
+        try await withMigratedApp { app in
+            let (user, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let mine = try await app.seedApp(
+                bundleID: "com.example.mine", name: "내 앱", owner: user
+            )
+
+            try await app.testing().test(
+                .POST, "/apps/\(try mine.requireID())/notification-targets",
+                headers: .form(cookie: token),
+                beforeRequest: {
+                    try $0.content.encode(
+                        ["kind": "email", "name": "팀 메일", "endpoint": "team@example.com"],
+                        as: .urlEncodedForm
+                    )
+                }
+            ) { response in
+                #expect(response.status == .conflict)
             }
         }
     }
