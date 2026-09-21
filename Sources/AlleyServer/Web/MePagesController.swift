@@ -119,15 +119,24 @@ struct PersonalDelivery: Encodable {
 
         if let token = request.application.alleyConfig.slackBotToken {
             let channel = SlackDirectMessageChannel(client: request.client, botToken: token)
-            let found = try? await channel.findRecipient(email: user.email)
-            ways.append(
-                PersonalDelivery(
-                    kind: .slackDirectMessage,
-                    detail: found.map { "\($0) 으로 보냅니다." }
-                        ?? "이 계정의 이메일로 Slack 사용자를 찾지 못했습니다.",
-                    isUsable: found != nil
+            do {
+                let handle = try await channel.findRecipient(email: user.email)
+                ways.append(
+                    PersonalDelivery(
+                        kind: .slackDirectMessage,
+                        detail: "\(handle) 으로 보냅니다.",
+                        isUsable: true
+                    )
                 )
-            )
+            } catch {
+                ways.append(
+                    PersonalDelivery(
+                        kind: .slackDirectMessage,
+                        detail: reason(error, email: user.email),
+                        isUsable: false
+                    )
+                )
+            }
         }
 
         if request.application.alleyConfig.smtp != nil {
@@ -141,6 +150,31 @@ struct PersonalDelivery: Encodable {
         }
 
         return ways
+    }
+
+    /// 왜 못 쓰는지, **누가 고쳐야 하는지** 함께 적는다.
+    ///
+    /// 한 문장으로 뭉뚱그리면 봇 토큰이 잘못된 스토어에서도 "이 계정의 이메일로 못
+    /// 찾았다" 고 말한다. 그러면 읽는 사람은 자기 이메일을 들여다보는데, 고칠 것은
+    /// 관리자 쪽에 있다. 갈래마다 할 수 있는 일이 다르다.
+    ///
+    /// | 무엇 | 누가 고치나 |
+    /// | --- | --- |
+    /// | 그 이메일을 쓰는 Slack 계정이 없다 | 나. 메일로 받거나 관리자에게 알린다 |
+    /// | Slack 이 거절했다 (토큰·권한) | 관리자 |
+    /// | Slack 에 못 닿았다 | 아무도. 잠시 뒤 다시 본다 |
+    static func reason(_ error: any Error, email: String) -> String {
+        switch error {
+        case SlackDirectMessageChannel.ChannelError.noSuchUser:
+            return "\(email) 로 Slack 사용자를 찾지 못했습니다. 스토어 계정과 Slack 계정의 이메일이 다를 수 있습니다."
+        case SlackDirectMessageChannel.ChannelError.rejected(_, let code):
+            // 코드를 그대로 싣는다. 관리자가 Slack 쪽에서 찾아볼 때 이것이 필요하다.
+            return "Slack 이 거절했습니다 (\(code)). 내 계정이 아니라 스토어의 Slack 봇 설정 문제입니다. 관리자에게 알려주세요."
+        case SlackDirectMessageChannel.ChannelError.transport:
+            return "Slack 에 연결하지 못했습니다. 잠시 뒤 다시 열어보세요."
+        default:
+            return String(describing: error)
+        }
     }
 
     init(kind: NotificationChannelKind, detail: String, isUsable: Bool) {
