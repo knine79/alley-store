@@ -99,53 +99,22 @@
                 <td class="table-tight table-muted">#if(version.downloadCount):#(version.downloadCount)#else:—#endif</td>
                 <td class="table-fill">
                     <span class="badge badge-#(version.state)">#(version.stateName)</span>
-                    #if(version.failureReason):
-                    <span class="table-note">#(version.failureReason)</span>
-                    #endif
-                    #if(version.failureTitle):
-                    <span class="table-note">
-                        <strong>#(version.failureTitle)</strong>
-                        <code class="failure-code">#(version.failureCode)</code>
-                    </span>
-                    <span class="table-note">#(version.failureAdvice)</span>
-                    #endif
+                    <!-- 실패한 줄에서는 로그와 붙은 entitlements 를 아래 실패 줄로
+                         내린다. 여기 두면 "실패 → 로그 → (아래) 무엇이 잘못됐나" 가
+                         되어, 원인보다 로그를 먼저 만난다. -->
+                    #if(!version.hasFailure):
                     #if(version.entitlementKeys):
                     <details class="log">
-                        <summary>entitlements</summary>
+                        <summary>붙어 있는 entitlements</summary>
                         <pre class="log-body">#(version.entitlementKeys)</pre>
                     </details>
                     #endif
-                    <!-- 올릴 때는 묻지 않는다. 번들을 열어보고 정말 필요할 때만
-                         여기서 받는다 (ADR-0036). -->
-                    #if(canUpload):#if(version.needsEntitlements):
-                    <form class="attach-form" method="post" enctype="multipart/form-data"
-                          action="/apps/#(app.id)/versions/#(version.id)/retry">
-                        <label class="field">
-                            <span class="field-label">entitlements</span>
-                            <input class="input" type="file" name="entitlements" required
-                                   accept=".plist,.entitlements,text/xml,application/xml">
-                            <span class="field-note">#(entitlementsWhereToFind)</span>
-                        </label>
-                        <button class="button button-primary" type="submit">붙여서 다시 시도</button>
-                    </form>
-                    <!-- 그 파일이 아예 없는 사람이 있습니다. 애드혹 서명으로 개발하던
-                         앱에는 만들 이유가 없었고, 키 이름 하나만 알려주면 XML 뼈대부터
-                         막힙니다. 그래서 복사해 바로 쓸 전문을 둡니다.
-
-                         entitlements_rejected 에는 프로필이 필요한 권한인데 프로필이
-                         없는 경우도 들어옵니다. 그쪽에는 이 본보기가 답이 아니라서
-                         제목에 Electron 을 적고 접어둡니다. -->
-                    <details class="log">
-                        <summary>Electron 앱인데 entitlements 파일이 없다면</summary>
-                        <p class="field-note">#(entitlementsElectronNotes)</p>
-                        <pre class="log-body">#(entitlementsElectronTemplate)</pre>
-                    </details>
-                    #endif#endif
                     #if(version.log):
                     <details class="log">
                         <summary>서명 로그</summary>
                         <pre class="log-body">#(version.log)</pre>
                     </details>
+                    #endif
                     #endif
                     #if(version.downloadPath):
                     <span class="table-note">
@@ -178,6 +147,89 @@
                 </td>
                 #endif
             </tr>
+            <!-- 실패는 줄 하나를 통째로 쓴다.
+                 상태 칸 안에 두면 폭이 좁아 원인 한 문장이 여덟 줄로 접히고, 왼쪽
+                 절반은 비어 있다. 읽을 것이 가장 많은 순간에 가장 좁은 칸을 쓰는 셈이라
+                 자리를 옮긴다. 워커 잡 목록도 같은 이유로 이렇게 한다.
+
+                 한 덩어리로 묶는 이유. 예전에는 워커 원문·갈래 제목·안내가 각각 흐린
+                 작은 글씨로 한 줄씩 섰다. 셋 다 같은 무게라 어느 줄이 "무엇이
+                 잘못됐나" 인지 알 수 없었고, 셋이 같은 말을 조금씩 다르게 했다.
+                 순서를 하나로 정한다. 갈래 이름 → 무엇이 걸렸나 → 무엇을 하면 되나.
+                 원인은 흐리게 쓰지 않는다. 그것을 읽으러 온다. -->
+            #if(version.hasFailure):
+            <tr class="failure-row">
+                <td colspan="#if(canUpload):7#else:6#endif">
+                    <div class="failure">
+                        <!-- 갈래를 모르는 옛 잡에는 제목이 없다. 그때는 워커 원문만 선다. -->
+                        #if(version.failureTitle):
+                        <p class="failure-head">
+                            <strong class="failure-title">#(version.failureTitle)</strong>
+                            <code class="failure-code">#(version.failureCode)</code>
+                        </p>
+                        #endif
+                        #if(version.failureReason):
+                        <p class="failure-reason">#(version.failureReason)</p>
+                        #endif
+                        #if(version.failureAdvice):
+                        <p class="failure-advice">#(version.failureAdvice)</p>
+                        #endif
+                    </div>
+                    <!-- 올릴 때는 묻지 않는다. 번들을 열어보고 정말 필요할 때만
+                         여기서 받는다 (ADR-0036). -->
+                    #if(canUpload):#if(version.needsEntitlements):
+                    <form class="attach-form" method="post" enctype="multipart/form-data"
+                          action="/apps/#(app.id)/versions/#(version.id)/retry">
+                        <label class="field">
+                            <span class="field-label">entitlements</span>
+                            <input class="input" type="file" name="entitlements" required
+                                   accept=".plist,.entitlements,text/xml,application/xml">
+                        </label>
+                        <button class="button button-primary" type="submit">붙여서 다시 시도</button>
+                    </form>
+                    <!-- 어디서 찾는지는 아는 사람에게 군말이다. 칸 바로 아래 문단으로
+                         펴 두면 폼이 무거워 보이고, 정작 누를 버튼이 그 아래로 밀린다. -->
+                    <details class="log">
+                        <summary>이 파일 어디 있나</summary>
+                        <p class="field-note">#(entitlementsWhereToFind)</p>
+                        <p class="field-note">#(entitlementsWhyItWorksLocally)</p>
+                        <p class="field-note">
+                            CLI 로 올린다면
+                            <code>alley upload ... --entitlements build/app.entitlements</code>
+                            입니다.
+                        </p>
+                    </details>
+                    <!-- 그 파일이 아예 없는 사람이 있습니다. 애드혹 서명으로 개발하던
+                         앱에는 만들 이유가 없었고, 키 이름 하나만 알려주면 XML 뼈대부터
+                         막힙니다. 그래서 복사해 바로 쓸 전문을 둡니다.
+
+                         entitlements_rejected 에는 프로필이 필요한 권한인데 프로필이
+                         없는 경우도 들어옵니다. 그쪽에는 이 본보기가 답이 아니라서
+                         제목에 Electron 을 적고 접어둡니다. -->
+                    <details class="log">
+                        <summary>Electron 앱인데 entitlements 파일이 없다면</summary>
+                        <p class="field-note">#(entitlementsElectronNotes)</p>
+                        <pre class="log-body">#(entitlementsElectronTemplate)</pre>
+                        <p class="field-note">#(entitlementsElectronCaveat)</p>
+                    </details>
+                    #endif#endif
+                    <!-- 무엇으로 서명했는지. 위의 '붙이는' 칸과 헷갈리지 않게 이름을
+                         나눈다. 둘 다 entitlements 라고만 적혀 있으면 같은 것으로 읽힌다. -->
+                    #if(version.entitlementKeys):
+                    <details class="log">
+                        <summary>붙어 있는 entitlements</summary>
+                        <pre class="log-body">#(version.entitlementKeys)</pre>
+                    </details>
+                    #endif
+                    #if(version.log):
+                    <details class="log">
+                        <summary>서명 로그</summary>
+                        <pre class="log-body">#(version.log)</pre>
+                    </details>
+                    #endif
+                </td>
+            </tr>
+            #endif
             #endfor
         </tbody>
     </table>

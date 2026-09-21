@@ -107,11 +107,17 @@ public enum EntitlementsGuidance {
     /// **없을 수도 있다고 먼저 말한다.** 예전 문구는 "빌드 설정에 이미 있습니다" 로
     /// 시작해서, 없는 사람은 한참 찾다가 막혔다. 애드혹 서명으로 개발하던 앱에는
     /// 만들 이유가 없었고, 그런 앱이 실제로 올라온다.
+    ///
+    /// **"빌드 설정에" 가 아니라 "프로젝트에" 다.** 빌드가 내놓는 것으로 읽혀서
+    /// 결과물 폴더를 뒤지게 만들었다. 사람이 만들어 레포에 두는 파일이다.
+    ///
+    /// 갈래가 둘이면 갈래를 문장 앞에 세운다. "Xcode 는 A 이고 electron-builder 는
+    /// B 입니다" 는 둘 다 읽어야 내 것을 고를 수 있다.
     public static let whereToFind = """
-        빌드 설정에 이미 있을 수 있습니다. Xcode 는 CODE_SIGN_ENTITLEMENTS 가 가리키는 \
-        .entitlements 파일이고, electron-builder 는 보통 build/entitlements.mac.plist \
-        입니다. 없으면 새로 만들어도 됩니다. 파일 이름은 아무거나 되고 확장자만 \
-        .plist 나 .entitlements 면 됩니다.
+        프로젝트에 이미 있을 수 있습니다. Xcode 로 빌드한 경우는 CODE_SIGN_ENTITLEMENTS \
+        가 가리키는 .entitlements 파일이고, electron-builder 로 빌드한 경우는 보통 \
+        build/entitlements.mac.plist 입니다. 없으면 새로 만들어도 됩니다. 파일 이름은 \
+        아무거나 되고 확장자만 .plist 나 .entitlements 면 됩니다.
         """
 
     /// 왜 내 맥에서는 되는데 여기서는 안 되나.
@@ -123,17 +129,12 @@ public enum EntitlementsGuidance {
         스토어 배포는 공증이 필요하고, 공증은 Hardened Runtime 을 요구합니다.
         """
 
-    /// 웹 콘솔에서 붙이는 법. **실패한 버전 옆에서만 쓴다.**
-    ///
-    /// 새 버전 화면의 파일 칸은 ADR-0036 이 없앴다. 올릴 때 묻지 않고, 번들을 열어보고
-    /// 정말 필요할 때 실패 옆에서 받는다. 그 뒤로도 안내가 없어진 칸을 가리키고 있어서,
-    /// 실패한 사람이 새 버전 화면까지 가서 찾다가 못 찾았다. 붙일 자리는 그 실패 바로
-    /// 아래에 이미 있다.
-    public static let howToSendInConsole = """
-        이 실패 바로 아래 'entitlements' 칸에 파일을 넣고 '붙여서 다시 시도' 를 누르세요.
-        """
-
     /// CLI 로 붙이는 법.
+    ///
+    /// **웹 콘솔에는 이런 문장을 두지 않는다.** 예전에는 "이 실패 바로 아래
+    /// 'entitlements' 칸에 파일을 넣고 '붙여서 다시 시도' 를 누르세요" 를 함께 냈는데,
+    /// 그 칸과 그 버튼이 바로 아래 보이는 자리에서 읽는 말이라 군말이었다. 화면은
+    /// 칸과 버튼으로 말하고, 글로 하는 안내는 화면이 없는 CLI 쪽에만 남긴다.
     public static let howToSendWithCLI = """
         CLI 로 올린다면 `alley upload ... --entitlements build/app.entitlements` 입니다.
         """
@@ -163,26 +164,37 @@ public enum EntitlementsGuidance {
         </plist>
         """
 
-    /// 위 본보기를 그대로 쓰기 전에 알아야 할 것.
+    /// 본보기 앞에 세우는 한 줄. **이것이 무엇이고 무엇을 하면 되는지**를 말한다.
+    ///
+    /// 예전 문구는 "electron-builder 의 기본값입니다" 로 시작해서, 이 덩어리를 왜
+    /// 보여주는지가 드러나지 않았다. 그 다음에 붙은 "프로젝트에 이미 있으면 그쪽이
+    /// 정확합니다" 는 `whereToFind` 가 이미 한 말이라 뺐다.
     public static let electronTemplateNotes = """
-        electron-builder 의 기본값입니다. 프로젝트에 build/entitlements.mac.plist 가 \
-        이미 있으면 그쪽이 정확합니다. 앱이 카메라나 마이크 같은 권한을 더 쓴다면 키를 \
-        더 넣어야 하고, 빠뜨리면 서명과 공증은 통과하는데 그 기능만 조용히 안 됩니다.
+        아래를 그대로 복사해 .entitlements 파일로 저장하면 됩니다. \
+        electron-builder 가 기본으로 넣는 네 키입니다.
+        """
+
+    /// 본보기 뒤에 붙는 한 줄. 그대로 쓰면 안 되는 경우를 말한다.
+    ///
+    /// 앞이 아니라 뒤에 두는 이유는, 복사할 것을 먼저 주고 단서를 나중에 다는 것이
+    /// 읽는 순서이기 때문이다.
+    public static let electronTemplateCaveat = """
+        앱이 카메라나 마이크를 사용한다면, 해당 키를 추가해야 하고, 빠뜨리면 서명과 \
+        공증은 통과하지만 해당 기능만 동작하지 않게 됩니다.
         """
 
     /// Electron 을 품었는데 JIT 권한이 없을 때.
     ///
     /// 이대로 서명하면 공증은 통과하고 실행만 안 되는 앱이 나간다. 그래서 서명 전에 멈춘다.
+    ///
+    /// **원인만 적는다.** 예전에는 여기에 어디서 찾는지·콘솔에서 어떻게 붙이는지·CLI
+    /// 로는 어떻게 하는지까지 넣었다. 그 문장들이 화면에서 한 번 더 나와서, 실패한
+    /// 사람이 같은 말을 두 번 읽고 정작 무엇이 걸렸는지는 못 찾았다. 붙이는 법은
+    /// 붙이는 칸 옆에서 말하는 것이 맞다.
     public static func missingJIT(bundle: String) -> String {
         """
         \(bundle) 안에 Electron Framework 가 있는데 entitlements 에 \(jitKey) 가 없습니다. \
-        Hardened Runtime 아래에서 이 권한 없이 V8 을 띄우면 앱이 실행되자마자 죽습니다. \
-        서명해도 공증은 통과하므로 아무도 실행할 수 없는 앱이 그대로 나갑니다. 그래서 여기서 멈춥니다.
-
-        \(whyItWorksLocally)
-
-        \(jitKey) 를 담은 entitlements plist 를 버전과 함께 올리세요. \
-        \(whereToFind) \(howToSendInConsole) \(howToSendWithCLI)
+        이 권한 없이 서명하면 공증은 통과하지만 앱이 실행되자마자 죽습니다.
         """
     }
 
