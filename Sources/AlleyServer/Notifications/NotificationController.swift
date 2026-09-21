@@ -159,6 +159,12 @@ enum NotificationTargets {
             throw Abort(.badRequest, reason: "Slack DM 은 알림 대상으로 등록할 수 없습니다.")
         }
 
+        // 메일은 주소지 웹훅이 아니다. 아래 https 검사를 지날 수 없다.
+        if kind == .email {
+            try validate(emailAddress: endpoint)
+            return
+        }
+
         guard let components = URLComponents(string: endpoint),
               components.scheme?.lowercased() == "https",
               let host = components.host
@@ -174,9 +180,24 @@ enum NotificationTargets {
                     reason: "Slack 웹훅 주소가 아닙니다. hooks.slack.com 으로 시작해야 합니다."
                 )
             }
-        case .slackDirectMessage:
-            // 위에서 막았다. 갈래가 늘면 컴파일러가 여기를 다시 물어본다.
+        case .slackDirectMessage, .email:
+            // 위에서 갈라 보냈다. 갈래가 늘면 컴파일러가 여기를 다시 물어본다.
             break
+        }
+    }
+
+    /// 메일 주소로 보이는지만 본다.
+    ///
+    /// **진짜인지는 보내봐야 안다.** 형식이 맞아도 없는 주소일 수 있고, 형식으로
+    /// 거를 수 있는 것은 오타 중 일부뿐이다. 그래서 `@` 하나와 점 하나만 본다.
+    /// 더 까다롭게 굴면 실제로 쓰는 주소를 거절하게 된다.
+    static func validate(emailAddress: String) throws {
+        let trimmed = emailAddress.trimmingCharacters(in: .whitespaces)
+        let parts = trimmed.split(separator: "@")
+        guard parts.count == 2, !parts[0].isEmpty, parts[1].contains("."),
+              !trimmed.contains(" ")
+        else {
+            throw Abort(.badRequest, reason: "메일 주소 형식이 아닙니다: \(emailAddress)")
         }
     }
 

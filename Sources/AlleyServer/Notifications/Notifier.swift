@@ -145,7 +145,7 @@ public struct Notifier: Sendable {
             .filter(\.$role == .admin)
             .all()) ?? []
         for admin in admins {
-            await notify(person: admin.email, message: message)
+            await notify(person: admin, message: message)
         }
     }
 
@@ -155,20 +155,37 @@ public struct Notifier: Sendable {
     /// 이쪽은 서버가 받는 사람을 아는 경우다. 서명이 실패하면 그 버전을 올린 사람이
     /// 고치는데, 그 사람이 미리 자기 대상을 만들어 뒀을 리 없다.
     ///
-    /// 보낼 채널이 없으면 조용히 지나간다. 봇 토큰을 넣지 않은 스토어가 그렇고,
-    /// 그때는 예전처럼 사람이 화면을 다시 보는 것으로 굴러간다.
-    public func notify(person email: String, message: NotificationMessage) async {
-        guard let channel = channels[.slackDirectMessage] else {
-            logger.debug("사람에게 보내는 알림 채널이 없어 건너뜁니다 [\(email)]")
+    /// 보낼 채널이 없으면 조용히 지나간다. 봇 토큰도 메일 설정도 없는 스토어가
+    /// 그렇고, 그때는 예전처럼 사람이 화면을 다시 보는 것으로 굴러간다.
+    public func notify(person user: User, message: NotificationMessage) async {
+        guard let channel = personalChannel(for: user) else {
+            logger.debug("사람에게 보내는 알림 채널이 없어 건너뜁니다 [\(user.email)]")
             return
         }
         do {
-            try await channel.send(message, to: email)
+            // Slack DM 도 메일도 받는 사람을 계정 이메일로 찾는다. DM 은 그 주소로
+            // Slack 계정을 뒤지고, 메일은 그 주소로 보낸다.
+            try await channel.send(message, to: user.email)
         } catch {
             // **여기서 던지지 않는다.** 이 알림은 서명 실패를 기록하는 흐름 안에서
             // 불린다. 알림이 실패했다고 그 기록까지 되돌리면 잡이 멈춘 채로 남는다.
-            logger.warning("알림을 보내지 못했습니다 [받는 사람: \(email), 이유: \(error)]")
+            logger.warning("알림을 보내지 못했습니다 [받는 사람: \(user.email), 이유: \(error)]")
         }
+    }
+
+    /// 이 사람에게 실제로 쓸 채널.
+    ///
+    /// **고른 것이 없으면 있는 것으로 보낸다.** 고를 당시에 없던 수단이 나중에 생기고
+    /// 있던 수단이 사라진다. 스토어가 Slack 봇을 떼고 메일만 남겼는데 예전에 고른
+    /// 값 때문에 알림이 사라지면, 끄지도 않은 알림이 조용히 멎는다.
+    ///
+    /// 반대로 둘 다 있으면 고른 대로 간다. 양쪽에 보내지 않는 이유는 운영 알림과
+    /// 같다. 두 번 오는 알림은 한 번 오는 알림보다 빨리 무시당한다.
+    private func personalChannel(for user: User) -> (any NotificationChannel)? {
+        if let chosen = channels[user.notifyVia] {
+            return chosen
+        }
+        return NotificationChannelKind.personal.lazy.compactMap { channels[$0] }.first
     }
 
     private func deliver(_ message: NotificationMessage, to targets: [NotificationTarget]) async {
@@ -196,12 +213,15 @@ public struct Notifier: Sendable {
 extension Application {
     /// 이 스토어가 쓸 수 있는 알림 채널들.
     ///
-    /// 봇 토큰이 없으면 DM 채널이 빠진다. 요청 경로와 주기 작업이 같은 목록을 써야
-    /// 한쪽에만 붙는 일이 없다.
+    /// 설정하지 않은 것은 빠진다. 봇 토큰이 없으면 DM 이, 메일 설정이 없으면 메일이
+    /// 빠진다. 요청 경로와 주기 작업이 같은 목록을 써야 한쪽에만 붙는 일이 없다.
     var notificationChannels: [any NotificationChannel] {
         var channels: [any NotificationChannel] = [SlackWebhookChannel(client: client)]
         if let token = alleyConfig.slackBotToken {
             channels.append(SlackDirectMessageChannel(client: client, botToken: token))
+        }
+        if let smtp = alleyConfig.smtp {
+            channels.append(EmailChannel(application: self, config: smtp))
         }
         return channels
     }

@@ -624,26 +624,29 @@ public struct NotificationTargetDTO: Codable, Sendable, Identifiable, Equatable 
 /// 운영 알림(워커 이상, 인증서 만료)을 어디로 보낼지.
 ///
 /// **둘 중 하나만 고른다.** 함께 보내는 선택지를 두지 않는 이유는, 그것을 고른
-/// 조직에서 같은 알림이 채널과 DM 으로 두 번 오기 때문이다. 두 번 오는 알림은
+/// 조직에서 같은 알림이 채널과 개인에게 두 번 오기 때문이다. 두 번 오는 알림은
 /// 한 번 오는 알림보다 빨리 무시당한다.
 public enum OperationalAlertTarget: String, Codable, Sendable, CaseIterable {
     /// 관리자가 등록해 둔 전역 채널로. 여러 명이 보고 이력이 남는다.
     case channel
-    /// 관리자 전원에게 DM 으로. 등록할 것이 없어 설정을 잊어도 닿는다.
+    /// 관리자 한 명 한 명에게. 등록할 것이 없어 설정을 잊어도 닿는다.
+    ///
+    /// 어떤 수단으로 가는지는 관리자마다 다르다. 각자 내 알림에서 정한 것을 따른다
+    /// (`User.notifyVia`).
     case admins
 
     public var displayName: String {
         switch self {
         case .channel: return "Slack 채널"
-        case .admins: return "관리자 DM"
+        case .admins: return "관리자 개인"
         }
     }
 }
 
 /// 알림을 보내는 방식.
 ///
-/// 지금은 웹훅 하나뿐이다. 메일을 붙이게 되면 여기 한 줄이 늘고 보내는 쪽이
-/// 갈린다. 채널을 타입으로 두는 이유가 그것이다.
+/// 채널을 타입으로 둔 덕에 메일을 붙일 때 부르는 쪽이 그대로였다. 보내는 구현만
+/// 하나 늘고, 대상 행은 `kind` 로 갈린다.
 public enum NotificationChannelKind: String, Codable, Sendable, CaseIterable {
     /// Slack Incoming Webhook. 정해진 채널 하나에 쓴다.
     case slack
@@ -653,16 +656,25 @@ public enum NotificationChannelKind: String, Codable, Sendable, CaseIterable {
     /// 대상은 채널이고, 이쪽은 "그 버전을 올린 사람" 처럼 서버가 받는 사람을 아는
     /// 경우에만 쓴다 (`Notifier.notify(person:)`).
     case slackDirectMessage = "slack_dm"
+    /// 메일. 사람에게도 보내고 앱 대상으로 등록할 수도 있다.
+    case email
 
     /// 관리자가 알림 대상으로 고를 수 있는 것들.
     ///
     /// `allCases` 를 화면에 그대로 내보내면 고를 수 없는 값이 목록에 선다.
-    public static var selectable: [NotificationChannelKind] { [.slack] }
+    /// DM 은 서버가 받는 사람을 아는 경우에만 쓰므로 등록할 자리가 없다.
+    public static var selectable: [NotificationChannelKind] { [.slack, .email] }
+
+    /// 사람 한 명에게 보낼 때 쓸 수 있는 것들.
+    ///
+    /// 웹훅은 여기 없다. 채널 주소라 그 사람에게만 가지 않는다.
+    public static var personal: [NotificationChannelKind] { [.slackDirectMessage, .email] }
 
     public var displayName: String {
         switch self {
         case .slack: return "Slack"
         case .slackDirectMessage: return "Slack DM"
+        case .email: return "메일"
         }
     }
 }
@@ -678,7 +690,8 @@ public struct CreateNotificationTargetRequest: Codable, Sendable {
         self.endpoint = endpoint
     }
 
-    /// 채널을 안 밝히면 Slack 으로 본다. 지금은 그것뿐이다.
+    /// 채널을 안 밝히면 Slack 으로 본다. 메일이 생기기 전에 만들어진 클라이언트가
+    /// 이 칸 없이 보내고, 그때는 웹훅뿐이었다.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.kind = try container.decodeIfPresent(

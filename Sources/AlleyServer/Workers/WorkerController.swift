@@ -509,7 +509,7 @@ public struct WorkerController: RouteCollection, Sendable {
         let appID = job.version.$app.id
 
         await request.notifier.notify(
-            person: uploader.email,
+            person: uploader,
             message: NotificationMessage(
                 title: "\(name) \(job.version.shortVersion) (\(job.version.buildNumber)) 서명이 실패했습니다",
                 // 갈래 이름과 무엇을 하면 되는지를 함께 싣는다. 코드만 보내면 받는

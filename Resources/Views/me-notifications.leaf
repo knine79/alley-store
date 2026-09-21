@@ -10,29 +10,56 @@
 <p class="notice notice-ok">저장했습니다.</p>
 #endif
 
+<!-- 스토어가 갖췄는데 나에게만 닿지 않는 것. Slack 계정과 스토어 계정의 이메일이
+     다르면 여기 걸린다. 고르는 자리에서 말해야 관리자에게 물을 수 있다. -->
+#for(item in blocked):
+<p class="notice notice-warn">#(item.label): #(item.detail)</p>
+#endfor
+
 <section class="section">
-    <h2 class="section-title">Slack DM</h2>
+    <h2 class="section-title">받는 방법</h2>
 
-    <!-- **켜기 전에 닿는지 보여준다.** 스토어 계정과 Slack 계정의 이메일이 다르면
-         찾지 못하는데, 그 사실을 처음 알림이 날 때 알게 되면 늦다. 그때는 알림이
-         안 온 것과 실패가 없는 것이 겉으로 같다.
-
-         닿지 않으면 칸을 아예 그리지 않는다. 켜도 아무 일이 없는 체크박스를 남겨두면
-         켜둔 사람은 받고 있다고 믿는다. -->
-    #if(!delivery.isUsable):
-    <p class="notice notice-warn">#(delivery.detail)</p>
+    <!-- 받을 수 있는 방법이 하나도 없다. 켜도 아무 일이 없는 체크박스를 남겨두면
+         켜둔 사람은 받고 있다고 믿는다. 그래서 칸을 아예 그리지 않는다. -->
+    #if(count(ways) == 0):
+    <p class="notice notice-warn">
+        관리자가 Slack 봇도 메일도 연결하지 않아 알림을 받을 수 없습니다.
+    </p>
     <p class="field-note">
         받을 수 있게 되면 여기서 고를 수 있습니다. 지금 정해둘 것은 없습니다.
     </p>
     #else:
-    <p class="fact-line">
-        <span class="fact-label">받는 곳</span>
-        <span class="fact-value">#(delivery.detail)</span>
-    </p>
-
     <form class="form" method="post" action="/me/notifications">
+        <!-- **고를 것이 하나뿐이면 고르게 하지 않는다.** 라디오 버튼 하나짜리
+             그룹은 고를 것이 없는 선택지다. 그때는 어디로 가는지만 적는다. -->
+        #if(count(ways) == 1):
+        #for(way in ways):
+        <p class="fact-line">
+            <span class="fact-label">#(way.label)</span>
+            <span class="fact-value">#(way.detail)</span>
+        </p>
+        #endfor
+        #else:
         <fieldset class="choice-group">
-            <legend class="visually-hidden">받을 알림</legend>
+            <legend class="visually-hidden">알림을 받을 방법</legend>
+            #for(way in ways):
+            <label class="choice">
+                <input type="radio" name="via" value="#(way.value)"
+                       #if(chosen == way.value):checked#endif>
+                <span>
+                    <span class="choice-name">#(way.label)</span>
+                    <span class="choice-note">#(way.detail)</span>
+                </span>
+            </label>
+            #endfor
+        </fieldset>
+        <!-- 양쪽에 보내지 않는 이유는 운영 알림과 같다. 같은 알림이 두 번 오면
+             한 번 오는 것보다 빨리 무시당한다. -->
+        <p class="field-note">한 곳으로만 갑니다.</p>
+        #endif
+
+        <fieldset class="choice-group">
+            <legend>받을 알림</legend>
 
             <!-- 체크박스는 꺼져 있으면 아예 보내지지 않는다. 서버가 값의 유무로 읽는다. -->
             <label class="choice">

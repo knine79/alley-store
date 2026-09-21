@@ -407,8 +407,13 @@
 <section class="section">
     <h2 class="section-title">알림</h2>
     <p class="page-lead">
-        이 앱에 새 피드백이 오면 알릴 곳입니다. Slack 채널 설정에서 Incoming Webhook
-        주소를 받아 넣으세요.
+        이 앱에 새 피드백이 오면 알릴 곳입니다.
+        #if(canUseEmailTarget):
+        Slack 채널이면 채널 설정에서 Incoming Webhook 주소를 받아 넣고, 메일이면 받을
+        주소를 넣으세요.
+        #else:
+        Slack 채널 설정에서 Incoming Webhook 주소를 받아 넣으세요.
+        #endif
     </p>
 
     #if(notificationError):
@@ -432,7 +437,9 @@
             #for(target in notificationTargets):
             <tr>
                 <td class="table-fill table-strong">#(target.name)</td>
-                <td class="table-tight table-muted">Slack</td>
+                <td class="table-tight table-muted">
+                    #if(target.kind == "email"):메일#else:Slack#endif
+                </td>
                 <td class="table-tight">
                     <form class="row-form" method="post"
                           action="/apps/#(app.id)/notification-targets/#(target.id)/delete">
@@ -451,6 +458,29 @@
             <input class="input" type="text" name="name" required placeholder="팀 채널"
                    autocapitalize="off" autocorrect="off" spellcheck="false">
         </label>
+
+        <!-- **고를 것이 하나뿐이면 고르게 하지 않는다.** 스토어에 메일 설정이 없으면
+             메일 주소를 넣어도 갈 곳이 없다. 그때는 칸을 그리지 않고 서버가 웹훅으로
+             읽는다. -->
+        #if(canUseEmailTarget):
+        <label class="field">
+            <span class="field-label">방식</span>
+            <select class="input" name="kind">
+                <option value="slack">Slack 채널</option>
+                <option value="email">메일</option>
+            </select>
+        </label>
+        <label class="field">
+            <span class="field-label">주소</span>
+            <input class="input" type="text" name="endpoint" required
+                   placeholder="https://hooks.slack.com/services/... 또는 team@example.com"
+                   autocapitalize="off" autocorrect="off" spellcheck="false">
+            <span class="field-note">
+                웹훅 주소는 저장하면 다시 보이지 않습니다. 그 주소 자체가 채널에 글을
+                쓸 수 있는 자격증명입니다.
+            </span>
+        </label>
+        #else:
         <label class="field">
             <span class="field-label">Slack 웹훅 주소</span>
             <input class="input" type="url" name="endpoint" required
@@ -458,6 +488,8 @@
                    autocapitalize="off" autocorrect="off" spellcheck="false">
             <span class="field-note">저장하면 다시 보이지 않습니다. 이 주소 자체가 채널에 글을 쓸 수 있는 자격증명입니다.</span>
         </label>
+        #endif
+
         <div class="form-actions">
             <button class="button button-primary" type="submit">추가</button>
         </div>
