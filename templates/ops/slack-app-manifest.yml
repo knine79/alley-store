@@ -1,0 +1,46 @@
+# 서명 실패를 알리는 Slack 앱.
+#
+# <https://api.slack.com/apps> > Create New App > **From an app manifest** 에서
+# 워크스페이스를 고르고 이 내용을 붙여넣으면 됩니다. 권한을 하나씩 찾아 켜는 것보다
+# 빠르고, 빠뜨릴 자리가 없습니다.
+#
+# 설치한 뒤 **OAuth & Permissions** 의 Bot User OAuth Token (`xoxb-` 로 시작)을
+# 서버 환경변수 `SLACK_BOT_TOKEN` 에 넣으세요.
+#
+# **이 앱은 채널에 들어가지 않습니다.** 사람에게 DM 만 보냅니다. 초대할 채널이
+# 없으므로 설치만 하면 끝입니다.
+
+display_information:
+  # 받는 사람에게 보이는 이름입니다. 스토어 이름에 맞춰 바꾸세요.
+  name: Alley Store
+  description: 서명이 실패하면 올린 사람에게 알립니다
+  # 실패를 알리는 앱이라 붉은 계열로 둡니다.
+  background_color: "#c0392b"
+
+features:
+  bot_user:
+    display_name: Alley Store
+    # 항상 온라인으로 두지 않습니다. 사람이 말을 거는 봇이 아닙니다.
+    always_online: false
+
+oauth_config:
+  scopes:
+    bot:
+      # 이메일로 사용자를 찾습니다 (`users.lookupByEmail`).
+      #
+      # 스토어 계정과 Slack 계정의 이메일이 같아야 찾습니다. 다르면 보내지 않고
+      # 그 사실이 서버 로그에 남습니다.
+      - users:read.email
+      # 위 권한이 사용자 정보를 읽는 것에 기대고 있어 함께 켭니다.
+      - users:read
+      # 찾은 사용자에게 DM 을 씁니다 (`chat.postMessage`).
+      #
+      # 사용자 ID 를 채널로 넘기면 DM 으로 갑니다. 채널에 초대할 필요가 없습니다.
+      - chat:write
+
+settings:
+  # 아래 셋은 쓰지 않습니다. 스토어가 Slack 에 보내기만 하고 받지 않습니다.
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  is_hosted: false
+  token_rotation_enabled: false

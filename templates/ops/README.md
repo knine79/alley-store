@@ -72,6 +72,19 @@ self-hosted, macos, alley-signing
 **인증서와 공증 자격증명은 시크릿에 넣지 않습니다.** 러너가 도는 맥의 키체인에
 이미 있습니다. `config/signing.env` 에 이름만 적습니다.
 
+### 3-1. 서명 실패를 알리려면 (선택)
+
+비워 두면 서명이 실패해도 알림이 가지 않습니다. 올린 사람이 웹 콘솔에 다시 들어와야
+실패를 압니다.
+
+[`slack-app-manifest.yml`](slack-app-manifest.yml) 을 <https://api.slack.com/apps> >
+Create New App > **From an app manifest** 에 붙여넣으면 앱이 만들어집니다. 설치한 뒤
+Bot User OAuth Token (`xoxb-` 로 시작)을 **서버 환경변수** `SLACK_BOT_TOKEN` 에
+넣으세요.
+
+**이 레포 시크릿이 아니라 배포 플랫폼 시크릿입니다.** 서버가 읽는 값이고, 이 레포의
+워크플로는 쓰지 않습니다.
+
 ### 4. 첫 배포
 
 ```bash
@@ -102,6 +115,7 @@ config/
   adopt.yml                 빌드 → 서명 → 업로드 → 롤아웃
   watch.yml                 제품 레포 새 릴리스 감지 → PR 생성
 credentials.md              자격증명 대장
+slack-app-manifest.yml      실패 알림용 Slack 앱을 만드는 manifest
 scripts/
   check-signing-mac.sh      서명 맥이 제대로 섰는지 본다
   rollout-server.sh         이미지를 배포 플랫폼으로 옮김 (.example 참고)
