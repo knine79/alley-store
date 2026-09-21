@@ -210,6 +210,35 @@ struct NotificationRoutingTests {
         }
     }
 
+    /// DM 이 안 되는 이유는 갈래마다 고칠 사람이 다르다. 한 문장으로 뭉뚱그리면
+    /// 봇 토큰이 잘못된 스토어에서도 읽는 사람이 자기 이메일을 들여다본다.
+    @Test("DM 이 안 되는 이유를 갈래마다 다르게 적는다")
+    func explainsWhoFixesTheDirectMessage() {
+        let email = "dev@example.com"
+
+        let mine = PersonalDelivery.reason(
+            SlackDirectMessageChannel.ChannelError.noSuchUser(email: email), email: email
+        )
+        #expect(mine.contains(email))
+        #expect(mine.contains("이메일이 다를 수 있습니다"))
+
+        let theirs = PersonalDelivery.reason(
+            SlackDirectMessageChannel.ChannelError.rejected(
+                api: "users.lookupByEmail", error: "invalid_auth"
+            ),
+            email: email
+        )
+        // 관리자가 Slack 쪽에서 찾아볼 때 코드가 필요하다.
+        #expect(theirs.contains("invalid_auth"))
+        #expect(theirs.contains("관리자"))
+        #expect(!theirs.contains("이메일이 다를 수 있습니다"))
+
+        let neither = PersonalDelivery.reason(
+            SlackDirectMessageChannel.ChannelError.transport("연결 끊김"), email: email
+        )
+        #expect(neither.contains("잠시 뒤"))
+    }
+
     // MARK: - 메일 (ADR-0058)
 
     /// 고른 수단이 스토어에 없으면 있는 것으로 간다. 고를 당시에 없던 수단이 나중에
