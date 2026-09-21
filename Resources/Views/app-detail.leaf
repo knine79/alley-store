@@ -284,7 +284,7 @@
 #endif
 
 #if(canUpload):
-<section class="section">
+<section class="section" id="members">
     <h2 class="section-title">업로드 권한</h2>
     <ul class="person-list">
         #for(member in members):
@@ -292,11 +292,62 @@
             <span class="person-name">#(member.user.name)</span>
             <span class="person-email">#(member.user.email)</span>
             #if(member.isOwner):<span class="badge">오너</span>#endif
+            <!-- 오너는 표에 없어도 언제나 올릴 수 있다. 거둘 것이 없는데 버튼을
+                 두면 눌러도 아무 일이 없다. -->
+            #if(canManage):#if(!member.isOwner):
+            <form class="person-action" method="post"
+                  action="/apps/#(app.id)/members/#(member.user.id)/remove">
+                <button class="button button-small button-quiet" type="submit">거두기</button>
+            </form>
+            #endif#endif
         </li>
         #endfor
     </ul>
+
     #if(canManage):
-    <p class="field-note">멤버 추가와 제거는 아직 API 로만 됩니다.</p>
+    #if(memberError):
+    <p class="notice notice-error">#(memberError)</p>
+    #endif
+
+    <!-- **계정이 있는 사람 중에서만 고른다.** 이메일을 손으로 적게 하면 오타가
+         "그런 계정이 없습니다" 로 돌아오고, 그게 오타인지 정말 로그인한 적이 없는
+         것인지 구분이 안 된다. 찾아서 고르면 둘이 갈린다 - 안 나오면 아직 한 번도
+         들어온 적이 없는 사람이다. -->
+    <form class="form-inline" method="get" action="/apps/#(app.id)">
+        <label class="field">
+            <span class="field-label">사람 찾기</span>
+            <input class="input" type="search" name="member" value="#(memberQuery)"
+                   placeholder="이름이나 이메일" autocomplete="off">
+        </label>
+        <button class="button" type="submit">찾기</button>
+    </form>
+
+    #if(memberQuery):
+    #if(count(memberCandidates) > 0):
+    <ul class="person-list">
+        #for(candidate in memberCandidates):
+        <li class="person">
+            <span class="person-name">#(candidate.name)</span>
+            <span class="person-email">#(candidate.email)</span>
+            <form class="person-action" method="post" action="/apps/#(app.id)/members">
+                <input type="hidden" name="userID" value="#(candidate.id)">
+                <button class="button button-small" type="submit">권한 주기</button>
+            </form>
+        </li>
+        #endfor
+    </ul>
+    #if(memberSearchOverflowed):
+    <p class="field-note">결과가 많아 일부만 보입니다. 더 좁혀서 찾아보세요.</p>
+    #endif
+    #else:
+    <!-- 빈 결과의 이유가 둘이다. 한쪽만 적으면 이미 권한이 있는 사람을 찾다가
+         "로그인한 적이 없나" 로 잘못 짚는다. -->
+    <p class="empty">
+        '#(memberQuery)' 로 찾은 사람이 없습니다. 이미 올릴 수 있는 사람과, 이 스토어에
+        아직 한 번도 로그인한 적이 없는 사람은 나오지 않습니다.
+    </p>
+    #endif
+    #endif
     #endif
 </section>
 #endif

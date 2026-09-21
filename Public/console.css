@@ -1608,6 +1608,26 @@ textarea.input {
     color: var(--text-muted);
 }
 
+/* 줄 오른쪽 끝의 버튼. 이름과 이메일이 길어도 버튼 자리는 흔들리지 않는다. */
+.person-action {
+    margin-left: auto;
+}
+
+/* 한 줄에 서는 검색 폼. 칸과 버튼이 나란히 있어야 "쳐서 찾는 것" 으로 읽힌다.
+   세로로 쌓으면 아래 목록과 섞여 어디까지가 폼인지 흐려진다. */
+.form-inline {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin: var(--space-4) 0 var(--space-3);
+}
+
+.form-inline .field {
+    flex: 1 1 18rem;
+    margin: 0;
+}
+
 /* ── 제목 + 오른쪽 버튼 (구역 안) ────────────────────────── */
 
 .section-head {

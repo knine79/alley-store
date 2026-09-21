@@ -28,6 +28,8 @@ struct AppPagesController: RouteCollection, Sendable {
         pages.post(":appID", "portal-app-id", use: registerPortalAppID)
         pages.post(":appID", "deploy-tokens", use: issueDeployToken)
         pages.post(":appID", "deploy-tokens", ":tokenID", "revoke", use: revokeDeployToken)
+        pages.post(":appID", "members", use: addMember)
+        pages.post(":appID", "members", ":userID", "remove", use: removeMember)
         pages.get(":appID", "versions", ":versionID", "download", use: download)
         pages.post(":appID", "feedback", ":feedbackID", "delete", use: deleteFeedback)
         pages.post(":appID", "feed-tokens", use: issueFeedToken)
@@ -242,7 +244,8 @@ struct AppPagesController: RouteCollection, Sendable {
         notificationError: String? = nil,
         feedError: String? = nil,
         portalError: String? = nil,
-        portalNotice: String? = nil
+        portalNotice: String? = nil,
+        memberError: String? = nil
     ) async throws -> View {
         let user = try request.requireUser()
         let app = try await request.findApp()
@@ -264,6 +267,24 @@ struct AppPagesController: RouteCollection, Sendable {
         var members: [AppMemberDTO] = []
         if canUpload {
             members = try await loadMembers(of: app, on: request.db)
+        }
+
+        // 멤버로 넣을 사람 찾기. 관리하는 사람에게만 연다.
+        //
+        // **한 번이라도 로그인한 사람 중에서만 고른다.** 계정이 없는 이메일을 미리
+        // 넣어두면 오타를 알아챌 방법이 없다. API 가 이미 같은 규칙으로 거절한다.
+        var memberCandidates: [MemberCandidateRow] = []
+        let memberQuery = request.query[String.self, at: "member"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        var memberSearchOverflowed = false
+        if canManage, let memberQuery, !memberQuery.isEmpty {
+            let found = try await findMemberCandidates(
+                matching: memberQuery,
+                excluding: members,
+                on: request.db
+            )
+            memberSearchOverflowed = found.count > MemberSearch.limit
+            memberCandidates = Array(found.prefix(MemberSearch.limit))
         }
 
         // 배포 토큰은 앱을 관리하는 사람만 본다. 멤버에게는 있는지조차 알릴 이유가 없다.
@@ -365,6 +386,10 @@ struct AppPagesController: RouteCollection, Sendable {
                     )
                 },
                 members: members,
+                memberQuery: memberQuery,
+                memberCandidates: memberCandidates,
+                memberSearchOverflowed: memberSearchOverflowed,
+                memberError: memberError,
                 deployTokens: deployTokens,
                 issuedToken: issuedToken,
                 downloads: downloads,
@@ -532,6 +557,73 @@ struct AppPagesController: RouteCollection, Sendable {
         response.headers.contentType = .html
         response.body = .init(buffer: view.data)
         return response
+    }
+
+    // MARK: - 업로드 권한
+
+    /// 고른 사람에게 이 앱을 올릴 권한을 준다.
+    ///
+    /// 화면은 `AppController.addMember` 와 같은 규칙을 쓴다. 한 번이라도 로그인한
+    /// 계정만 넣을 수 있고, 오너는 이미 올릴 수 있으므로 표에 넣지 않는다.
+    @Sendable
+    func addMember(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        try app.requireManageAccess(for: user)
+
+        let values = try request.content.decode(MemberFormValues.self)
+        guard let id = values.userID.flatMap(UUID.init(uuidString:)),
+              let target = try await User.find(id, on: request.db)
+        else {
+            // 검색 결과를 눌러서 오는 길이라 평소에는 일어나지 않는다. 고른 사이에
+            // 계정이 사라졌거나 폼을 손으로 만든 경우다.
+            let view = try await renderDetail(
+                on: request,
+                issuedToken: nil,
+                memberError: "고른 계정을 찾을 수 없습니다. 다시 검색해주세요."
+            )
+            return htmlResponse(view, status: .notFound)
+        }
+
+        let appID = try app.requireID()
+        let targetID = try target.requireID()
+        if app.$owner.id != targetID {
+            let existing = try await AppMember.query(on: request.db)
+                .filter(\.$app.$id == appID)
+                .filter(\.$user.$id == targetID)
+                .first()
+            if existing == nil {
+                try await AppMember(appID: appID, userID: targetID).save(on: request.db)
+                request.logger.notice(
+                    "업로드 권한 추가 [앱: \(app.bundleID), 대상: \(target.email), 관리자: \(user.email)]"
+                )
+            }
+        }
+        return request.redirect(to: "/apps/\(appID.uuidString)#members")
+    }
+
+    /// 업로드 권한을 거둔다. 오너는 표에 없으므로 여기로 오지 않는다.
+    @Sendable
+    func removeMember(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        try app.requireManageAccess(for: user)
+
+        guard let raw = request.parameters.get("userID"),
+              let targetID = UUID(uuidString: raw)
+        else {
+            throw Abort(.badRequest, reason: "사용자를 알 수 없습니다.")
+        }
+
+        let appID = try app.requireID()
+        try await AppMember.query(on: request.db)
+            .filter(\.$app.$id == appID)
+            .filter(\.$user.$id == targetID)
+            .delete()
+        request.logger.notice(
+            "업로드 권한 제거 [앱: \(app.bundleID), 대상: \(targetID), 관리자: \(user.email)]"
+        )
+        return request.redirect(to: "/apps/\(appID.uuidString)#members")
     }
 
     @Sendable
@@ -727,6 +819,44 @@ struct AppPagesController: RouteCollection, Sendable {
         response.headers.contentType = .html
         response.body = .init(buffer: view.data)
         return response
+    }
+
+    /// 멤버로 넣을 후보를 찾는다.
+    ///
+    /// 이름과 이메일 어느 쪽으로 쳐도 걸리게 한다. 사람을 부르는 이름과 계정을
+    /// 가리키는 이메일이 머릿속에서 따로 놀아서, 한쪽만 받으면 "분명 있는데 안
+    /// 나온다" 가 된다.
+    ///
+    /// 이미 올릴 수 있는 사람은 뺀다. 눌러도 아무 일이 없는 줄을 보여줄 이유가 없다.
+    private func findMemberCandidates(
+        matching query: String,
+        excluding members: [AppMemberDTO],
+        on database: any Database
+    ) async throws -> [MemberCandidateRow] {
+        let already = Set(members.map(\.user.id))
+        let needle = "%\(query.lowercased())%"
+
+        return try await User.query(on: database)
+            .group(.or) { match in
+                match.filter(\.$email, .custom("ILIKE"), needle)
+                match.filter(\.$name, .custom("ILIKE"), needle)
+            }
+            .sort(\.$name)
+            // 화면에 스무 줄 넘게 깔면 고르는 것이 아니라 훑는 일이 된다. 넘치면
+            // 더 좁혀 치라고 알린다.
+            .limit(MemberSearch.limit + 1)
+            .all()
+            .filter { user in
+                guard let id = try? user.requireID() else { return false }
+                return !already.contains(id)
+            }
+            .map { user in
+                MemberCandidateRow(
+                    id: try user.requireID().uuidString,
+                    email: user.email,
+                    name: user.name
+                )
+            }
     }
 
     private func loadMembers(of app: App, on database: any Database) async throws -> [AppMemberDTO] {
@@ -944,6 +1074,13 @@ struct AppDetailContext: Encodable {
     var app: AppRow
     var versions: [VersionRow]
     var members: [AppMemberDTO]
+    /// 방금 친 검색어. 다시 그릴 때 칸에 그대로 남긴다.
+    var memberQuery: String?
+    /// 그 검색어로 찾은 사람들. 이미 올릴 수 있는 사람은 빠져 있다.
+    var memberCandidates: [MemberCandidateRow]
+    /// 후보가 화면에 세울 수보다 많았나. 그러면 더 좁혀 치라고 알린다.
+    var memberSearchOverflowed: Bool
+    var memberError: String?
     var deployTokens: [DeployTokenRow]
     var issuedToken: IssuedDeployToken?
     /// 다운로드 요약. 올릴 권한이 없는 사람에게는 nil.
@@ -1047,6 +1184,29 @@ struct DeployTokenFormValues: Codable {
 }
 
 extension DeployTokenFormValues: Content {}
+
+/// 업로드 권한을 줄 사람 찾기의 크기.
+enum MemberSearch {
+    /// 화면에 세울 후보 수. 넘으면 더 좁혀 치라고 알린다.
+    static let limit = 20
+}
+
+/// 검색 결과 한 줄.
+struct MemberCandidateRow: Encodable {
+    var id: String
+    var email: String
+    var name: String
+}
+
+struct MemberFormValues: Codable {
+    /// 검색 결과에서 고른 사람. 이메일이 아니라 id 로 받는다.
+    ///
+    /// 이메일로 받으면 고른 뒤 그 사람이 이메일을 바꿨을 때 엉뚱한 계정에 붙거나
+    /// 못 찾는다. 화면이 이미 계정을 특정해 놓은 상태라 id 를 그대로 넘긴다.
+    var userID: String?
+}
+
+extension MemberFormValues: Content {}
 
 struct DeployTokenRow: Encodable {
     var id: String
