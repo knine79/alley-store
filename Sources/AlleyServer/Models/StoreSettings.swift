@@ -1,6 +1,7 @@
 import AlleyShared
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 /// 관리자가 화면에서 바꿀 수 있는 스토어 설정.
@@ -55,6 +56,26 @@ public final class StoreSettings: Model, @unchecked Sendable {
     @Field(key: "allows_anonymous_feedback")
     public var allowsAnonymousFeedback: Bool
 
+    /// 운영 알림을 어디로 보낼지.
+    ///
+    /// 워커가 조용해지거나 인증서가 만료될 때 가는 알림이다. 앱 하나가 아니라
+    /// 스토어 전체가 멈추는 종류라 관리자가 받아야 한다.
+    ///
+    /// **문자열로 둔다.** 값이 둘뿐이고 `signing_job_state` 처럼 enum 타입을 만들면
+    /// 갈래를 늘릴 때마다 마이그레이션이 필요하다. 모르는 값이 들어오면 읽는 쪽이
+    /// 기본값으로 접는다.
+    @Field(key: "operational_alerts")
+    public var operationalAlertsRaw: String
+
+    /// 위 값을 갈래로 읽는다. 모르는 값은 관리자 DM 으로 접는다.
+    ///
+    /// 접는 쪽을 DM 으로 두는 이유는, 채널은 등록해 둔 것이 있어야 닿고 DM 은
+    /// 설정 없이 닿기 때문이다. 알 수 없는 상태에서는 닿는 쪽이 맞다.
+    public var operationalAlerts: OperationalAlertTarget {
+        get { OperationalAlertTarget(rawValue: operationalAlertsRaw) ?? .admins }
+        set { operationalAlertsRaw = newValue.rawValue }
+    }
+
     /// 마지막으로 설정을 바꾼 사람. 로그인 도메인처럼 위험한 항목이 있어서
     /// 누가 건드렸는지는 남겨둔다.
     @OptionalParent(key: "updated_by")
@@ -72,7 +93,8 @@ public final class StoreSettings: Model, @unchecked Sendable {
         allowedEmailDomains: [String] = [],
         bundleIDPrefix: String? = nil,
         enforceBundleIDPrefix: Bool = true,
-        allowsAnonymousFeedback: Bool = true
+        allowsAnonymousFeedback: Bool = true,
+        operationalAlerts: OperationalAlertTarget = .admins
     ) {
         self.id = Self.singletonID
         self.storeName = storeName
@@ -82,6 +104,7 @@ public final class StoreSettings: Model, @unchecked Sendable {
         self.bundleIDPrefix = bundleIDPrefix
         self.enforceBundleIDPrefix = enforceBundleIDPrefix
         self.allowsAnonymousFeedback = allowsAnonymousFeedback
+        self.operationalAlertsRaw = operationalAlerts.rawValue
     }
 }
 
@@ -177,6 +200,43 @@ public struct AddAnonymousFeedbackSetting: AsyncMigration {
     public func revert(on database: any Database) async throws {
         try await database.schema(StoreSettings.schema)
             .deleteField("allows_anonymous_feedback")
+            .update()
+    }
+}
+
+/// 운영 알림을 어디로 보낼지 정하는 칸을 만든다.
+///
+/// **이미 도는 스토어의 동작을 바꾸지 않는다.** 지금까지 운영 알림은 전역 알림
+/// 대상(채널)으로만 갔다. 기본값을 관리자 DM 으로 깔면, 채널을 등록해 두고 그것을
+/// 보던 조직이 어느 날부터 채널에서 못 받는다.
+///
+/// 그래서 전역 대상이 하나라도 있으면 `channel`, 없으면 `admins` 로 채운다. 전자는
+/// 지금 하던 그대로이고, 후자는 지금까지 아무 데도 안 가던 경우라 바꿀 동작이 없다.
+public struct AddOperationalAlertsSetting: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+        try await sql.raw(
+            """
+            ALTER TABLE store_settings
+            ADD COLUMN operational_alerts text NOT NULL DEFAULT 'admins'
+            """
+        ).run()
+        // 앱에 묶이지 않은 알림 대상이 전역 대상이다.
+        try await sql.raw(
+            """
+            UPDATE store_settings SET operational_alerts = 'channel'
+            WHERE EXISTS (SELECT 1 FROM notification_targets WHERE app_id IS NULL)
+            """
+        ).run()
+    }
+
+    public func revert(on database: any Database) async throws {
+        try await database.schema(StoreSettings.schema)
+            .deleteField("operational_alerts")
             .update()
     }
 }

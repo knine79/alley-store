@@ -621,6 +621,25 @@ public struct NotificationTargetDTO: Codable, Sendable, Identifiable, Equatable 
     }
 }
 
+/// 운영 알림(워커 이상, 인증서 만료)을 어디로 보낼지.
+///
+/// **둘 중 하나만 고른다.** 함께 보내는 선택지를 두지 않는 이유는, 그것을 고른
+/// 조직에서 같은 알림이 채널과 DM 으로 두 번 오기 때문이다. 두 번 오는 알림은
+/// 한 번 오는 알림보다 빨리 무시당한다.
+public enum OperationalAlertTarget: String, Codable, Sendable, CaseIterable {
+    /// 관리자가 등록해 둔 전역 채널로. 여러 명이 보고 이력이 남는다.
+    case channel
+    /// 관리자 전원에게 DM 으로. 등록할 것이 없어 설정을 잊어도 닿는다.
+    case admins
+
+    public var displayName: String {
+        switch self {
+        case .channel: return "Slack 채널"
+        case .admins: return "관리자 DM"
+        }
+    }
+}
+
 /// 알림을 보내는 방식.
 ///
 /// 지금은 웹훅 하나뿐이다. 메일을 붙이게 되면 여기 한 줄이 늘고 보내는 쪽이

@@ -712,17 +712,47 @@ struct AppPagesController: RouteCollection, Sendable {
     ) async {
         let stars = entry.rating.map { String(repeating: "★", count: $0) } ?? ""
         let who = entry.isAnonymous ? "익명" : user.name
-        await request.notifier.notify(
-            app: version.$app.id,
-            message: NotificationMessage(
-                title: "\(version.app.name) \(version.shortVersion) (\(version.buildNumber)) 에 새 피드백",
-                body: [stars, entry.body, "— \(who)"]
-                    .compactMap { $0 }
-                    .filter { !$0.isEmpty }
-                    .joined(separator: "\n"),
-                link: request.consoleLink("/apps/\(version.$app.id.uuidString)")
-            )
+        let message = NotificationMessage(
+            title: "\(version.app.name) \(version.shortVersion) (\(version.buildNumber)) 에 새 피드백",
+            body: [stars, entry.body, "— \(who)"]
+                .compactMap { $0 }
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n"),
+            link: request.consoleLink("/apps/\(version.$app.id.uuidString)")
         )
+
+        let appID = version.$app.id
+        await request.notifier.notify(app: appID, message: message)
+        await notifyWatchers(of: appID, message: message, on: request)
+    }
+
+    /// 이 앱의 피드백을 개인으로 받겠다고 켠 사람들에게 DM 을 보낸다.
+    ///
+    /// **기본은 꺼짐이다.** 앱 하나를 여럿이 맡으면 피드백 하나에 DM 이 여러 통
+    /// 간다. 앱에 붙이는 채널이 이미 그 일을 하고 있어서, 따로 받고 싶은 사람만
+    /// 켠다 (`User.notifyFeedback`).
+    ///
+    /// 올릴 수 있는 사람까지 본다. 오너만 보면 함께 맡은 멤버가 앱 소식에서 빠진다.
+    private func notifyWatchers(
+        of appID: UUID,
+        message: NotificationMessage,
+        on request: Request
+    ) async {
+        guard let app = try? await App.find(appID, on: request.db) else { return }
+        let memberIDs = (try? await AppMember.query(on: request.db)
+            .filter(\.$app.$id == appID)
+            .all()
+            .map(\.$user.id)) ?? []
+
+        let ids = Set(memberIDs + [app.$owner.id])
+        let watchers = (try? await User.query(on: request.db)
+            .filter(\.$id ~~ Array(ids))
+            .filter(\.$notifyFeedback == true)
+            .all()) ?? []
+
+        for watcher in watchers {
+            await request.notifier.notify(person: watcher.email, message: message)
+        }
     }
 
     // MARK: - 피드 토큰

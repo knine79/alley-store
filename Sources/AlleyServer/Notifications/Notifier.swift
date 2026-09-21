@@ -122,6 +122,33 @@ public struct Notifier: Sendable {
         await deliver(message, to: targets)
     }
 
+    /// 운영 알림. 스토어가 정한 곳 **한 군데**로 보낸다.
+    ///
+    /// 채널과 DM 을 함께 보내지 않는다. 같은 알림이 두 번 오면 한 번 오는 것보다
+    /// 빨리 무시당한다. 어느 쪽인지는 관리 화면에서 정한다.
+    public func notifyOperators(_ message: NotificationMessage) async {
+        let settings = try? await StoreSettings.find(StoreSettings.singletonID, on: database)
+        switch settings?.operationalAlerts ?? .admins {
+        case .channel:
+            await notifyGlobal(message: message)
+        case .admins:
+            await notifyAdmins(message)
+        }
+    }
+
+    /// 관리자 전원에게 DM 을 보낸다.
+    ///
+    /// 등록해 둘 것이 없어 설정을 잊어도 닿는다. 예전에는 전역 대상을 만들어 두지
+    /// 않으면 워커가 죽어도 아무 데도 가지 않았고, 그 대상을 만드는 화면조차 없었다.
+    private func notifyAdmins(_ message: NotificationMessage) async {
+        let admins = (try? await User.query(on: database)
+            .filter(\.$role == .admin)
+            .all()) ?? []
+        for admin in admins {
+            await notify(person: admin.email, message: message)
+        }
+    }
+
     /// 사람 한 명에게 보낸다.
     ///
     /// **대상 행을 거치지 않는다.** 앱에 붙이는 대상은 관리자가 만들어 두는 채널이고,

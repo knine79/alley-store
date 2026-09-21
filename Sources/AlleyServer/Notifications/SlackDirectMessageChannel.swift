@@ -48,19 +48,32 @@ public struct SlackDirectMessageChannel: NotificationChannel, Sendable {
 
     /// `endpoint` 는 받는 사람의 이메일이다.
     public func send(_ message: NotificationMessage, to endpoint: String) async throws {
-        let userID = try await lookupUser(email: endpoint)
-        try await post(message, to: userID)
+        let user = try await lookupUser(email: endpoint)
+        try await post(message, to: user.id)
+    }
+
+    /// 이 이메일로 누구에게 닿는지 사람이 읽을 수 있게 돌려준다.
+    ///
+    /// 설정 화면이 "켜면 누구에게 가는가" 를 그 자리에서 보여주려고 쓴다. 보내지
+    /// 않고 찾기만 한다.
+    public func findRecipient(email: String) async throws -> String {
+        let user = try await lookupUser(email: email)
+        // 표시 이름이 없는 계정이 있다. 그때는 핸들만 보여준다.
+        if let name = user.realName, !name.isEmpty {
+            return "\(name) (@\(user.name))"
+        }
+        return "@\(user.name)"
     }
 
     // MARK: - Slack API
 
-    private func lookupUser(email: String) async throws -> String {
+    private func lookupUser(email: String) async throws -> SlackUser {
         let response = try await call(
             "users.lookupByEmail",
             query: "email=\(email.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? email)"
         )
         let decoded = try response.content.decode(LookupResponse.self)
-        guard decoded.ok, let id = decoded.user?.id else {
+        guard decoded.ok, let user = decoded.user else {
             // 이 오류만 따로 가른다. 나머지는 설정이나 권한 문제이고, 이것은 사람마다
             // 다른 일이라 받는 쪽이 할 수 있는 조치가 다르다.
             if decoded.error == "users_not_found" {
@@ -68,7 +81,7 @@ public struct SlackDirectMessageChannel: NotificationChannel, Sendable {
             }
             throw ChannelError.rejected(api: "users.lookupByEmail", error: decoded.error ?? "알 수 없음")
         }
-        return id
+        return user
     }
 
     private func post(_ message: NotificationMessage, to userID: String) async throws {
@@ -113,10 +126,21 @@ public struct SlackDirectMessageChannel: NotificationChannel, Sendable {
         }
     }
 
-    private struct LookupResponse: Content {
-        struct SlackUser: Content {
-            var id: String
+    /// Slack 이 돌려주는 사용자. 쓰는 것만 담는다.
+    struct SlackUser: Content {
+        var id: String
+        /// 핸들(`@` 뒤에 오는 것).
+        var name: String
+        /// 표시 이름. 없는 계정이 있다.
+        var realName: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id, name
+            case realName = "real_name"
         }
+    }
+
+    private struct LookupResponse: Content {
         var ok: Bool
         var error: String?
         var user: SlackUser?

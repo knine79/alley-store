@@ -36,6 +36,7 @@ enum AdminTab: String, CaseIterable, Sendable {
     case users
     case workers
     case portal
+    case notifications
     case stats
 
     /// 탭에 적히는 글자. 각 화면의 `<h1>` 과 브라우저 탭 제목으로도 쓴다
@@ -50,6 +51,9 @@ enum AdminTab: String, CaseIterable, Sendable {
         // "개발자 포털" 이었다. 이 스토어에도 developer 역할이 있어서 그 사람들의
         // 화면으로 읽혔다. 여기서 보는 것은 Apple 쪽 자격이다.
         case .portal: "앱 서명"
+        // 여기서 정하는 것은 운영 알림 한 갈래다. 앱 채널은 앱 상세에, 개인 알림은
+        // 내 알림에 있다. 셋이 받는 사람도 정하는 사람도 달라서 화면을 나눴다.
+        case .notifications: "알림"
         case .stats: "통계"
         }
     }
@@ -61,6 +65,7 @@ enum AdminTab: String, CaseIterable, Sendable {
         case .users: "/admin/users"
         case .workers: "/admin/workers"
         case .portal: "/admin/portal"
+        case .notifications: "/admin/notifications"
         case .stats: "/admin/stats"
         }
     }
