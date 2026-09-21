@@ -153,8 +153,13 @@ struct StoreSettingsPageTests {
 
     @Test("프리픽스 강제 여부가 체크 상태로 나타난다", arguments: [true, false])
     func reflectsCheckboxState(_ enforced: Bool) async throws {
+        // 프리픽스를 함께 준다. 비어 있으면 강제 여부가 아무 일도 하지 않고,
+        // 화면도 그 사실을 알리는 쪽으로 바뀐다. 여기서 보려는 것은 그것이 아니다.
         try await withMigratedApp(
-            overrides: ["ENFORCE_BUNDLE_ID_PREFIX": enforced ? "true" : "false"]
+            overrides: [
+                "BUNDLE_ID_PREFIX": "com.example",
+                "ENFORCE_BUNDLE_ID_PREFIX": enforced ? "true" : "false",
+            ]
         ) { app in
             let (_, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
 

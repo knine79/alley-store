@@ -123,6 +123,19 @@ func withMigratedApp(
     _ body: (Application) async throws -> Void
 ) async throws {
     await DatabaseTestLock.shared.acquire()
+    // **딸려 오는 번들을 레포에서 찾지 않게 한다.** 예전에는 실제 디렉터리를 봐서,
+    // 그 자리에 파일을 두고 개발하면 "이미지에 번들이 없을 때" 를 보는 시험이
+    // 깨졌다. CI 는 그 자리가 늘 비어 있어 아무도 몰랐다.
+    //
+    // 기본은 빈 임시 자리다. 있을 때를 보려면 `withBundledStoreApp` 이 채운다.
+    let bundleRoot = FileManager.default.temporaryDirectory
+        .appendingPathComponent("alley-bundle-\(UUID().uuidString)")
+    BundledStoreApp.useRootForTesting(bundleRoot.path + "/")
+    defer {
+        BundledStoreApp.useRootForTesting(nil)
+        try? FileManager.default.removeItem(at: bundleRoot)
+    }
+
     do {
         try await withConfiguredApp(overrides: overrides) { app in
             try await app.autoRevert()
@@ -140,6 +153,24 @@ func withMigratedApp(
         throw error
     }
     await DatabaseTestLock.shared.release()
+}
+
+/// 그 임시 자리에 번들을 놓아둔다. "이미지에 번들이 있을 때" 를 보는 시험이 쓴다.
+///
+/// `withMigratedApp` 안에서만 뜻이 있다. 그 바깥에서는 가리키는 자리가 없다.
+func withBundledStoreApp(_ body: () async throws -> Void) async throws {
+    let root = BundledStoreApp.rootForTesting
+    let url = URL(fileURLWithPath: root + BundledStoreApp.path)
+    try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(), withIntermediateDirectories: true
+    )
+    try StoreAppBundleRewriterTests.baseZip().write(to: url)
+    BundledStoreApp.forgetCacheForTesting()
+    defer {
+        try? FileManager.default.removeItem(at: url)
+        BundledStoreApp.forgetCacheForTesting()
+    }
+    try await body()
 }
 
 // MARK: - 스토리지 대역

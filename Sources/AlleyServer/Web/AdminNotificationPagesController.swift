@@ -39,6 +39,18 @@ struct AdminNotificationPagesController: RouteCollection, Sendable {
         guard let target = OperationalAlertTarget(rawValue: values.target ?? "") else {
             throw Abort(.badRequest, reason: "알 수 없는 값입니다: \(values.target ?? "")")
         }
+        // 받아 봐야 아무 데도 가지 않는 설정이 저장되고, 관리자는 골라뒀으니 받고
+        // 있다고 믿는다. 오류 화면으로 보내지 않고 이 화면에 이유만 띄운다.
+        if target == .admins, request.application.alleyConfig.slackBotToken == nil {
+            let view = try await render(
+                error: "Slack 봇이 연결되어 있지 않아 관리자 DM 을 고를 수 없습니다.",
+                on: request
+            )
+            let response = Response(status: .conflict)
+            response.headers.contentType = .html
+            response.body = .init(buffer: view.data)
+            return response
+        }
 
         let settings = try await request.storeSettings()
         settings.operationalAlerts = target

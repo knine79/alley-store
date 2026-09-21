@@ -25,6 +25,11 @@ struct MePagesController: RouteCollection, Sendable {
     @Sendable
     func submitNotifications(request: Request) async throws -> Response {
         let user = try request.requireUser()
+        // 화면이 칸을 그리지 않는 상태다. 여기까지 오는 길은 폼을 손으로 만드는
+        // 것뿐이고, 받아 봐야 켜도 아무 일이 없는 값이 저장된다.
+        guard request.application.alleyConfig.slackBotToken != nil else {
+            throw Abort(.conflict, reason: "Slack 봇이 연결되어 있지 않아 알림을 정할 수 없습니다.")
+        }
         let values = try request.content.decode(NotificationPreferenceValues.self)
 
         // 체크박스는 꺼져 있으면 아예 보내지지 않는다. 값이 없으면 끈 것이다.

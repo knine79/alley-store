@@ -15,31 +15,13 @@ import VaporTesting
 struct BundledStoreAppTests {
     /// 이미지 안의 자리에 번들을 놓아둔다. 실제 배포에서는 CI 가 넣는다.
     ///
-    /// 실행 디렉터리를 건드리므로 끝나고 되돌린다. 남겨두면 다른 시험이 "이미지에
-    /// 번들이 있는" 상태로 돌아서, 없을 때의 동작을 아무도 확인하지 않게 된다.
+    /// **레포 디렉터리를 건드리지 않는다.** 예전에는 실제 자리에 써 넣고 지웠는데,
+    /// 그러면 그 자리에 파일을 두고 개발할 수 없었다. `withMigratedApp` 이 잡아둔
+    /// 임시 자리를 쓴다.
     private func withBundled(
         in app: Application, _ body: () async throws -> Void
     ) async throws {
-        let url = URL(fileURLWithPath: app.directory.workingDirectory)
-            .appendingPathComponent(BundledStoreApp.path)
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(), withIntermediateDirectories: true
-        )
-        let existed = FileManager.default.fileExists(atPath: url.path)
-        let previous = existed ? try Data(contentsOf: url) : nil
-
-        try StoreAppBundleRewriterTests.baseZip().write(to: url)
-        BundledStoreApp.forgetCacheForTesting()
-        defer {
-            if let previous {
-                try? previous.write(to: url)
-            } else {
-                try? FileManager.default.removeItem(at: url)
-            }
-            BundledStoreApp.forgetCacheForTesting()
-        }
-
-        try await body()
+        try await withBundledStoreApp(body)
     }
 
     private func settings(on app: Application) async throws -> StoreAppSettings {

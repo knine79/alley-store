@@ -15,15 +15,20 @@
 
     <!-- **켜기 전에 닿는지 보여준다.** 스토어 계정과 Slack 계정의 이메일이 다르면
          찾지 못하는데, 그 사실을 처음 알림이 날 때 알게 되면 늦다. 그때는 알림이
-         안 온 것과 실패가 없는 것이 겉으로 같다. -->
-    #if(delivery.isUsable):
+         안 온 것과 실패가 없는 것이 겉으로 같다.
+
+         닿지 않으면 칸을 아예 그리지 않는다. 켜도 아무 일이 없는 체크박스를 남겨두면
+         켜둔 사람은 받고 있다고 믿는다. -->
+    #if(!delivery.isUsable):
+    <p class="notice notice-warn">#(delivery.detail)</p>
+    <p class="field-note">
+        받을 수 있게 되면 여기서 고를 수 있습니다. 지금 정해둘 것은 없습니다.
+    </p>
+    #else:
     <p class="fact-line">
         <span class="fact-label">받는 곳</span>
         <span class="fact-value">#(delivery.detail)</span>
     </p>
-    #else:
-    <p class="notice notice-warn">#(delivery.detail)</p>
-    #endif
 
     <form class="form" method="post" action="/me/notifications">
         <fieldset class="choice-group">
@@ -35,10 +40,7 @@
                        #if(signingFailure):checked#endif>
                 <span>
                     <span class="choice-name">내가 올린 버전의 서명이 실패했을 때</span>
-                    <span class="choice-note">
-                        내가 올린 것만 옵니다. 실패는 올린 사람이 고쳐야 해서 기본으로
-                        켜져 있습니다.
-                    </span>
+                    <span class="choice-note">내가 올린 것만 옵니다.</span>
                 </span>
             </label>
 
@@ -46,9 +48,12 @@
                 <input type="checkbox" name="feedback" #if(feedback):checked#endif>
                 <span>
                     <span class="choice-name">내가 올릴 수 있는 앱에 피드백이 왔을 때</span>
+                    <!-- **앱 채널과 함께 간다.** 채널이 걸려 있으면 그쪽에도 그대로
+                         가고, 이것은 나에게 한 통이 더 오는 설정이다. 둘 중 하나를
+                         고르는 것으로 읽히면 켜둔 사람이 채널을 껐다고 여긴다. -->
                     <span class="choice-note">
-                        앱 하나를 여럿이 맡으면 각자에게 따로 갑니다. 팀이 함께 보려면
-                        앱 채널 쪽이 낫습니다.
+                        앱에 걸어둔 채널로도 그대로 갑니다. 켜면 나에게 한 통이 더 옵니다.
+                        앱 하나를 여럿이 맡으면 켜둔 사람마다 따로 받습니다.
                     </span>
                 </span>
             </label>
@@ -58,6 +63,7 @@
             <button class="button button-primary" type="submit">저장</button>
         </div>
     </form>
+    #endif
 </section>
 
 #endexport
