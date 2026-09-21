@@ -1,4 +1,4 @@
-# 서명 실패를 알리는 Slack 앱.
+# 스토어가 사람에게 DM 을 보내는 Slack 앱.
 #
 # <https://api.slack.com/apps> > Create New App > **From an app manifest** 에서
 # 워크스페이스를 고르고 이 내용을 붙여넣으면 됩니다. 권한을 하나씩 찾아 켜는 것보다
@@ -8,14 +8,18 @@
 # 서버 환경변수 `SLACK_BOT_TOKEN` 에 넣으세요.
 #
 # **이 앱은 채널에 들어가지 않습니다.** 사람에게 DM 만 보냅니다. 초대할 채널이
-# 없으므로 설치만 하면 끝입니다.
+# 없으므로 설치만 하면 끝입니다. 채널로 가는 알림은 앱마다 따로 두는 Incoming
+# Webhook 이 맡습니다.
+#
+# 지금 DM 으로 나가는 것은 서명 실패 하나뿐이지만, 받는 사람이 정해지는 알림은
+# 앞으로도 이 앱으로 나갑니다. 이름과 설명을 그 하나에 맞춰 적지 않는 이유입니다.
 
 display_information:
   # 받는 사람에게 보이는 이름입니다. 스토어 이름에 맞춰 바꾸세요.
   name: Alley Store
-  description: 서명이 실패하면 올린 사람에게 알립니다
-  # 실패를 알리는 앱이라 붉은 계열로 둡니다.
-  background_color: "#c0392b"
+  description: 내 앱에 생긴 일을 알려드립니다
+  # 알림 종류가 늘어날 자리라 실패를 뜻하는 붉은색은 쓰지 않습니다.
+  background_color: "#2f6b41"
 
 features:
   bot_user:
