@@ -300,6 +300,31 @@ curl -fsSL -o .env https://raw.githubusercontent.com/<소유자>/<레포>/main/.
 | `ALLOWED_EMAIL_DOMAINS` | 로그인을 허용할 도메인 |
 | `ALLEY_IMAGE`, `ALLEY_IMAGE_TAG` | 받아올 서버 이미지 (아래) |
 
+안 채워도 되는 것:
+
+| 변수 | 값 |
+| --- | --- |
+| `SLACK_BOT_TOKEN` | 서명이 실패했을 때 올린 사람에게 Slack DM 을 보냅니다 (아래) |
+
+### 서명 실패를 올린 사람에게 알리려면
+
+비워 두면 실패해도 알림이 가지 않습니다. 올린 사람이 웹 콘솔에 다시 들어와야
+실패를 압니다.
+
+**앱 알림 대상(Incoming Webhook)으로는 안 됩니다.** 그쪽은 만들 때 정한 채널 하나에
+쓰는 것이라 받는 사람을 고를 수 없습니다. 서명 실패는 그 버전을 올린 사람이 고치는
+일이라 그 사람에게 닿아야 합니다.
+
+1. Slack 워크스페이스에 앱을 하나 만듭니다 (<https://api.slack.com/apps>)
+2. **OAuth & Permissions** 에서 봇 권한 둘을 줍니다
+   - `users:read.email` - 이메일로 사용자를 찾습니다
+   - `chat:write` - 그 사용자에게 DM 을 씁니다
+3. 워크스페이스에 설치하고 **Bot User OAuth Token** (`xoxb-` 로 시작)을 받습니다
+4. `.env` 에 `SLACK_BOT_TOKEN=xoxb-...` 로 넣습니다
+
+**스토어 계정과 Slack 계정의 이메일이 같아야 합니다.** 다르면 찾지 못하고, 그 사실이
+서버 로그에 남습니다. 조직 계정으로 둘 다 쓰는 것이 보통이라 이 가정으로 시작합니다.
+
 ### 어떤 태그를 고르나
 
 `ALLEY_IMAGE=ghcr.io/<소유자>/<레포>` 로 두고 태그만 고릅니다.

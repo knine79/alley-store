@@ -15,6 +15,14 @@ public struct AppConfig: Sendable {
     public var security: SecurityConfig
     /// App Store Connect API 연동. 설정하지 않으면 그 기능만 꺼진다.
     public var appStoreConnect: AppStoreConnectConfig?
+    /// Slack 봇 토큰. 사람에게 DM 을 보내는 데 쓴다.
+    ///
+    /// **웹훅으로는 DM 을 못 보낸다.** Incoming Webhook 은 만들 때 정한 채널 하나에만
+    /// 쓴다. 서명 실패는 그 버전을 올린 사람이 고치는 일이라 그 사람에게 닿아야 하고,
+    /// 그러려면 봇 토큰과 이메일로 사용자를 찾는 권한(`users:read.email`)이 필요하다.
+    ///
+    /// 없으면 사람에게 보내는 알림만 조용히 건너뛴다. 앱 채널로 가는 알림은 그대로다.
+    public var slackBotToken: String?
     /// 사용자와 워커가 접근하는 서버의 공개 주소. 콜백 URL 구성에 쓴다.
     public var publicBaseURL: String
     /// 업로드 통지 없이 버려진 `draft` 버전을 지우기까지 기다리는 시간(초).
@@ -400,6 +408,7 @@ extension AppConfig {
                 sessionTTL: try integer("SESSION_TTL", default: 60 * 60 * 24 * 7)
             ),
             appStoreConnect: appStoreConnectConfig(),
+            slackBotToken: optional("SLACK_BOT_TOKEN"),
             publicBaseURL: try validatedPublicBaseURL(),
             // 기본 사흘. presigned 업로드 URL 의 기본 수명(1시간)의 일흔두 배라
             // 아직 올리는 중인 업로드를 지울 여지가 없고, 금요일 저녁에 버려진
