@@ -47,6 +47,17 @@ public final class User: Model, @unchecked Sendable {
     @OptionalField(key: "last_login_at")
     public var lastLoginAt: Date?
 
+    /// 관리자가 이 사람의 역할을 손으로 정했나.
+    ///
+    /// **웹 콘솔로 들어온 사람은 자동으로 `developer` 가 된다** (ADR-0056). 그 승격이
+    /// 관리자가 내린 결정을 매 로그인마다 되돌리면 안 된다. 관리자가 한 번이라도
+    /// 역할을 정하면 이 값이 켜지고, 그 뒤로 자동 승격은 이 계정을 건너뛴다.
+    ///
+    /// 이 값이 없으면 "내려두면 다음 로그인에 다시 올라간다" 가 되어, 역할 화면이
+    /// 눌리기는 하는데 아무것도 바뀌지 않는 버튼이 된다.
+    @Field(key: "role_set_by_admin")
+    public var roleSetByAdmin: Bool
+
     public init() {}
 
     public init(
@@ -56,7 +67,8 @@ public final class User: Model, @unchecked Sendable {
         email: String,
         name: String,
         avatarURL: String? = nil,
-        role: UserRole
+        role: UserRole,
+        roleSetByAdmin: Bool = false
     ) {
         self.id = id
         self.issuer = issuer
@@ -65,6 +77,7 @@ public final class User: Model, @unchecked Sendable {
         self.name = name
         self.avatarURL = avatarURL
         self.role = role
+        self.roleSetByAdmin = roleSetByAdmin
     }
 }
 
@@ -193,6 +206,39 @@ public struct AddIssuerToUser: AsyncMigration {
             ADD CONSTRAINT "uq:users.google_subject" UNIQUE (google_subject)
             """#
         ).run()
+    }
+}
+
+/// 관리자가 역할을 손으로 정했는지를 기록하는 칸을 만든다 (ADR-0056).
+///
+/// **이미 있는 계정은 전부 `true` 로 채운다.** 지금까지 역할은 사람이 정하는 것
+/// 하나뿐이었다. `false` 로 깔면 그동안 `user` 로 두기로 한 계정들이 다음 로그인에
+/// 조용히 `developer` 로 올라간다. 마이그레이션이 권한을 바꾸는 일은 없어야 한다.
+public struct AddRoleSetByAdminToUser: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+        try await sql.raw(
+            """
+            ALTER TABLE users
+            ADD COLUMN role_set_by_admin boolean NOT NULL DEFAULT true
+            """
+        ).run()
+        // 기본값은 이미 있는 행을 채우려고 뒀다. 남겨두면 앞으로 만들어지는 계정도
+        // "관리자가 정한 것" 으로 들어와 자동 승격을 영영 받지 못한다.
+        try await sql.raw(
+            "ALTER TABLE users ALTER COLUMN role_set_by_admin SET DEFAULT false"
+        ).run()
+    }
+
+    public func revert(on database: any Database) async throws {
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+        try await sql.raw("ALTER TABLE users DROP COLUMN role_set_by_admin").run()
     }
 }
 
