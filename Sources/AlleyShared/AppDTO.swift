@@ -626,12 +626,24 @@ public struct NotificationTargetDTO: Codable, Sendable, Identifiable, Equatable 
 /// 지금은 웹훅 하나뿐이다. 메일을 붙이게 되면 여기 한 줄이 늘고 보내는 쪽이
 /// 갈린다. 채널을 타입으로 두는 이유가 그것이다.
 public enum NotificationChannelKind: String, Codable, Sendable, CaseIterable {
-    /// Slack Incoming Webhook.
+    /// Slack Incoming Webhook. 정해진 채널 하나에 쓴다.
     case slack
+    /// Slack DM. 봇 토큰으로 사람에게 직접 보낸다.
+    ///
+    /// **관리자가 고르는 값이 아니다.** 알림 대상 화면에는 나오지 않는다. 앱에 붙이는
+    /// 대상은 채널이고, 이쪽은 "그 버전을 올린 사람" 처럼 서버가 받는 사람을 아는
+    /// 경우에만 쓴다 (`Notifier.notify(person:)`).
+    case slackDirectMessage = "slack_dm"
+
+    /// 관리자가 알림 대상으로 고를 수 있는 것들.
+    ///
+    /// `allCases` 를 화면에 그대로 내보내면 고를 수 없는 값이 목록에 선다.
+    public static var selectable: [NotificationChannelKind] { [.slack] }
 
     public var displayName: String {
         switch self {
         case .slack: return "Slack"
+        case .slackDirectMessage: return "Slack DM"
         }
     }
 }

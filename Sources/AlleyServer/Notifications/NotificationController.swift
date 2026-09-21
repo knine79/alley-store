@@ -153,6 +153,12 @@ enum NotificationTargets {
     /// 오타 하나로 알림이 조용히 사라지는 것을 저장 시점에 막는다. 실제로 받는지는
     /// 보내봐야 알지만, 형식이 틀린 것은 지금 걸러낼 수 있다.
     static func validate(endpoint: String, kind: NotificationChannelKind) throws {
+        // DM 은 관리자가 만드는 대상이 아니다. 받는 사람을 서버가 알고 그때그때
+        // 보내는 것이라 등록할 자리가 없다 (`Notifier.notify(person:)`).
+        guard kind != .slackDirectMessage else {
+            throw Abort(.badRequest, reason: "Slack DM 은 알림 대상으로 등록할 수 없습니다.")
+        }
+
         guard let components = URLComponents(string: endpoint),
               components.scheme?.lowercased() == "https",
               let host = components.host
@@ -168,6 +174,9 @@ enum NotificationTargets {
                     reason: "Slack 웹훅 주소가 아닙니다. hooks.slack.com 으로 시작해야 합니다."
                 )
             }
+        case .slackDirectMessage:
+            // 위에서 막았다. 갈래가 늘면 컴파일러가 여기를 다시 물어본다.
+            break
         }
     }
 

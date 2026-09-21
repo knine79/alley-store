@@ -122,6 +122,28 @@ public struct Notifier: Sendable {
         await deliver(message, to: targets)
     }
 
+    /// 사람 한 명에게 보낸다.
+    ///
+    /// **대상 행을 거치지 않는다.** 앱에 붙이는 대상은 관리자가 만들어 두는 채널이고,
+    /// 이쪽은 서버가 받는 사람을 아는 경우다. 서명이 실패하면 그 버전을 올린 사람이
+    /// 고치는데, 그 사람이 미리 자기 대상을 만들어 뒀을 리 없다.
+    ///
+    /// 보낼 채널이 없으면 조용히 지나간다. 봇 토큰을 넣지 않은 스토어가 그렇고,
+    /// 그때는 예전처럼 사람이 화면을 다시 보는 것으로 굴러간다.
+    public func notify(person email: String, message: NotificationMessage) async {
+        guard let channel = channels[.slackDirectMessage] else {
+            logger.debug("사람에게 보내는 알림 채널이 없어 건너뜁니다 [\(email)]")
+            return
+        }
+        do {
+            try await channel.send(message, to: email)
+        } catch {
+            // **여기서 던지지 않는다.** 이 알림은 서명 실패를 기록하는 흐름 안에서
+            // 불린다. 알림이 실패했다고 그 기록까지 되돌리면 잡이 멈춘 채로 남는다.
+            logger.warning("알림을 보내지 못했습니다 [받는 사람: \(email), 이유: \(error)]")
+        }
+    }
+
     private func deliver(_ message: NotificationMessage, to targets: [NotificationTarget]) async {
         for target in targets {
             guard let channel = channels[target.kind] else {
@@ -144,12 +166,26 @@ public struct Notifier: Sendable {
     }
 }
 
+extension Application {
+    /// 이 스토어가 쓸 수 있는 알림 채널들.
+    ///
+    /// 봇 토큰이 없으면 DM 채널이 빠진다. 요청 경로와 주기 작업이 같은 목록을 써야
+    /// 한쪽에만 붙는 일이 없다.
+    var notificationChannels: [any NotificationChannel] {
+        var channels: [any NotificationChannel] = [SlackWebhookChannel(client: client)]
+        if let token = alleyConfig.slackBotToken {
+            channels.append(SlackDirectMessageChannel(client: client, botToken: token))
+        }
+        return channels
+    }
+}
+
 extension Request {
     /// 이 요청에서 쓸 알림 발송기.
     var notifier: Notifier {
         Notifier(
             database: db,
-            channels: [SlackWebhookChannel(client: client)],
+            channels: application.notificationChannels,
             logger: logger
         )
     }

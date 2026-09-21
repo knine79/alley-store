@@ -478,6 +478,48 @@ public struct WorkerController: RouteCollection, Sendable {
         request.logger.warning(
             "서명 실패 [버전: \(job.$version.id), 코드: \(code?.rawValue ?? "없음"), 이유: \(reason)]"
         )
+
+        await announceFailure(job, reason: reason, code: code, on: request)
+    }
+
+    /// 실패를 올린 사람에게 알린다.
+    ///
+    /// **여기가 확정된 실패만 지나는 자리다.** 다시 해볼 만한 실패는 위에서 큐로
+    /// 돌아가므로 여기까지 오지 않는다. 재시도마다 알리면 저절로 풀릴 일에 사람을
+    /// 부르게 된다.
+    ///
+    /// 성공은 알리지 않는다. 올린 사람은 방금 올리고 화면을 보고 있다. 실패만
+    /// 알리는 이유는 그 화면을 떠난 뒤에 일어나기 때문이다.
+    private func announceFailure(
+        _ job: SigningJob,
+        reason: String,
+        code: SigningFailureCode?,
+        on request: Request
+    ) async {
+        // 올린 사람을 모르면 보낼 곳이 없다. 관계가 안 실렸을 때 여기서 던지면
+        // 실패 기록까지 되돌아가므로 조용히 넘긴다.
+        guard let uploader = try? await job.version.$createdBy.get(on: request.db) else {
+            request.logger.notice("올린 사람을 찾지 못해 실패 알림을 건너뜁니다 [버전: \(job.$version.id)]")
+            return
+        }
+        let app = (try? await job.version.$app.get(on: request.db))
+        let name = app?.name ?? "앱"
+        let appID = job.version.$app.id
+
+        await request.notifier.notify(
+            person: uploader.email,
+            message: NotificationMessage(
+                title: "\(name) \(job.version.shortVersion) (\(job.version.buildNumber)) 서명이 실패했습니다",
+                // 갈래 이름과 무엇을 하면 되는지를 함께 싣는다. 코드만 보내면 받는
+                // 사람이 콘솔에 들어와 다시 읽어야 한다.
+                body: [
+                    code.map(SigningFailureGuidance.title),
+                    code.map(SigningFailureGuidance.whatToDo),
+                    reason
+                ].compactMap { $0 }.joined(separator: "\n"),
+                link: request.consoleLink("/apps/\(appID.uuidString)")
+            )
+        )
     }
 
     /// 다시 해볼 만한 실패라 잡을 큐에 돌려놓는다.

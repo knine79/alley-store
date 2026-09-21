@@ -9,7 +9,11 @@ import VaporTesting
 
 /// 보낸 것을 기억하는 가짜 채널.
 final class RecordingChannel: NotificationChannel, @unchecked Sendable {
-    let kind: NotificationChannelKind = .slack
+    let kind: NotificationChannelKind
+
+    init(kind: NotificationChannelKind = .slack) {
+        self.kind = kind
+    }
 
     private let lock = NSLock()
     private var sent: [(NotificationMessage, String)] = []
