@@ -418,157 +418,15 @@
 #if(canManage):
 <section class="section">
     <h2 class="section-title">알림</h2>
-    <!-- 어디에 무엇을 넣는지는 칸 옆에서 말한다. 여기서 또 적으면 같은 말이 두 번
-         서고, 그러면 둘 다 읽히지 않는다. -->
     <p class="page-lead">
-        이 앱에 새 피드백이 오면 알릴 곳입니다. 개인으로 받는 알림은
-        <a href="/me/notifications">내 알림</a> 에서 따로 정합니다.
+        이 앱에 새 피드백이 오거나 서명이 실패하면 알립니다. 나에게 오는 알림을 무엇으로
+        받을지는 <a href="/me/notifications">내 알림</a> 에서 정합니다.
     </p>
 
-    #if(notificationError):
-    <p class="notice notice-error">#(notificationError)</p>
-    #endif
-
-    #if(count(notificationTargets) == 0):
-    <div class="empty">
-        <p>알림 대상이 없습니다. 피드백이 와도 아무도 모릅니다.</p>
-    </div>
-    #else:
-    <!-- **어디로 가는지를 보여준다.** 이름만 있으면 지운 대상을 다시 만들 때 무엇이
-         있었는지 알 길이 없다. 메일 주소는 자격증명이 아니라 그냥 주소라 가릴 이유가
-         없고, 웹훅은 가려야 해서 그 사실을 대신 적는다. -->
-    <table class="table">
-        <thead>
-            <tr>
-                <th class="table-fill">받는 곳</th>
-                <th class="table-tight">방식</th>
-                <th class="table-tight"><span class="visually-hidden">삭제</span></th>
-            </tr>
-        </thead>
-        <tbody>
-            #for(target in notificationTargets):
-            <tr>
-                <!-- 이름이 먼저다. 주소는 그 아래 한 줄로 붙는다. 메일 주소가 별칭이면
-                     그것만 봐서는 누구인지 모르고, 웹훅 주소는 아예 보여주지 않는다. -->
-                <td class="table-fill">
-                    <span class="table-strong">#(target.name)</span>
-                    #if(target.endpoint):
-                    <span class="table-note"><code>#(target.endpoint)</code></span>
-                    #endif
-                </td>
-                <td class="table-tight table-muted">
-                    #if(target.kind == "email"):메일#else:Slack 채널#endif
-                </td>
-                <td class="table-tight">
-                    <form class="row-form" method="post"
-                          action="/apps/#(app.id)/notification-targets/#(target.id)/delete">
-                        <button class="button" type="submit">삭제</button>
-                    </form>
-                </td>
-            </tr>
-            #endfor
-        </tbody>
-    </table>
-    #endif
-
-    <!-- 표 바로 아래에 칸이 붙어 서면 그 칸들이 표의 일부로 읽힌다. 새로 만드는
-         자리라는 것을 제목으로 먼저 말한다. -->
-    <form class="form" method="post" action="/apps/#(app.id)/notification-targets">
-        <!-- `fieldset` + `legend` 로 둔다. `legend` 는 grid 항목이 아니라서 묶음의
-             `gap` 이 걸리지 않고 자기 아래 여백만 갖는다. `h3` 로 뒀더니 그 여백에
-             `gap` 이 한 번 더 붙어 제목과 첫 칸이 멀어졌다. -->
-        <fieldset class="form-group">
-            <legend class="form-group-title">대상 추가</legend>
-
-            <!-- **방식을 먼저 고른다.** 그래야 아래 칸에 무엇을 넣는지가 정해진다.
-                 이름을 맨 위에 뒀더니 무엇의 이름인지 알 수 없는 칸이 첫 줄에 섰다.
-
-                 **고를 것이 하나뿐이면 고르게 하지 않는다.** 스토어에 메일 설정이
-                 없으면 메일 주소를 넣어도 갈 곳이 없다. 그때는 칸을 그리지 않고
-                 서버가 웹훅으로 읽는다. -->
-            #if(canUseEmailTarget):
-            <!-- 고른 방식에 따라 아래 칸의 이름과 예시가 바뀐다
-                 (`notification-target-form.js`). 무엇을 넣는지는 방식마다 아주 다른데,
-                 둘을 아우르는 말로 적으면 어느 쪽에도 맞지 않는 안내가 된다.
-
-                 바뀔 말은 여기 `data-` 에 둔다. 스크립트가 한국어를 들고 있으면 문구를
-                 다듬을 때 화면과 따로 놀기 시작한다. -->
-            <label class="field">
-                <span class="field-label">방식</span>
-                <select class="input" name="kind" data-target-kind>
-                    <option value="slack"
-                            data-endpoint-label="Slack 웹훅 주소"
-                            data-endpoint-placeholder="https://hooks.slack.com/services/..."
-                            data-endpoint-note="채널 설정에서 받은 Incoming Webhook 주소입니다. 그 자체가 채널에 글을 쓸 수 있는 자격증명이라 저장하면 다시 보여주지 않습니다."
-                            data-name-label="채널 이름"
-                            data-name-placeholder="팀 채널"
-                            data-name-note="웹훅 주소는 저장하면 보이지 않습니다. 목록에서 어느 채널인지 알아볼 이름을 적으세요."
-                            >Slack 채널</option>
-                    <option value="email"
-                            data-endpoint-label="받을 메일 주소"
-                            data-endpoint-placeholder="team@example.com"
-                            data-endpoint-note="이 주소로 바로 보냅니다. 여러 명이 봐야 하면 팀 메일링 리스트 주소를 넣으세요."
-                            data-name-label="받는 사람"
-                            data-name-placeholder="플랫폼팀"
-                            data-name-note="주소만으로는 누구인지 알기 어렵습니다. 목록에서 알아볼 이름을 적으세요."
-                            >메일</option>
-                </select>
-            </label>
-            <label class="field" data-endpoint-field>
-                <span class="field-label">받을 곳</span>
-                <input class="input" type="text" name="endpoint" required
-                       placeholder="https://hooks.slack.com/services/... 또는 team@example.com"
-                       autocapitalize="off" autocorrect="off" spellcheck="false">
-                <span class="field-note">
-                    Slack 채널이면 채널 설정에서 받은 Incoming Webhook 주소를, 메일이면
-                    받을 주소를 넣으세요. 웹훅 주소는 그 자체가 채널에 글을 쓸 수 있는
-                    자격증명이라 저장하면 다시 보여주지 않습니다.
-                </span>
-            </label>
-
-            <!-- **메일에도 이름을 받는다.** 주소가 곧 받는 곳이라 지웠다가 되돌렸다.
-                 별칭이나 메일링 리스트 주소는 그것만 봐서는 누구인지 알기 어렵고,
-                 그런 주소가 목록에 둘 셋 서면 어느 것이 어느 팀인지 매번 짚어야 한다.
-
-                 무엇을 적는 칸인지는 방식마다 다르다. 웹훅은 보이지 않는 주소를
-                 대신할 이름이고, 메일은 그 주소가 누구인지다. -->
-            <label class="field" data-name-field>
-                <span class="field-label">채널 이름</span>
-                <input class="input" type="text" name="name" required placeholder="팀 채널"
-                       autocapitalize="off" autocorrect="off" spellcheck="false">
-                <span class="field-note">
-                    웹훅 주소는 저장하면 보이지 않습니다. 목록에서 어느 채널인지 알아볼
-                    이름을 적으세요.
-                </span>
-            </label>
-            #else:
-            <label class="field">
-                <span class="field-label">Slack 웹훅 주소</span>
-                <input class="input" type="url" name="endpoint" required
-                       placeholder="https://hooks.slack.com/services/..."
-                       autocapitalize="off" autocorrect="off" spellcheck="false">
-                <span class="field-note">
-                    채널 설정에서 받은 Incoming Webhook 주소입니다. 그 자체가 채널에
-                    글을 쓸 수 있는 자격증명이라 저장하면 다시 보여주지 않습니다.
-                </span>
-            </label>
-            <label class="field">
-                <span class="field-label">채널 이름</span>
-                <input class="input" type="text" name="name" required placeholder="팀 채널"
-                       autocapitalize="off" autocorrect="off" spellcheck="false">
-                <span class="field-note">
-                    위 주소는 저장하면 보이지 않으니, 목록에서 어느 채널인지 알아볼
-                    이름을 적습니다.
-                </span>
-            </label>
-            #endif
-        </fieldset>
-
-        <div class="form-actions">
-            <button class="button button-primary" type="submit">추가</button>
-        </div>
-    </form>
+    #extend("alert-delivery")
 </section>
+
+#extend("alert-channels")
 #endif
 
 #if(canManage):
@@ -814,9 +672,5 @@
 <script src="/member-search.js?v=#(page.assetVersion)" defer></script>
 #endif
 
-<!-- 고른 방식에 알림 대상 칸을 맞춘다. 고를 것이 하나뿐이면 맞출 것도 없다. -->
-#if(canManage):#if(canUseEmailTarget):
-<script src="/notification-target-form.js?v=#(page.assetVersion)" defer></script>
-#endif#endif
 #endexport
 #endextend

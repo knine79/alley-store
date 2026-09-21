@@ -588,7 +588,7 @@ POST  /api/v1/apps/:id/feed-tokens     # Sparkle 피드 토큰 발급 (ADR-0017)
 GET   /api/v1/deploy/app               # 배포 토큰이 자기 앱을 확인
 GET   /api/v1/apps/:id/feedback        # 별점·피드백 목록
 POST  /api/v1/versions/:id/feedback    # 별점·피드백 남기기
-POST  /api/v1/apps/:id/notification-targets  # 알림 대상 등록
+POST  /api/v1/apps/:id/notification-targets  # 알림 채널 등록 (ADR-0059)
 GET   /api/v1/admin/portal/certificates      # 인증서 만료 현황 (ASC API)
 ```
 

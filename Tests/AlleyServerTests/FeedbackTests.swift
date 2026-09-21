@@ -452,12 +452,12 @@ struct FeedbackPageTests {
             try await app.testing().test(
                 .GET, "/apps/\(setup.appID.uuidString)",
                 headers: .sessionCookie(setup.readerToken)
-            ) { #expect(!$0.body.string.contains("대상 추가")) }
+            ) { #expect(!$0.body.string.contains("올릴 수 있는 사람에게 각각")) }
 
             try await app.testing().test(
                 .GET, "/apps/\(setup.appID.uuidString)",
                 headers: .sessionCookie(setup.ownerToken)
-            ) { #expect($0.body.string.contains("대상 추가")) }
+            ) { #expect($0.body.string.contains("올릴 수 있는 사람에게 각각")) }
         }
     }
 
@@ -465,6 +465,16 @@ struct FeedbackPageTests {
     func addsTargetFromConsole() async throws {
         try await withMigratedApp { app in
             let setup = try await seedReleasedVersion(on: app)
+
+            // 채널을 고른 동안에만 목록이 선다 (ADR-0059). 개별 전송으로 두고
+            // 웹훅을 넣게 하면, 넣어놓고 아무 데도 안 가는 상태가 된다.
+            try await app.testing().test(
+                .POST, "/apps/\(setup.appID.uuidString)/alerts",
+                headers: .form(cookie: setup.ownerToken),
+                beforeRequest: {
+                    try $0.content.encode(["target": "channel"], as: .urlEncodedForm)
+                }
+            ) { #expect($0.status == .seeOther) }
 
             try await app.testing().test(
                 .POST, "/apps/\(setup.appID.uuidString)/notification-targets",

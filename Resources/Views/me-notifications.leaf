@@ -2,8 +2,8 @@
 #export("content"):
 <h1 class="page-title">내 알림</h1>
 <p class="page-lead">
-    나에게 오는 알림만 여기서 정합니다. 앱 채널로 가는 알림은 앱 상세의
-    <strong>알림</strong> 에서 앱마다 따로 답니다.
+    나에게 오는 알림만 여기서 정합니다. 앱 소식을 개별로 보낼지 Slack 채널로 보낼지는
+    앱 상세의 <strong>알림</strong> 에서 앱마다 정합니다.
 </p>
 
 #if(saved):
@@ -78,21 +78,25 @@
                 <input type="checkbox" name="signingFailure"
                        #if(signingFailure):checked#endif>
                 <span>
-                    <span class="choice-name">내가 올린 버전의 서명이 실패했을 때</span>
-                    <span class="choice-note">내가 올린 것만 옵니다.</span>
+                    <span class="choice-name">서명이 실패했을 때</span>
+                    <!-- 내가 올린 것만 오지 않는다. 올린 사람이 자리를 비우면 그
+                         버전이 아무도 모르게 멈춰 있어서, 올릴 수 있는 사람 모두가
+                         받는다 (ADR-0059). -->
+                    <span class="choice-note">
+                        내가 올릴 수 있는 앱이면 누가 올린 것이든 옵니다.
+                    </span>
                 </span>
             </label>
 
             <label class="choice">
                 <input type="checkbox" name="feedback" #if(feedback):checked#endif>
                 <span>
-                    <span class="choice-name">내가 올릴 수 있는 앱에 피드백이 왔을 때</span>
-                    <!-- **앱 채널과 함께 간다.** 채널이 걸려 있으면 그쪽에도 그대로
-                         가고, 이것은 나에게 한 통이 더 오는 설정이다. 둘 중 하나를
-                         고르는 것으로 읽히면 켜둔 사람이 채널을 껐다고 여긴다. -->
+                    <span class="choice-name">피드백이 왔을 때</span>
+                    <!-- 채널로 정해둔 앱은 여기를 켜도 나에게 오지 않는다. 둘 다
+                         보내지 않기 때문이다. 그 앱은 채널이 받는다. -->
                     <span class="choice-note">
-                        앱에 걸어둔 채널로도 그대로 갑니다. 켜면 나에게 한 통이 더 옵니다.
-                        앱 하나를 여럿이 맡으면 켜둔 사람마다 따로 받습니다.
+                        내가 올릴 수 있는 앱에 옵니다. Slack 채널로 정해둔 앱은 채널이
+                        받으므로 나에게 오지 않습니다.
                     </span>
                 </span>
             </label>

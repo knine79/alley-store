@@ -1,6 +1,7 @@
 import AlleyShared
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 /// 스토어에 등록된 앱 하나.
@@ -48,6 +49,23 @@ public final class App: Model, @unchecked Sendable {
     @Field(key: "bundle_id_pending")
     public var bundleIDPending: Bool
 
+    /// 이 앱의 소식을 어디로 보낼지 (ADR-0059).
+    ///
+    /// 운영 알림과 같은 갈래를 쓴다. 받는 사람만 다르다 - 여기서는 이 앱을 올릴 수
+    /// 있는 사람들이다.
+    ///
+    /// **문자열로 둔다.** 값이 둘뿐이고 enum 타입을 만들면 갈래를 늘릴 때마다
+    /// 마이그레이션이 필요하다. 모르는 값은 읽는 쪽이 기본값으로 접는다.
+    @Field(key: "alerts")
+    public var alertsRaw: String
+
+    /// 모르는 값은 개별 전송으로 접는다. 채널은 등록해 둔 것이 있어야 닿고 개별은
+    /// 설정 없이 닿는다. 알 수 없는 상태에서는 닿는 쪽이 맞다.
+    public var alerts: AlertDelivery {
+        get { AlertDelivery(rawValue: alertsRaw) ?? .people }
+        set { alertsRaw = newValue.rawValue }
+    }
+
     /// 앱을 만든 사람. 메타데이터 수정과 멤버 관리 권한을 갖는다.
     @Parent(key: "owner_id")
     public var owner: User
@@ -75,7 +93,8 @@ public final class App: Model, @unchecked Sendable {
         iconURL: String? = nil,
         category: String? = nil,
         ownerID: UUID,
-        bundleIDPending: Bool = false
+        bundleIDPending: Bool = false,
+        alerts: AlertDelivery = .people
     ) {
         self.id = id
         self.bundleID = bundleID
@@ -87,6 +106,7 @@ public final class App: Model, @unchecked Sendable {
         self.$owner.id = ownerID
         // 값을 넣지 않으면 저장할 때 죽는다. Fluent 의 `@Field` 는 기본값이 없다.
         self.bundleIDPending = bundleIDPending
+        self.alertsRaw = alerts.rawValue
     }
 }
 
@@ -192,5 +212,47 @@ public struct AddAppIconKey: AsyncMigration {
         try await database.schema(App.schema)
             .deleteField("icon_key")
             .update()
+    }
+}
+
+/// 앱 소식을 어디로 보낼지 정하는 칸을 만든다 (ADR-0059).
+///
+/// **이미 도는 앱의 동작을 바꾸지 않는다.** 지금까지 앱 알림은 앱에 붙은 대상(채널)
+/// 으로만 갔다. 기본값을 개별 전송으로 깔면, 채널을 걸어두고 그것을 보던 팀이 어느
+/// 날부터 채널에서 못 받는다.
+///
+/// 그래서 붙은 대상이 하나라도 있으면 `channel`, 없으면 `people` 로 채운다. 전자는
+/// 지금 하던 그대로이고, 후자는 지금까지 아무 데도 안 가던 경우라 바꿀 동작이 없다.
+/// 운영 알림에 같은 칸을 낼 때와 같은 판단이다 (`AddOperationalAlertsSetting`).
+public struct AddAppAlertsSetting: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+        // 다시 돌려도 되게 둔다. 아래 UPDATE 가 실패하면 이 마이그레이션은 기록되지
+        // 않는데 칸은 이미 생겨 있다.
+        try await sql.raw(
+            """
+            ALTER TABLE apps
+            ADD COLUMN IF NOT EXISTS alerts text NOT NULL DEFAULT 'people'
+            """
+        ).run()
+        try await sql.raw(
+            """
+            UPDATE apps SET alerts = 'channel'
+            WHERE EXISTS (
+                SELECT 1 FROM notification_targets WHERE notification_targets.app_id = apps.id
+            )
+            """
+        ).run()
+    }
+
+    public func revert(on database: any Database) async throws {
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+        try await sql.raw("ALTER TABLE apps DROP COLUMN IF EXISTS alerts").run()
     }
 }

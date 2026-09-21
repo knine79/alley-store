@@ -67,9 +67,9 @@ public final class User: Model, @unchecked Sendable {
 
     /// 내가 올릴 수 있는 앱에 피드백이 왔을 때 받을지.
     ///
-    /// **기본이 꺼짐이다.** 앱 하나를 여럿이 맡으면 피드백 하나에 알림이 여러 통
-    /// 간다. 앱에 붙이는 채널이 이미 그 일을 하고 있어서, 개인이 따로 받고 싶을
-    /// 때만 켠다.
+    /// **기본이 켜짐이다** (ADR-0059). 한때 꺼짐이었는데, 그러면 앱이 개별 전송으로
+    /// 정해져 있어도 아무도 안 받는다. 기본이 꺼짐인 알림은 그 알림이 필요한 순간에
+    /// 꺼져 있다. 소음을 겪은 사람이 끄면 되고, 그 사람은 끄는 자리를 찾아간다.
     @Field(key: "notify_feedback")
     public var notifyFeedback: Bool
 
@@ -109,7 +109,7 @@ public final class User: Model, @unchecked Sendable {
         role: UserRole,
         roleSetByAdmin: Bool = false,
         notifySigningFailure: Bool = true,
-        notifyFeedback: Bool = false,
+        notifyFeedback: Bool = true,
         notifyVia: NotificationChannelKind = .slackDirectMessage
     ) {
         self.id = id
@@ -343,5 +343,31 @@ public struct AddNotifyViaToUser: AsyncMigration {
         try await database.schema(User.schema)
             .deleteField("notify_via")
             .update()
+    }
+}
+
+/// 피드백 알림의 기본값을 켜짐으로 바꾼다 (ADR-0059).
+///
+/// **이미 정한 사람의 값은 건드리지 않는다.** 켠 사람은 켜져 있고 끈 사람은 꺼져
+/// 있다. 여기서 바꾸는 것은 앞으로 만들어지는 계정의 기본값뿐이다.
+///
+/// 지금까지 꺼져 있던 사람들을 켜주지 않는 이유는, 그들이 끈 것인지 기본값을 그대로
+/// 둔 것인지 구분할 수 없기 때문이다. 끈 사람을 다시 켜면 끄는 버튼이 눌러도 되돌아
+/// 오는 버튼이 된다.
+public struct DefaultFeedbackNotificationsOn: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+        try await sql.raw("ALTER TABLE users ALTER COLUMN notify_feedback SET DEFAULT true").run()
+    }
+
+    public func revert(on database: any Database) async throws {
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+        try await sql.raw("ALTER TABLE users ALTER COLUMN notify_feedback SET DEFAULT false").run()
     }
 }

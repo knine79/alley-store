@@ -35,6 +35,7 @@ struct AppPagesController: RouteCollection, Sendable {
         pages.post(":appID", "feedback", ":feedbackID", "delete", use: deleteFeedback)
         pages.post(":appID", "feed-tokens", use: issueFeedToken)
         pages.post(":appID", "feed-tokens", ":tokenID", "revoke", use: revokeFeedToken)
+        pages.post(":appID", "alerts", use: submitAlerts)
         pages.post(":appID", "notification-targets", use: addNotificationTarget)
         pages.post(
             ":appID", "notification-targets", ":targetID", "delete",
@@ -321,13 +322,31 @@ struct AppPagesController: RouteCollection, Sendable {
                 .map { try DeployTokenRow(token: $0) }
         }
 
-        var targets: [NotificationTargetDTO] = []
+        // 어디로 보내나. 관리 화면과 같은 부품을 쓴다 (ADR-0059).
+        var alerts: AlertDeliveryContext?
         if canManage {
-            targets = try await NotificationTarget.query(on: request.db)
-                .filter(\.$app.$id == app.requireID())
+            let appID = try app.requireID()
+            let channels = try await NotificationTarget.query(on: request.db)
+                .filter(\.$app.$id == appID)
                 .sort(\.$name)
                 .all()
-                .map { try $0.toDTO() }
+            let uploaderCount = members.count
+            alerts = AlertDeliveryContext(
+                target: app.alerts.rawValue,
+                canReachPeople: request.application.canReachPeople,
+                peopleName: "올릴 수 있는 사람에게 각각",
+                peopleNote: """
+                    지금 \(uploaderCount)명 에게 각각 보냅니다. 등록할 것이 없어 설정을 \
+                    잊어도 닿습니다. 무엇으로 받을지는 각자 내 알림에서 정하고, 받기 \
+                    싫으면 거기서 끕니다.
+                    """,
+                saveAction: "/apps/\(appID.uuidString)/alerts",
+                channelAction: "/apps/\(appID.uuidString)/notification-targets",
+                channels: AlertDeliveryContext.channels(channels) { id in
+                    "/apps/\(appID.uuidString)/notification-targets/\(id.uuidString)/delete"
+                },
+                error: notificationError
+            )
         }
 
         // 실패한 버전은 로그가 있어야 올린 사람이 스스로 고칠 수 있다.
@@ -404,10 +423,8 @@ struct AppPagesController: RouteCollection, Sendable {
                 issuedFeed: issuedFeed,
                 feedError: feedError,
                 sparkle: sparkle,
-                notificationTargets: targets,
-                canUseEmailTarget: request.application.alleyConfig.smtp != nil,
+                alerts: alerts,
                 feedback: feedback,
-                notificationError: notificationError,
                 canUpload: canUpload,
                 canManage: canManage,
                 entitlementsWhereToFind: EntitlementsGuidance.whereToFind,
@@ -742,7 +759,11 @@ struct AppPagesController: RouteCollection, Sendable {
         return request.redirect(to: "/apps/\(try app.requireID().uuidString)#feedback")
     }
 
-    /// 앱에 붙은 알림 대상에게 알린다.
+    /// 이 앱이 정한 곳으로 새 피드백을 알린다 (ADR-0059).
+    ///
+    /// 채널이냐 개별이냐는 앱 설정이 정하고, 개별이면 받는 사람이 각자 끌 수 있다.
+    /// 예전에는 채널로 보내면서 따로 켠 사람에게 한 통을 더 보냈는데, 그 "한 통 더"
+    /// 를 켠 사람이 없어서 채널을 안 걸어둔 앱은 아무 데도 가지 않았다.
     private func announce(
         _ entry: Feedback,
         version: Version,
@@ -760,38 +781,7 @@ struct AppPagesController: RouteCollection, Sendable {
             link: request.consoleLink("/apps/\(version.$app.id.uuidString)")
         )
 
-        let appID = version.$app.id
-        await request.notifier.notify(app: appID, message: message)
-        await notifyWatchers(of: appID, message: message, on: request)
-    }
-
-    /// 이 앱의 피드백을 개인으로 받겠다고 켠 사람들에게 DM 을 보낸다.
-    ///
-    /// **기본은 꺼짐이다.** 앱 하나를 여럿이 맡으면 피드백 하나에 DM 이 여러 통
-    /// 간다. 앱에 붙이는 채널이 이미 그 일을 하고 있어서, 따로 받고 싶은 사람만
-    /// 켠다 (`User.notifyFeedback`).
-    ///
-    /// 올릴 수 있는 사람까지 본다. 오너만 보면 함께 맡은 멤버가 앱 소식에서 빠진다.
-    private func notifyWatchers(
-        of appID: UUID,
-        message: NotificationMessage,
-        on request: Request
-    ) async {
-        guard let app = try? await App.find(appID, on: request.db) else { return }
-        let memberIDs = (try? await AppMember.query(on: request.db)
-            .filter(\.$app.$id == appID)
-            .all()
-            .map(\.$user.id)) ?? []
-
-        let ids = Set(memberIDs + [app.$owner.id])
-        let watchers = (try? await User.query(on: request.db)
-            .filter(\.$id ~~ Array(ids))
-            .filter(\.$notifyFeedback == true)
-            .all()) ?? []
-
-        for watcher in watchers {
-            await request.notifier.notify(person: watcher, message: message)
-        }
+        await request.notifier.notify(app: version.app, kind: .feedback, message: message)
     }
 
     // MARK: - 피드 토큰
@@ -861,19 +851,12 @@ struct AppPagesController: RouteCollection, Sendable {
         try app.requireManageAccess(for: user)
 
         let values = try request.content.decode(NotificationTargetFormValues.self)
-        // 폼에 칸이 없으면 웹훅이다. 메일 설정이 없는 스토어는 고르는 칸을 그리지
-        // 않는다.
-        let kind = values.kind.flatMap(NotificationChannelKind.init(rawValue:)) ?? .slack
+        // **채널만 등록한다** (ADR-0059). 사람에게 보내는 길은 개별 전송이 맡고,
+        // 그쪽은 받는 사람이 각자 수단을 정하므로 여기서 주소를 받을 것이 없다.
         do {
-            guard NotificationChannelKind.selectable.contains(kind) else {
-                throw Abort(.badRequest, reason: "알림 대상으로 고를 수 없는 방식입니다.")
-            }
-            guard kind != .email || request.application.alleyConfig.smtp != nil else {
-                throw Abort(.conflict, reason: "메일 설정이 없어 메일 주소를 등록할 수 없습니다.")
-            }
             _ = try await NotificationTargets.create(
                 CreateNotificationTargetRequest(
-                    kind: kind,
+                    kind: .slack,
                     name: values.name ?? "",
                     endpoint: values.endpoint ?? ""
                 ),
@@ -888,6 +871,36 @@ struct AppPagesController: RouteCollection, Sendable {
             )
             return htmlResponse(view, status: abort.status)
         }
+        return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
+    }
+
+    /// 이 앱의 소식을 채널로 보낼지 개별로 보낼지 (ADR-0059).
+    @Sendable
+    func submitAlerts(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        try app.requireManageAccess(for: user)
+
+        let values = try request.content.decode(OperationalTargetValues.self)
+        guard let target = AlertDelivery(rawValue: values.target ?? "") else {
+            throw Abort(.badRequest, reason: "알 수 없는 값입니다: \(values.target ?? "")")
+        }
+        // 받아 봐야 아무 데도 가지 않는 설정이 저장되고, 고른 사람은 받고 있다고
+        // 믿는다. 오류 화면으로 보내지 않고 이 화면에 이유만 띄운다.
+        if target == .people, !request.application.canReachPeople {
+            let view = try await renderDetail(
+                on: request,
+                issuedToken: nil,
+                notificationError: "Slack 봇도 메일도 연결되어 있지 않아 개별 전송을 고를 수 없습니다."
+            )
+            return htmlResponse(view, status: .conflict)
+        }
+
+        app.alerts = target
+        try await app.save(on: request.db)
+        request.logger.notice(
+            "앱 알림 대상 변경 [\(app.bundleID), \(target.rawValue), 바꾼 사람: \(user.email)]"
+        )
         return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
     }
 
@@ -1193,13 +1206,11 @@ struct AppDetailContext: Encodable {
     var feedError: String?
     /// Sparkle 을 실제로 쓸 수 있는 상태인가 (ADR-0057). 관리 권한이 없으면 nil.
     var sparkle: SparkleReadinessRow?
-    var notificationTargets: [NotificationTargetDTO]
-    /// 메일 주소도 등록할 수 있나. 스토어에 메일 설정이 없으면 웹훅뿐이다.
-    var canUseEmailTarget: Bool
+    /// 어디로 보내나. 관리 권한이 없으면 nil (ADR-0059).
+    var alerts: AlertDeliveryContext?
     var feedback: [FeedbackRow]
     /// 지금 사람이 피드백을 남길 수 있는 버전들. 받아본 것만 들어온다.
     /// 익명 체크박스를 띄울지. 스토어 설정에서 온다.
-    var notificationError: String?
     var canUpload: Bool
     var canManage: Bool
     /// 권한이 모자라 실패한 버전 옆에 붙일 안내. 그 파일을 어디서 구하나 (ADR-0036).
@@ -1259,8 +1270,6 @@ extension FeedbackFormValues: Content {}
 struct NotificationTargetFormValues: Codable {
     var name: String?
     var endpoint: String?
-    /// `NotificationChannelKind` 의 rawValue. 고를 것이 하나뿐인 화면에서는 오지 않는다.
-    var kind: String?
 }
 
 extension NotificationTargetFormValues: Content {}

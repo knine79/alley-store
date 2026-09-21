@@ -36,12 +36,12 @@ struct AdminNotificationPagesController: RouteCollection, Sendable {
     func submitTarget(request: Request) async throws -> Response {
         let admin = try request.requireAdmin()
         let values = try request.content.decode(OperationalTargetValues.self)
-        guard let target = OperationalAlertTarget(rawValue: values.target ?? "") else {
+        guard let target = AlertDelivery(rawValue: values.target ?? "") else {
             throw Abort(.badRequest, reason: "알 수 없는 값입니다: \(values.target ?? "")")
         }
         // 받아 봐야 아무 데도 가지 않는 설정이 저장되고, 관리자는 골라뒀으니 받고
         // 있다고 믿는다. 오류 화면으로 보내지 않고 이 화면에 이유만 띄운다.
-        if target == .admins, !request.application.canReachPeople {
+        if target == .people, !request.application.canReachPeople {
             let view = try await render(
                 error: "Slack 봇도 메일도 연결되어 있지 않아 관리자 개인에게 보낼 수 없습니다.",
                 on: request
@@ -104,7 +104,6 @@ struct AdminNotificationPagesController: RouteCollection, Sendable {
             .filter(\.$app.$id == nil)
             .sort(\.$name)
             .all()
-            .map { try $0.toDTO() }
         let adminCount = try await User.query(on: request.db)
             .filter(\.$role == .admin)
             .count()
@@ -113,39 +112,33 @@ struct AdminNotificationPagesController: RouteCollection, Sendable {
             "admin-notifications",
             AdminNotificationsContext(
                 page: try await request.pageContext(adminTab: .notifications),
-                target: settings.operationalAlerts.rawValue,
-                targets: targets,
-                adminCount: adminCount,
-                // 사람에게 보낼 수단이 없으면 관리자 개인을 골라도 아무 데도 가지
-                // 않는다. 고르기 전에 알려야 한다.
-                canReachAdmins: request.application.canReachPeople,
-                error: error
+                alerts: AlertDeliveryContext(
+                    target: settings.operationalAlerts.rawValue,
+                    // 사람에게 보낼 수단이 없으면 개별 전송을 골라도 아무 데도 가지
+                    // 않는다. 고르기 전에 알려야 한다.
+                    canReachPeople: request.application.canReachPeople,
+                    peopleName: "관리자에게 각각",
+                    peopleNote: """
+                        지금 관리자 \(adminCount)명 에게 각각 보냅니다. 등록할 것이 \
+                        없어 설정을 잊어도 닿습니다. Slack DM 으로 갈지 메일로 갈지는 \
+                        각자 내 알림에서 정합니다.
+                        """,
+                    saveAction: "/admin/notifications/target",
+                    channelAction: "/admin/notifications/targets",
+                    channels: AlertDeliveryContext.channels(targets) { id in
+                        "/admin/notifications/targets/\(id.uuidString)/remove"
+                    },
+                    error: error
+                )
             )
         ).get()
     }
 }
 
-extension Application {
-    /// 사람 한 명에게 보낼 방법이 하나라도 있나.
-    ///
-    /// 봇 토큰이든 메일 설정이든 하나면 된다. 어느 쪽으로 갈지는 받는 사람이 정한다
-    /// (`User.notifyVia`).
-    var canReachPeople: Bool {
-        alleyConfig.slackBotToken != nil || alleyConfig.smtp != nil
-    }
-}
-
 struct AdminNotificationsContext: Encodable {
     var page: PageContext
-    /// 지금 고른 값. `OperationalAlertTarget` 의 rawValue.
-    var target: String
-    /// 등록된 전역 채널들.
-    var targets: [NotificationTargetDTO]
-    /// 관리자 개인을 고르면 몇 명에게 가는지.
-    var adminCount: Int
-    /// 사람에게 보낼 수단이 있나. 없으면 관리자 개인을 골라도 가지 않는다.
-    var canReachAdmins: Bool
-    var error: String?
+    /// 어디로 보내나. 앱 알림 화면과 같은 부품을 쓴다 (ADR-0059).
+    var alerts: AlertDeliveryContext
 }
 
 struct OperationalTargetValues: Codable {

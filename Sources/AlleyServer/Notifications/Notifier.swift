@@ -22,10 +22,29 @@ public struct NotificationMessage: Sendable {
     }
 }
 
+/// 앱에서 나가는 알림의 갈래.
+///
+/// **끄는 자리가 갈래마다 다르다.** 앱 하나를 여럿이 맡으면 피드백은 소음이 되기
+/// 쉽고 서명 실패는 그렇지 않다. 하나로 묶으면 소음을 끄려다 실패까지 끄게 된다.
+public enum AppAlertKind: Sendable {
+    /// 새 피드백이 왔다.
+    case feedback
+    /// 서명이 최종적으로 실패했다.
+    case signingFailure
+
+    /// 이 사람이 이 갈래를 켜뒀나. 둘 다 기본은 켜짐이다 (ADR-0059).
+    func isOn(for user: User) -> Bool {
+        switch self {
+        case .feedback: return user.notifyFeedback
+        case .signingFailure: return user.notifySigningFailure
+        }
+    }
+}
+
 /// 알림을 실제로 보내는 곳.
 ///
-/// 지금 구현은 웹훅 하나뿐이다. 메일을 붙이게 되면 이 프로토콜을 따르는 타입이
-/// 하나 늘고, 부르는 쪽은 그대로다.
+/// 채널을 타입으로 둔 덕에 메일을 붙일 때 부르는 쪽이 그대로였다. 보내는 구현만
+/// 하나 늘었다.
 public protocol NotificationChannel: Sendable {
     var kind: NotificationChannelKind { get }
     func send(_ message: NotificationMessage, to endpoint: String) async throws
@@ -106,8 +125,22 @@ public struct Notifier: Sendable {
         self.logger = logger
     }
 
-    /// 앱에 붙은 대상들에게 보낸다.
-    public func notify(app appID: UUID, message: NotificationMessage) async {
+    /// 앱 소식. 그 앱이 정한 곳 **한 군데**로 보낸다 (ADR-0059).
+    ///
+    /// 운영 알림과 같은 규칙이다. 채널을 걸어뒀으면 채널로, 아니면 그 앱을 올릴 수
+    /// 있는 사람들에게 한 명씩 간다. 개별로 갈 때는 각자 끈 것을 본다.
+    public func notify(app: App, kind: AppAlertKind, message: NotificationMessage) async {
+        guard let appID = try? app.requireID() else { return }
+        switch app.alerts {
+        case .channel:
+            await notifyChannels(of: appID, message: message)
+        case .people:
+            await notifyEach(await uploaders(of: appID), about: kind, message: message)
+        }
+    }
+
+    /// 앱에 붙은 채널들에게 보낸다.
+    public func notifyChannels(of appID: UUID, message: NotificationMessage) async {
         let targets = (try? await NotificationTarget.query(on: database)
             .filter(\.$app.$id == appID)
             .all()) ?? []
@@ -124,28 +157,56 @@ public struct Notifier: Sendable {
 
     /// 운영 알림. 스토어가 정한 곳 **한 군데**로 보낸다.
     ///
-    /// 채널과 DM 을 함께 보내지 않는다. 같은 알림이 두 번 오면 한 번 오는 것보다
+    /// 채널과 개별을 함께 보내지 않는다. 같은 알림이 두 번 오면 한 번 오는 것보다
     /// 빨리 무시당한다. 어느 쪽인지는 관리 화면에서 정한다.
     public func notifyOperators(_ message: NotificationMessage) async {
         let settings = try? await StoreSettings.find(StoreSettings.singletonID, on: database)
-        switch settings?.operationalAlerts ?? .admins {
+        switch settings?.operationalAlerts ?? .people {
         case .channel:
             await notifyGlobal(message: message)
-        case .admins:
+        case .people:
             await notifyAdmins(message)
         }
     }
 
-    /// 관리자 전원에게 DM 을 보낸다.
+    /// 관리자 전원에게 각각 보낸다.
     ///
     /// 등록해 둘 것이 없어 설정을 잊어도 닿는다. 예전에는 전역 대상을 만들어 두지
     /// 않으면 워커가 죽어도 아무 데도 가지 않았고, 그 대상을 만드는 화면조차 없었다.
+    ///
+    /// **여기에는 끄는 자리가 없다.** 스토어가 멈추는 알림이라 받지 않겠다고 할 수
+    /// 있는 성질이 아니다. 앱 알림은 소음이 될 수 있어 갈래마다 끄는 칸을 뒀다.
     private func notifyAdmins(_ message: NotificationMessage) async {
         let admins = (try? await User.query(on: database)
             .filter(\.$role == .admin)
             .all()) ?? []
         for admin in admins {
             await notify(person: admin, message: message)
+        }
+    }
+
+    /// 이 앱을 올릴 수 있는 사람들. 오너와 멤버다.
+    private func uploaders(of appID: UUID) async -> [User] {
+        let memberIDs = (try? await AppMember.query(on: database)
+            .filter(\.$app.$id == appID)
+            .all()
+            .map(\.$user.id)) ?? []
+        let ownerID = try? await App.find(appID, on: database)?.$owner.id
+        let ids = Set(memberIDs + [ownerID].compactMap { $0 })
+        guard !ids.isEmpty else { return [] }
+        return (try? await User.query(on: database)
+            .filter(\.$id ~~ Array(ids))
+            .all()) ?? []
+    }
+
+    /// 끄지 않은 사람에게만 한 통씩.
+    private func notifyEach(
+        _ people: [User],
+        about kind: AppAlertKind,
+        message: NotificationMessage
+    ) async {
+        for person in people where kind.isOn(for: person) {
+            await notify(person: person, message: message)
         }
     }
 

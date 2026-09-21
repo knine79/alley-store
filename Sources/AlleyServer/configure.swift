@@ -159,6 +159,10 @@ private func configureMigrations(_ app: Application) {
     app.migrations.add(AddNotificationPreferencesToUser())
     // 개인 알림을 메일로도 받는다 (ADR-0058).
     app.migrations.add(AddNotifyViaToUser())
+    // 앱 알림도 운영 알림과 같은 갈래를 고른다 (ADR-0059).
+    app.migrations.add(RenameAdminsAlertTarget())
+    app.migrations.add(AddAppAlertsSetting())
+    app.migrations.add(DefaultFeedbackNotificationsOn())
 
     // 워커가 Sparkle 공개키를 알린다 (ADR-0057).
     app.migrations.add(AddWorkerSparklePublicKey())

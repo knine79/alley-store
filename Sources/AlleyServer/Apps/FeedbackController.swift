@@ -179,7 +179,7 @@ public struct FeedbackController: RouteCollection, Sendable {
         return try entry.toDTO(viewer: viewer, screenshotURL: url)
     }
 
-    /// 앱에 붙은 알림 대상에게 알린다.
+    /// 이 앱이 정한 곳으로 알린다 (ADR-0059).
     private func announce(
         _ entry: Feedback,
         version: Version,
@@ -191,7 +191,8 @@ public struct FeedbackController: RouteCollection, Sendable {
         let versionName = "\(version.shortVersion) (\(version.buildNumber))"
 
         await request.notifier.notify(
-            app: version.$app.id,
+            app: version.app,
+            kind: .feedback,
             message: NotificationMessage(
                 title: "\(version.app.name) \(versionName) 에 새 피드백",
                 body: [stars, entry.body, "— \(who)"]
