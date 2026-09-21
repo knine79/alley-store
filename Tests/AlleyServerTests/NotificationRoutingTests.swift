@@ -339,10 +339,10 @@ struct NotificationRoutingTests {
         }
     }
 
-    /// **메일에는 이름을 묻지 않는다.** 주소가 곧 받는 곳이라 목록에서 그것으로
-    /// 알아본다. 따로 받으면 같은 것을 두 번 적게 된다.
-    @Test("메일은 이름을 비워두면 주소를 쓴다")
-    func mailTargetNamesItselfByAddress() async throws {
+    /// **메일도 이름을 받는다.** 주소가 곧 받는 곳이라 한때 비울 수 있게 뒀는데,
+    /// 별칭이나 메일링 리스트 주소는 그것만 봐서는 누구인지 알기 어렵다.
+    @Test("이름 없이는 메일 주소도 등록할 수 없다")
+    func mailTargetAlsoNeedsAName() async throws {
         try await withMigratedApp(
             overrides: ["SMTP_HOST": "smtp.example.com", "SMTP_FROM": "alley@example.com"]
         ) { app in
@@ -360,15 +360,14 @@ struct NotificationRoutingTests {
                         as: .urlEncodedForm
                     )
                 }
-            ) { #expect($0.status == .seeOther) }
+            ) { #expect($0.status == .badRequest) }
 
-            let saved = try #require(try await NotificationTarget.query(on: app.db).first())
-            #expect(saved.name == "team@example.com")
+            #expect(try await NotificationTarget.query(on: app.db).count() == 0)
         }
     }
 
-    /// 웹훅은 주소를 가려야 해서 이름이 그 자리를 대신한다. 그래서 그쪽만 비울 수
-    /// 없다. 비운 채로 만들면 목록에서 어느 채널인지 알 길이 없다.
+    /// 웹훅은 주소를 아예 가리므로 이름이 그 자리를 대신한다. 같은 이유로 비울 수
+    /// 없지만, 목록에서 읽히는 모양은 다르다.
     @Test("웹훅은 이름을 비울 수 없다")
     func webhookTargetStillNeedsAName() async throws {
         try await withMigratedApp { app in
@@ -389,6 +388,35 @@ struct NotificationRoutingTests {
             ) { #expect($0.status == .badRequest) }
 
             #expect(try await NotificationTarget.query(on: app.db).count() == 0)
+        }
+    }
+
+    /// 메일 주소는 자격증명이 아니라 그냥 주소다. 목록에 이름과 함께 선다. 웹훅
+    /// 주소는 그 자체가 자격증명이라 내려주지 않는다.
+    @Test("메일 주소는 목록에 보이고 웹훅 주소는 보이지 않는다")
+    func onlyMailAddressesComeBack() async throws {
+        try await withMigratedApp { app in
+            let (user, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let mine = try await app.seedApp(
+                bundleID: "com.example.both", name: "내 앱", owner: user
+            )
+            let appID = try mine.requireID()
+
+            for (kind, endpoint) in [
+                (NotificationChannelKind.email, "team@example.com"),
+                (NotificationChannelKind.slack, "https://hooks.slack.com/services/x"),
+            ] {
+                try await NotificationTarget(
+                    appID: appID, kind: kind, name: "\(kind.displayName) 대상",
+                    endpoint: endpoint, createdByID: try user.requireID()
+                ).save(on: app.db)
+            }
+
+            let rows = try await NotificationTarget.query(on: app.db).all().map { try $0.toDTO() }
+            let mail = try #require(rows.first { $0.kind == .email })
+            let webhook = try #require(rows.first { $0.kind == .slack })
+            #expect(mail.endpoint == "team@example.com")
+            #expect(webhook.endpoint == nil)
         }
     }
 

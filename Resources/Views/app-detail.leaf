@@ -448,13 +448,12 @@
         <tbody>
             #for(target in notificationTargets):
             <tr>
-                <!-- 메일은 주소가 곧 받는 곳이다. 웹훅은 주소를 가려야 해서 등록할 때
-                     받아둔 이름이 그 자리를 대신한다. -->
+                <!-- 이름이 먼저다. 주소는 그 아래 한 줄로 붙는다. 메일 주소가 별칭이면
+                     그것만 봐서는 누구인지 모르고, 웹훅 주소는 아예 보여주지 않는다. -->
                 <td class="table-fill">
-                    #if(target.endpoint):
-                    <code>#(target.endpoint)</code>
-                    #else:
                     <span class="table-strong">#(target.name)</span>
+                    #if(target.endpoint):
+                    <span class="table-note"><code>#(target.endpoint)</code></span>
                     #endif
                 </td>
                 <td class="table-tight table-muted">
@@ -501,12 +500,18 @@
                             data-endpoint-label="Slack 웹훅 주소"
                             data-endpoint-placeholder="https://hooks.slack.com/services/..."
                             data-endpoint-note="채널 설정에서 받은 Incoming Webhook 주소입니다. 그 자체가 채널에 글을 쓸 수 있는 자격증명이라 저장하면 다시 보여주지 않습니다."
-                            data-needs-name="1">Slack 채널</option>
+                            data-name-label="채널 이름"
+                            data-name-placeholder="팀 채널"
+                            data-name-note="웹훅 주소는 저장하면 보이지 않습니다. 목록에서 어느 채널인지 알아볼 이름을 적으세요."
+                            >Slack 채널</option>
                     <option value="email"
                             data-endpoint-label="받을 메일 주소"
                             data-endpoint-placeholder="team@example.com"
                             data-endpoint-note="이 주소로 바로 보냅니다. 여러 명이 봐야 하면 팀 메일링 리스트 주소를 넣으세요."
-                            data-needs-name="">메일</option>
+                            data-name-label="받는 사람"
+                            data-name-placeholder="플랫폼팀"
+                            data-name-note="주소만으로는 누구인지 알기 어렵습니다. 목록에서 알아볼 이름을 적으세요."
+                            >메일</option>
                 </select>
             </label>
             <label class="field" data-endpoint-field>
@@ -521,18 +526,19 @@
                 </span>
             </label>
 
-            <!-- **메일에는 이름을 묻지 않는다.** 주소가 곧 받는 곳이라 목록에서 그것으로
-                 알아본다. 이름을 또 받으면 같은 것을 두 번 적게 된다.
+            <!-- **메일에도 이름을 받는다.** 주소가 곧 받는 곳이라 지웠다가 되돌렸다.
+                 별칭이나 메일링 리스트 주소는 그것만 봐서는 누구인지 알기 어렵고,
+                 그런 주소가 목록에 둘 셋 서면 어느 것이 어느 팀인지 매번 짚어야 한다.
 
-                 스크립트가 없으면 이 칸이 그대로 서지만 비워도 된다. 그때는 서버가
-                 주소를 이름으로 쓴다. -->
+                 무엇을 적는 칸인지는 방식마다 다르다. 웹훅은 보이지 않는 주소를
+                 대신할 이름이고, 메일은 그 주소가 누구인지다. -->
             <label class="field" data-name-field>
                 <span class="field-label">채널 이름</span>
-                <input class="input" type="text" name="name" placeholder="팀 채널"
+                <input class="input" type="text" name="name" required placeholder="팀 채널"
                        autocapitalize="off" autocorrect="off" spellcheck="false">
                 <span class="field-note">
-                    웹훅 주소는 저장하면 보이지 않으니, 목록에서 어느 채널인지 알아볼
-                    이름을 적습니다. 메일은 비워두면 주소를 그대로 씁니다.
+                    웹훅 주소는 저장하면 보이지 않습니다. 목록에서 어느 채널인지 알아볼
+                    이름을 적으세요.
                 </span>
             </label>
             #else:
