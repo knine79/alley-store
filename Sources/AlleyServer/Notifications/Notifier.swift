@@ -219,34 +219,39 @@ public struct Notifier: Sendable {
     /// 보낼 채널이 없으면 조용히 지나간다. 봇 토큰도 메일 설정도 없는 스토어가
     /// 그렇고, 그때는 예전처럼 사람이 화면을 다시 보는 것으로 굴러간다.
     public func notify(person user: User, message: NotificationMessage) async {
-        guard let channel = personalChannel(for: user) else {
+        let usable = personalChannels(for: user)
+        guard !usable.isEmpty else {
             logger.debug("사람에게 보내는 알림 채널이 없어 건너뜁니다 [\(user.email)]")
             return
         }
-        do {
-            // Slack DM 도 메일도 받는 사람을 계정 이메일로 찾는다. DM 은 그 주소로
-            // Slack 계정을 뒤지고, 메일은 그 주소로 보낸다.
-            try await channel.send(message, to: user.email)
-        } catch {
-            // **여기서 던지지 않는다.** 이 알림은 서명 실패를 기록하는 흐름 안에서
-            // 불린다. 알림이 실패했다고 그 기록까지 되돌리면 잡이 멈춘 채로 남는다.
-            logger.warning("알림을 보내지 못했습니다 [받는 사람: \(user.email), 이유: \(error)]")
+        for channel in usable {
+            do {
+                // Slack DM 도 메일도 받는 사람을 계정 이메일로 찾는다. DM 은 그 주소로
+                // Slack 계정을 뒤지고, 메일은 그 주소로 보낸다.
+                try await channel.send(message, to: user.email)
+            } catch {
+                // **여기서 던지지 않는다.** 이 알림은 서명 실패를 기록하는 흐름 안에서
+                // 불린다. 알림이 실패했다고 그 기록까지 되돌리면 잡이 멈춘 채로 남는다.
+                logger.warning("알림을 보내지 못했습니다 [받는 사람: \(user.email), 이유: \(error)]")
+            }
         }
     }
 
-    /// 이 사람에게 실제로 쓸 채널.
+    /// 이 사람에게 실제로 쓸 채널들.
     ///
-    /// **고른 것이 없으면 있는 것으로 보낸다.** 고를 당시에 없던 수단이 나중에 생기고
-    /// 있던 수단이 사라진다. 스토어가 Slack 봇을 떼고 메일만 남겼는데 예전에 고른
-    /// 값 때문에 알림이 사라지면, 끄지도 않은 알림이 조용히 멎는다.
+    /// 고른 대로 간다. 둘 다 골랐으면 둘 다 간다 - 남이 정해준 것이 아니라 자기가
+    /// 고른 것이라 두 번 오는 것도 본인이 정한 결과다.
     ///
-    /// 반대로 둘 다 있으면 고른 대로 간다. 양쪽에 보내지 않는 이유는 운영 알림과
-    /// 같다. 두 번 오는 알림은 한 번 오는 알림보다 빨리 무시당한다.
-    private func personalChannel(for user: User) -> (any NotificationChannel)? {
-        if let chosen = channels[user.notifyVia] {
-            return chosen
-        }
-        return NotificationChannelKind.personal.lazy.compactMap { channels[$0] }.first
+    /// **고른 것이 스토어에 없으면 있는 것 하나로 보낸다.** 고를 당시에 없던 수단이
+    /// 나중에 생기고 있던 수단이 사라진다. 스토어가 Slack 봇을 떼고 메일만 남겼는데
+    /// 예전에 고른 값 때문에 알림이 사라지면, 끄지도 않은 알림이 조용히 멎는다.
+    private func personalChannels(for user: User) -> [any NotificationChannel] {
+        let chosen = NotificationChannelKind.personal
+            .filter(user.notifyVia.contains)
+            .compactMap { channels[$0] }
+        if !chosen.isEmpty { return chosen }
+        // 되짚을 때는 하나만 고른다. 고르지도 않은 것을 두 곳으로 보내지 않는다.
+        return NotificationChannelKind.personal.lazy.compactMap { channels[$0] }.prefix(1).map { $0 }
     }
 
     private func deliver(_ message: NotificationMessage, to targets: [NotificationTarget]) async {

@@ -29,8 +29,11 @@
      전송되지 않아 저장을 누르면 값이 조용히 뒤집힌다. 그렇다고 라디오를 하나만
      남기면 고를 것이 없는 선택지가 된다. -->
 #if(alerts.canReachPeople):
-<form class="form" method="post" action="#(alerts.saveAction)">
-    <fieldset class="choice-group">
+<!-- **폼을 라디오에서 끊는다.** 채널 등록 칸은 그 자체로 폼이라 이 폼 안에 넣을 수
+     없다 (폼은 중첩되지 않는다). 그래서 여기서 닫고, 저장 버튼은 아래에서
+     `form` 속성으로 이 폼을 가리킨다. 그래야 채널 칸이 고른 자리 바로 밑에 선다. -->
+<form class="form" id="alert-delivery" method="post" action="#(alerts.saveAction)">
+    <fieldset class="choice-group" data-alert-choice>
         <legend class="visually-hidden">알림을 받을 곳</legend>
 
         <label class="choice">
@@ -38,7 +41,11 @@
                    #if(alerts.target == "people"):checked#endif>
             <span>
                 <span class="choice-name">#(alerts.peopleName)</span>
-                <span class="choice-note">#(alerts.peopleNote)</span>
+                <span class="choice-note">
+                    #(alerts.peopleNote)
+                    개인이 <a href="/me/notifications">내 알림</a> 에서 알림 방식을
+                    설정할 수 있고, 알림을 끌 수도 있습니다.
+                </span>
             </span>
         </label>
 
@@ -46,43 +53,11 @@
             <input type="radio" name="target" value="channel"
                    #if(alerts.target == "channel"):checked#endif>
             <span>
-                <span class="choice-name">Slack 채널</span>
+                <span class="choice-name">Slack 채널로 전송</span>
                 <span class="choice-note">여러 명이 보고 이력이 남습니다.</span>
             </span>
         </label>
-
-        <!-- **고른 것 바로 밑에 둔다.** 채널에 딸린 것이라 그 아래여야 한다. 위
-             라디오 앞에 두면 개별 전송에 딸린 칸으로 읽힌다. -->
-        <div class="field field-attached">
-            #if(count(alerts.channels) == 0):
-            <p class="field-note">
-                등록된 채널이 없습니다.
-                #if(alerts.target == "channel"):
-                <strong>지금 설정으로는 이 알림이 아무 데도 가지 않습니다.</strong>
-                #endif
-            </p>
-            #else:
-            <ul class="person-list">
-                #for(channel in alerts.channels):
-                <li class="person">
-                    <span class="person-name">#(channel.name)</span>
-                    <span class="person-email">
-                        #if(channel.lastSentAt):마지막 발송 #(channel.lastSentAt)#else:보낸 적 없음#endif
-                    </span>
-                    <!-- 아무도 안 받고 있는데 잘 되는 줄 아는 상태를 만들지 않는다. -->
-                    #if(channel.lastError):
-                    <span class="person-email">#(channel.lastError)</span>
-                    #endif
-                </li>
-                #endfor
-            </ul>
-            #endif
-        </div>
     </fieldset>
-
-    <div class="form-actions">
-        <button class="button button-primary" type="submit">저장</button>
-    </div>
 </form>
 #else:
 <!-- 보낼 수단이 없다. 고를 것이 하나뿐이니 라디오가 아니라 그리로 옮기는 버튼을 준다. -->
@@ -109,4 +84,88 @@
     환경변수 <code>SLACK_BOT_TOKEN</code> 또는 <code>SMTP_HOST</code> 를 넣고 다시
     띄우면 됩니다.
 </p>
+#endif
+
+<!-- 채널을 고른 동안에만 연다. 개별로 두고 웹훅을 넣게 하면, 넣어놓고 아무 데도
+     안 가는 상태가 된다.
+
+     서버가 저장된 값으로 한 번 정하고, 스크립트가 있으면 라디오를 누르는 순간
+     열고 닫는다 (`alert-delivery.js`). 스크립트가 없으면 저장한 뒤에 열린다. -->
+<div class="field field-attached" data-alert-channels
+     #if(alerts.channelsHidden):hidden#endif>
+    #if(count(alerts.channels) == 0):
+    <p class="field-note">
+        등록된 채널이 없습니다.
+        <strong>채널을 하나도 넣지 않으면 이 알림이 아무 데도 가지 않습니다.</strong>
+    </p>
+    #else:
+    <table class="table">
+        <thead>
+            <tr>
+                <th class="table-fill">채널 이름</th>
+                <th class="table-tight">마지막 발송</th>
+                <th class="table-tight"><span class="visually-hidden">지우기</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            #for(channel in alerts.channels):
+            <tr>
+                <td class="table-fill">
+                    <span class="table-strong">#(channel.name)</span>
+                    <!-- 아무도 안 받고 있는데 잘 되는 줄 아는 상태를 만들지 않는다. -->
+                    #if(channel.lastError):
+                    <span class="table-note">#(channel.lastError)</span>
+                    #endif
+                </td>
+                <td class="table-tight table-muted">
+                    #if(channel.lastSentAt):#(channel.lastSentAt)#else:보낸 적 없음#endif
+                </td>
+                <td class="table-tight">
+                    <form class="row-form" method="post" action="#(channel.deletePath)">
+                        <button class="button" type="submit">지우기</button>
+                    </form>
+                </td>
+            </tr>
+            #endfor
+        </tbody>
+    </table>
+    #endif
+
+    <form class="form" method="post" action="#(alerts.channelAction)">
+        <label class="field">
+            <span class="field-label">Slack 웹훅 주소</span>
+            <input class="input" type="url" name="endpoint" required
+                   placeholder="https://hooks.slack.com/services/..."
+                   autocapitalize="off" autocorrect="off" spellcheck="false">
+            <span class="field-note">
+                채널 설정에서 받은 Incoming Webhook 주소입니다. 그 자체가 채널에 글을
+                쓸 수 있는 자격증명이라 저장하면 다시 보여주지 않습니다.
+            </span>
+        </label>
+
+        <label class="field">
+            <span class="field-label">채널 이름</span>
+            <input class="input" type="text" name="name" required placeholder="팀 채널"
+                   autocapitalize="off" autocorrect="off" spellcheck="false">
+            <span class="field-note">
+                위 주소는 저장하면 보이지 않습니다. 목록에서 어느 채널인지 알아볼
+                이름을 적으세요.
+            </span>
+        </label>
+
+        <div class="form-actions">
+            <button class="button" type="submit">채널 추가</button>
+        </div>
+    </form>
+</div>
+
+<!-- 저장은 채널 칸 뒤에 둔다. 고르는 자리와 거기 딸린 칸이 붙어 있고 그 다음이
+     저장이어야, 채널을 넣다 말고 저장을 먼저 누르는 일이 줄어든다.
+
+     폼 밖에 있지만 `form` 속성이 위 폼을 가리킨다. 채널 칸이 그 자체로 폼이라
+     감쌀 수 없어서(폼은 중첩되지 않는다) 이렇게 잇는다. -->
+#if(alerts.canReachPeople):
+<div class="form-actions">
+    <button class="button button-primary" type="submit" form="alert-delivery">저장</button>
+</div>
 #endif

@@ -117,12 +117,8 @@ struct AdminNotificationPagesController: RouteCollection, Sendable {
                     // 사람에게 보낼 수단이 없으면 개별 전송을 골라도 아무 데도 가지
                     // 않는다. 고르기 전에 알려야 한다.
                     canReachPeople: request.application.canReachPeople,
-                    peopleName: "관리자에게 각각",
-                    peopleNote: """
-                        지금 관리자 \(adminCount)명 에게 각각 보냅니다. 등록할 것이 \
-                        없어 설정을 잊어도 닿습니다. Slack DM 으로 갈지 메일로 갈지는 \
-                        각자 내 알림에서 정합니다.
-                        """,
+                    peopleName: "스토어 관리자에 개별전송",
+                    peopleNote: "스토어 관리자 \(adminCount)명에게 개별로 보냅니다.",
                     saveAction: "/admin/notifications/target",
                     channelAction: "/admin/notifications/targets",
                     channels: AlertDeliveryContext.channels(targets) { id in

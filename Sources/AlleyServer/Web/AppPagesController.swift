@@ -334,12 +334,11 @@ struct AppPagesController: RouteCollection, Sendable {
             alerts = AlertDeliveryContext(
                 target: app.alerts.rawValue,
                 canReachPeople: request.application.canReachPeople,
-                peopleName: "올릴 수 있는 사람에게 각각",
-                peopleNote: """
-                    지금 \(uploaderCount)명 에게 각각 보냅니다. 등록할 것이 없어 설정을 \
-                    잊어도 닿습니다. 무엇으로 받을지는 각자 내 알림에서 정하고, 받기 \
-                    싫으면 거기서 끕니다.
-                    """,
+                peopleName: "앱 관리자에 개별전송",
+                // 뒤에 "개인이 내 알림에서 정할 수 있다" 가 템플릿에서 붙는다. 그
+                // 문장에는 링크가 들어가는데 Leaf 는 넘긴 값을 이스케이프하므로
+                // 여기에 태그를 적을 수 없다.
+                peopleNote: "앱을 수정할 수 있는 권한이 있는 \(uploaderCount)명에게 개별로 보냅니다.",
                 saveAction: "/apps/\(appID.uuidString)/alerts",
                 channelAction: "/apps/\(appID.uuidString)/notification-targets",
                 channels: AlertDeliveryContext.channels(channels) { id in

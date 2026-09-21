@@ -2,8 +2,8 @@
 #export("content"):
 <h1 class="page-title">내 알림</h1>
 <p class="page-lead">
-    나에게 오는 알림만 여기서 정합니다. 앱 소식을 개별로 보낼지 Slack 채널로 보낼지는
-    앱 상세의 <strong>알림</strong> 에서 앱마다 정합니다.
+    앱 관리 화면에서 앱 소식을 개별로 보내지 않고 Slack 채널로 보내도록 설정되어 있는
+    경우 이 화면에서 설정한대로 알림을 받지 못할 수 있습니다.
 </p>
 
 #if(saved):
@@ -11,43 +11,20 @@
 #endif
 
 <section class="section">
-    <h2 class="section-title">받는 방법</h2>
-
-    <!-- 받을 수 있는 방법이 하나도 없다. 켜도 아무 일이 없는 체크박스를 남겨두면
-         켜둔 사람은 받고 있다고 믿는다. 그래서 칸을 아예 그리지 않는다. -->
-    #if(count(ways) == 0):
-    <!-- 여기서만 경고다. 다른 수단이 있으면 알림은 그리로 가므로 이 사람에게는
-         아무 일도 일어나지 않는다. 정말로 아무 데도 안 갈 때만 붉게 띄운다. -->
-    #if(count(blocked) == 0):
-    <p class="notice notice-warn">
-        관리자가 Slack 봇도 메일도 연결하지 않아 알림을 받을 수 없습니다.
-    </p>
-    #else:
-    #for(item in blocked):
-    <p class="notice notice-warn">#(item.detail)</p>
-    #endfor
-    #endif
-    <p class="field-note">
-        받을 수 있게 되면 여기서 고를 수 있습니다. 지금 정해둘 것은 없습니다.
-    </p>
-    #else:
+    <!-- **두 묶음이 같은 무게로 선다.** 받는 방법이 사실 한 줄이고 받을 알림만
+         체크박스였더니, 하나는 정하는 것이고 하나는 보는 것처럼 읽혔다. 둘 다
+         내가 정하는 것이다. -->
     <form class="form" method="post" action="/me/notifications">
-        <!-- **고를 것이 하나뿐이면 고르게 하지 않는다.** 라디오 버튼 하나짜리
-             그룹은 고를 것이 없는 선택지다. 그때는 어디로 가는지만 적는다. -->
-        #if(count(ways) == 1):
-        #for(way in ways):
-        <p class="fact-line">
-            <span class="fact-label">#(way.label)</span>
-            <span class="fact-value">#(way.detail)</span>
-        </p>
-        #endfor
-        #else:
         <fieldset class="choice-group">
-            <legend class="visually-hidden">알림을 받을 방법</legend>
+            <legend class="form-group-title">받는 방법</legend>
+
             #for(way in ways):
-            <label class="choice">
-                <input type="radio" name="via" value="#(way.value)"
-                       #if(chosen == way.value):checked#endif>
+            <!-- 쓸 수 없는 것은 지우지 않고 비활성으로 남긴다. 없애버리면 왜 메일만
+                 있는지 알 수 없고, 관리자가 Slack 을 붙이면 생긴다는 것도 모른다. -->
+            <label class="choice #if(!way.isUsable):choice-off#endif">
+                <input type="checkbox" name="via" value="#(way.value)"
+                       #if(way.isChosen):checked#endif
+                       #if(!way.isUsable):disabled#endif>
                 <span>
                     <span class="choice-name">#(way.label)</span>
                     <span class="choice-note">#(way.detail)</span>
@@ -55,23 +32,9 @@
             </label>
             #endfor
         </fieldset>
-        <!-- 양쪽에 보내지 않는 이유는 운영 알림과 같다. 같은 알림이 두 번 오면
-             한 번 오는 것보다 빨리 무시당한다. -->
-        <p class="field-note">한 곳으로만 갑니다.</p>
-        #endif
-
-        <!-- 지금 고를 수 없는 것. **경고가 아니다.** 알림은 위의 것으로 가고 있고,
-             이 사람이 시킨 적 없는 일이 실패한 것도 아니다. 무엇이 갖춰지면 고를 수
-             있는지만 조용히 적는다.
-
-             고를 것이 하나든 둘이든 같은 자리에 선다. 안쪽 갈래에 넣었더니 흔한
-             경우(쓸 수 있는 것 하나 + 못 고르는 것 하나)에서 빠졌다. -->
-        #for(item in blocked):
-        <p class="field-note">#(item.detail)</p>
-        #endfor
 
         <fieldset class="choice-group">
-            <legend>받을 알림</legend>
+            <legend class="form-group-title">받을 알림</legend>
 
             <!-- 체크박스는 꺼져 있으면 아예 보내지지 않는다. 서버가 값의 유무로 읽는다. -->
             <label class="choice">
@@ -79,9 +42,6 @@
                        #if(signingFailure):checked#endif>
                 <span>
                     <span class="choice-name">서명이 실패했을 때</span>
-                    <!-- 내가 올린 것만 오지 않는다. 올린 사람이 자리를 비우면 그
-                         버전이 아무도 모르게 멈춰 있어서, 올릴 수 있는 사람 모두가
-                         받는다 (ADR-0059). -->
                     <span class="choice-note">
                         내가 올릴 수 있는 앱이면 누가 올린 것이든 옵니다.
                     </span>
@@ -92,12 +52,7 @@
                 <input type="checkbox" name="feedback" #if(feedback):checked#endif>
                 <span>
                     <span class="choice-name">피드백이 왔을 때</span>
-                    <!-- 채널로 정해둔 앱은 여기를 켜도 나에게 오지 않는다. 둘 다
-                         보내지 않기 때문이다. 그 앱은 채널이 받는다. -->
-                    <span class="choice-note">
-                        내가 올릴 수 있는 앱에 옵니다. Slack 채널로 정해둔 앱은 채널이
-                        받으므로 나에게 오지 않습니다.
-                    </span>
+                    <span class="choice-note">내가 올릴 수 있는 앱에 옵니다.</span>
                 </span>
             </label>
         </fieldset>
@@ -106,7 +61,6 @@
             <button class="button button-primary" type="submit">저장</button>
         </div>
     </form>
-    #endif
 </section>
 
 #endexport
