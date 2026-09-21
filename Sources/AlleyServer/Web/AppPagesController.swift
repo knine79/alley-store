@@ -771,6 +771,18 @@ struct AppPagesController: RouteCollection, Sendable {
         let app = try await request.findApp()
         try app.requireManageAccess(for: user)
 
+        // **화면만 가리면 막은 것이 아니다.** 여기까지 오는 길은 폼을 손으로 만드는
+        // 것뿐이지만, 내주고 나면 주소가 나오고 주소가 나오면 된 줄 안다 (ADR-0057).
+        let sparkle = try await SparkleReadinessRow.of(app: app, on: request.db)
+        guard sparkle.canIssue else {
+            let view = try await renderDetail(
+                on: request,
+                issuedToken: nil,
+                feedError: sparkle.blocker ?? "지금은 피드 주소를 내줄 수 없습니다."
+            )
+            return htmlResponse(view, status: .conflict)
+        }
+
         let values = try request.content.decode(DeployTokenFormValues.self)
         do {
             let created = try await FeedTokenIssuing.issue(
