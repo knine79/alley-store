@@ -501,8 +501,8 @@
 <section class="section">
     <h2 class="section-title">자동 업데이트 피드</h2>
     <p class="page-lead">
-        앱에 Sparkle 을 넣으면 스토어 앱 없이도 스스로 업데이트합니다. 아래 주소를
-        앱의 <code>SUFeedURL</code> 에 넣으세요. 이 경로로 받은 것은
+        앱에 Sparkle 을 넣으면 스토어 앱 없이도 스스로 업데이트합니다. 여기서 낸 피드
+        주소를 앱의 <code>SUFeedURL</code> 에 넣습니다. 이 경로로 받은 것은
         <strong>사용자별 다운로드 이력이 남지 않습니다.</strong>
     </p>
 
@@ -584,6 +584,12 @@
     </table>
     #endif
 
+    <!-- **공개키를 하나로 말할 수 없으면 내주지 않는다.** 주소를 내주면 넣고, 넣으면
+         된 줄 안다. 위의 경고는 그때 한 줄로 남을 뿐이다 (ADR-0057).
+
+         이미 발급한 것은 위 표에 그대로 있다. 그 주소로 피드는 내려가고, 키를 넣으면
+         다음 버전부터 서명이 붙는다. 여기서 막는 것은 새로 내주는 것뿐이다. -->
+    #if(sparkle.canIssue):
     <form class="form" method="post" action="/apps/#(app.id)/feed-tokens">
         <label class="field">
             <span class="field-label">피드 이름</span>
@@ -594,6 +600,15 @@
             <button class="button button-primary" type="submit">피드 주소 발급</button>
         </div>
     </form>
+    #else:
+    <!-- 고치는 자리가 관리 화면이라 여기로 링크하지 않는다. 이 앱을 맡은 사람이
+         관리자가 아니면 눌러도 들어가지 못한다. 누구에게 말해야 하는지만 적는다. -->
+    <p class="field-note">
+        위 문제를 고치기 전에는 피드 주소를 내주지 않습니다. 지금 내줘도 앱이 그 주소로
+        업데이트를 받지 못합니다. 서명 워커에 Sparkle 키를 넣는 것은 스토어 관리자가
+        하는 일입니다.
+    </p>
+    #endif
 </section>
 #endif
 

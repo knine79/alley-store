@@ -300,6 +300,12 @@ struct FeedTokenTests {
             let seeded = try await seed(on: app)
             let path = "/apps/\(seeded.appID.uuidString)"
 
+            // 공개키를 하나로 말할 수 있어야 피드 주소를 내준다 (ADR-0057). 여기서
+            // 보려는 것은 내준 주소가 한 번만 보이는가라서, 그 조건을 갖춰둔다.
+            let (worker, _) = try await app.makeWorker()
+            worker.sparklePublicKey = "PUBKEYAAA="
+            try await worker.save(on: app.db)
+
             try await app.testing().test(
                 .POST, "\(path)/feed-tokens", headers: .form(cookie: seeded.ownerToken),
                 beforeRequest: { request in
