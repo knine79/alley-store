@@ -27,6 +27,9 @@
         var note = endpointField.querySelector(".field-note");
         var nameInput = nameField ? nameField.querySelector("input") : null;
 
+        var nameLabel = nameField ? nameField.querySelector(".field-label") : null;
+        var nameNote = nameField ? nameField.querySelector(".field-note") : null;
+
         function apply() {
             var option = select.options[select.selectedIndex];
             if (!option) return;
@@ -35,18 +38,13 @@
             if (note) note.textContent = option.getAttribute("data-endpoint-note");
             if (input) input.placeholder = option.getAttribute("data-endpoint-placeholder");
 
-            if (!nameField) return;
-            var needsName = option.getAttribute("data-needs-name") === "1";
-            nameField.hidden = !needsName;
             /*
-             * **감춘 칸의 `required` 를 풀어준다.** 감춰진 채로 남아 있으면 브라우저가
-             * "보이지 않는 칸을 채우라" 며 제출을 막는데, 사람은 무엇을 채우라는
-             * 것인지 볼 수 없다. 화면에 없는 것을 요구하지 않는다.
+             * 이름 칸도 방식마다 뜻이 다르다. 웹훅은 보이지 않는 주소를 대신할
+             * 이름이고, 메일은 그 주소가 누구인지다. 둘 다 받지만 묻는 말이 다르다.
              */
-            if (nameInput) {
-                nameInput.required = needsName;
-                if (!needsName) nameInput.value = "";
-            }
+            if (nameLabel) nameLabel.textContent = option.getAttribute("data-name-label");
+            if (nameNote) nameNote.textContent = option.getAttribute("data-name-note");
+            if (nameInput) nameInput.placeholder = option.getAttribute("data-name-placeholder");
         }
 
         select.addEventListener("change", apply);
