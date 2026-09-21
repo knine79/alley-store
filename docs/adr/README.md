@@ -64,6 +64,7 @@
 | [0054](0054-logging-out-of-the-provider-is-a-choice.md) | 공급자 세션까지 끊을지는 조직이 정한다 | 수락됨 | 2026-09-17 |
 | [0055](0055-unique-names-among-usable-tokens.md) | 쓸 수 있는 토큰끼리는 이름이 겹치지 않게 한다 | 수락됨 | 2026-09-16 |
 | [0056](0056-console-visitors-are-developers.md) | 웹 콘솔로 들어온 사람은 개발자로 둔다 | 수락됨 | 2026-09-21 |
+| [0057](0057-workers-report-the-sparkle-public-key.md) | 워커가 Sparkle 공개키를 알리고, 화면이 쓸 수 있는 상태인지 말한다 | 수락됨 | 2026-09-21 |
 
 ## 언제 쓰나
 

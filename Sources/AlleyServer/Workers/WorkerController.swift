@@ -561,6 +561,10 @@ public struct WorkerController: RouteCollection, Sendable {
         // 옛 워커는 이 값을 안 보낸다. 그때 nil 로 덮어써야 "모름" 이 유지된다.
         // 한 번 받은 값을 붙들고 있으면 워커를 옛 것으로 되돌려도 새 것으로 보인다.
         worker.workerVersion = payload.workerVersion
+        // 키를 뺀 워커는 nil 을 보낸다. 덮어써야 "서명 안 함" 이 화면에 그대로
+        // 드러난다. 한 번 받은 값을 붙들면 키를 빼도 붙어 있는 것처럼 보인다
+        // (ADR-0057).
+        worker.sparklePublicKey = payload.sparklePublicKey
         worker.currentJobID = payload.currentJobID
         worker.lastSeenAt = Date()
         try await worker.save(on: request.db)

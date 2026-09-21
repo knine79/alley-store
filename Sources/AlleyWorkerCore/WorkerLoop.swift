@@ -179,6 +179,15 @@ public struct WorkerLoop: Sendable {
     /// 화면에 한 줄로 뜰 실패 이유.
     ///
     /// 전체 로그는 따로 보낸다. 목록에서 읽을 것은 첫 줄이면 충분하다.
+    /// 설정된 개인키에서 계산한 공개키. 키가 없거나 형식이 깨졌으면 nil.
+    ///
+    /// 형식이 깨진 것을 nil 로 접는 이유는, 그 경우에도 서명이 붙지 않기 때문이다.
+    /// 화면에서 보이는 결과가 같아야 한다.
+    private func sparklePublicKey() -> String? {
+        guard let raw = config.sparklePrivateKey else { return nil }
+        return try? SparkleSignature.publicKey(fromPrivateKeyBase64: raw)
+    }
+
     private func summarize(_ reason: String) -> String {
         let firstLine = reason.split(separator: "\n").first.map(String.init) ?? reason
         return firstLine.count > 300 ? String(firstLine.prefix(300)) + "…" : firstLine
