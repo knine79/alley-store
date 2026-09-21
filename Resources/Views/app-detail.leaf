@@ -418,15 +418,10 @@
 #if(canManage):
 <section class="section">
     <h2 class="section-title">알림</h2>
-    <p class="page-lead">
-        이 앱에 새 피드백이 오거나 서명이 실패하면 알립니다. 나에게 오는 알림을 무엇으로
-        받을지는 <a href="/me/notifications">내 알림</a> 에서 정합니다.
-    </p>
+    <p class="page-lead">이 앱에 새 피드백이 오거나 서명이 실패하면 알립니다.</p>
 
     #extend("alert-delivery")
 </section>
-
-#extend("alert-channels")
 #endif
 
 #if(canManage):
@@ -670,6 +665,11 @@
 <!-- 업로드 권한을 줄 사람을 치는 동안 찾는다. 없어도 폼이 그대로 굴러간다. -->
 #if(canUpload):
 <script src="/member-search.js?v=#(page.assetVersion)" defer></script>
+#endif
+
+<!-- Slack 채널을 고르면 그 자리에서 채널 칸을 연다. 없어도 저장하면 열린다. -->
+#if(canManage):
+<script src="/alert-delivery.js?v=#(page.assetVersion)" defer></script>
 #endif
 
 #endexport

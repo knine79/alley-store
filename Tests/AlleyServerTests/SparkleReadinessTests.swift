@@ -73,7 +73,7 @@ struct SparkleReadinessTests {
                 headers: .sessionCookie(token)
             ) { response in
                 let html = response.body.string
-                #expect(html.contains("Sparkle 키가 없습니다"))
+                #expect(html.contains("Sparkle 키가 없어서"))
                 // 알려줄 공개키가 없으니 상자도 그리지 않는다.
                 #expect(!html.contains("SUPublicEDKey"))
             }
@@ -201,7 +201,7 @@ struct SparkleReadinessTests {
             ) { response in
                 #expect(response.status == .conflict)
                 // 오류 화면이 아니라 그 화면에 이유가 붙는다.
-                #expect(response.body.string.contains("서명 워커에 Sparkle 키가 없습니다"))
+                #expect(response.body.string.contains("서명 워커에 Sparkle 키가 없어서"))
             }
 
             let issued = try await FeedToken.query(on: app.db).count()

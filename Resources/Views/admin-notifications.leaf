@@ -6,11 +6,10 @@
     전체가 멈추는 종류라 관리자가 받습니다.
 </p>
 
-<!-- 여기서 정하지 않는 것들을 먼저 말한다. 알림이 셋이라 "왜 내 앱 설정이 여기
-     없지" 로 헤매기 쉽다. -->
+<!-- 여기서 정하지 않는 것을 먼저 말한다. 알림이 셋이라 "왜 내 앱 설정이 여기 없지"
+     로 헤매기 쉽다. -->
 <p class="field-note">
-    앱마다 보내는 알림은 <strong>앱 상세의 알림</strong> 에서, 나에게 오는 알림을
-    무엇으로 받을지는 <a href="/me/notifications">내 알림</a> 에서 정합니다.
+    앱마다 보내는 알림은 <strong>앱 상세의 알림</strong> 에서 정합니다.
 </p>
 
 <section class="section">
@@ -18,6 +17,6 @@
     #extend("alert-delivery")
 </section>
 
-#extend("alert-channels")
+<script src="/alert-delivery.js?v=#(page.assetVersion)" defer></script>
 #endexport
 #endextend

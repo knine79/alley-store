@@ -63,11 +63,9 @@ struct SparkleReadinessRow: Encodable {
                 """
         }
         if publicKey == nil {
-            return """
-                서명 워커에 Sparkle 키가 없습니다. 지금 상태로는 결과물에 서명이 붙지 \
-                않고, Sparkle 은 서명이 없는 업데이트를 조용히 건너뜁니다. 피드 주소를 \
-                넣어도 업데이트되지 않습니다.
-                """
+            // 왜 안 되는지를 길게 적어봐야, 이 화면에서 할 수 있는 것이 없다. 무엇이
+            // 없어서 막혔는지만 적고 고치는 사람은 아래 안내가 가리킨다.
+            return "서명 워커에 Sparkle 키가 없어서 설정할 수 없습니다."
         }
         if hasNoRelease { return nil }
         if !latestReleaseIsSigned {

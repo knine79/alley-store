@@ -23,6 +23,38 @@ struct AlertDeliveryContext: Encodable {
     var channels: [AlertChannelRow]
     /// 채널을 넣다 틀렸을 때 그 자리에 띄울 말.
     var error: String?
+
+    /// 채널 칸을 접어둘까.
+    ///
+    /// **`target` 을 화면에서 견주지 않는다.** Leaf 는 `#if(a != b)` 를 읽지 못하고,
+    /// `#if(a == b):#else:...#endif` 처럼 앞 본문이 비면 통째로 깨진다(500 이 난다).
+    /// 참이면 붙이는 값 하나로 넘겨야 화면이 단순하다.
+    ///
+    /// **계산 프로퍼티로 두면 안 된다.** `Encodable` 합성 인코딩은 저장 프로퍼티만
+    /// 담아서, 계산한 값은 Leaf 까지 가지 않는다 (`SparkleReadinessRow.blocker` 와
+    /// 같은 함정이다).
+    var channelsHidden: Bool
+
+    init(
+        target: String,
+        canReachPeople: Bool,
+        peopleName: String,
+        peopleNote: String,
+        saveAction: String,
+        channelAction: String,
+        channels: [AlertChannelRow],
+        error: String?
+    ) {
+        self.target = target
+        self.canReachPeople = canReachPeople
+        self.peopleName = peopleName
+        self.peopleNote = peopleNote
+        self.saveAction = saveAction
+        self.channelAction = channelAction
+        self.channels = channels
+        self.error = error
+        self.channelsHidden = target != AlertDelivery.channel.rawValue
+    }
 }
 
 extension Application {

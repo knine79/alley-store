@@ -73,28 +73,38 @@ public final class User: Model, @unchecked Sendable {
     @Field(key: "notify_feedback")
     public var notifyFeedback: Bool
 
-    /// 나에게 오는 알림을 무엇으로 받을지.
+    /// 나에게 오는 알림을 무엇으로 받을지. **여럿 고를 수 있다.**
     ///
     /// **개인이 정한다.** Slack 을 안 쓰는 사람이 있고, 봇 토큰을 받지 못한 스토어도
     /// 있다. 관리자가 정해두면 그 둘 중 한쪽은 알림을 못 받는다.
     ///
-    /// 스토어가 그 수단을 갖추지 않았으면 고른 값이 그대로 있어도 쓸 수 있는 쪽으로
-    /// 간다 (`Notifier.notify(person:)`). 고를 때는 없던 수단이 나중에 생기기도
-    /// 하고, 있던 수단이 사라지기도 한다.
+    /// 쉼표로 이어 담는다. 한 갈래만 담던 시절의 값(`slack_dm`)도 그대로 읽힌다.
+    ///
+    /// 고른 것을 스토어가 갖추지 않았으면 쓸 수 있는 쪽으로 간다
+    /// (`Notifier.notify(person:)`). 고를 때는 없던 수단이 나중에 생기기도 하고,
+    /// 있던 수단이 사라지기도 한다.
     @Field(key: "notify_via")
     public var notifyViaName: String
 
-    public var notifyVia: NotificationChannelKind {
+    public var notifyVia: Set<NotificationChannelKind> {
         get {
-            let stored = NotificationChannelKind(rawValue: notifyViaName)
-            // 사람에게 보낼 수 없는 값이 들어와 있으면 기본으로 되돌린다. 웹훅
-            // 주소로는 그 사람에게만 보낼 수 없다.
-            guard let stored, NotificationChannelKind.personal.contains(stored) else {
-                return .slackDirectMessage
-            }
-            return stored
+            // 사람에게 보낼 수 없는 값은 버린다. 웹훅 주소로는 그 사람에게만 보낼
+            // 수 없다.
+            Set(
+                notifyViaName
+                    .split(separator: ",")
+                    .compactMap { NotificationChannelKind(rawValue: String($0)) }
+                    .filter(NotificationChannelKind.personal.contains)
+            )
         }
-        set { notifyViaName = newValue.rawValue }
+        // 담는 순서를 고정한다. 같은 집합이 저장할 때마다 다른 문자열이 되면
+        // 데이터베이스의 값만 보고는 바뀐 것인지 알 수 없다.
+        set {
+            notifyViaName = NotificationChannelKind.personal
+                .filter(newValue.contains)
+                .map(\.rawValue)
+                .joined(separator: ",")
+        }
     }
 
     public init() {}
@@ -110,7 +120,7 @@ public final class User: Model, @unchecked Sendable {
         roleSetByAdmin: Bool = false,
         notifySigningFailure: Bool = true,
         notifyFeedback: Bool = true,
-        notifyVia: NotificationChannelKind = .slackDirectMessage
+        notifyVia: Set<NotificationChannelKind> = [.slackDirectMessage]
     ) {
         self.id = id
         self.issuer = issuer
@@ -122,7 +132,10 @@ public final class User: Model, @unchecked Sendable {
         self.roleSetByAdmin = roleSetByAdmin
         self.notifySigningFailure = notifySigningFailure
         self.notifyFeedback = notifyFeedback
-        self.notifyViaName = notifyVia.rawValue
+        self.notifyViaName = NotificationChannelKind.personal
+            .filter(notifyVia.contains)
+            .map(\.rawValue)
+            .joined(separator: ",")
     }
 }
 
@@ -346,14 +359,16 @@ public struct AddNotifyViaToUser: AsyncMigration {
     }
 }
 
-/// 피드백 알림의 기본값을 켜짐으로 바꾼다 (ADR-0059).
+/// 피드백 알림을 모두 켠다 (ADR-0059).
 ///
-/// **이미 정한 사람의 값은 건드리지 않는다.** 켠 사람은 켜져 있고 끈 사람은 꺼져
-/// 있다. 여기서 바꾸는 것은 앞으로 만들어지는 계정의 기본값뿐이다.
+/// 기본값만 바꾸고 이미 있는 행은 두려고 했다. 끈 사람을 다시 켜면 끄는 버튼이
+/// 눌러도 되돌아오는 버튼이 되기 때문이다.
 ///
-/// 지금까지 꺼져 있던 사람들을 켜주지 않는 이유는, 그들이 끈 것인지 기본값을 그대로
-/// 둔 것인지 구분할 수 없기 때문이다. 끈 사람을 다시 켜면 끄는 버튼이 눌러도 되돌아
-/// 오는 버튼이 된다.
+/// **그런데 지금까지 꺼져 있던 사람은 끈 적이 없다.** 이 값은 만들어질 때부터 꺼짐
+/// 이었고, 앱 알림이 개별로 가게 되기 전에는 켤 이유도 없었다. 그 상태로 두면 앱을
+/// 개별 전송으로 정해둬도 아무에게도 가지 않는다.
+///
+/// 한 번 켜고, 그 뒤로 끄는 것은 각자 내 알림에서 한다.
 public struct DefaultFeedbackNotificationsOn: AsyncMigration {
     public init() {}
 
@@ -362,6 +377,7 @@ public struct DefaultFeedbackNotificationsOn: AsyncMigration {
             throw MigrationError.needsSQLDatabase
         }
         try await sql.raw("ALTER TABLE users ALTER COLUMN notify_feedback SET DEFAULT true").run()
+        try await sql.raw("UPDATE users SET notify_feedback = true").run()
     }
 
     public func revert(on database: any Database) async throws {

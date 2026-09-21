@@ -152,19 +152,22 @@ struct NotificationRoutingTests {
         }
     }
 
-    /// 화면이 칸을 그리지 않는 상태다. 여기까지 오는 길은 폼을 손으로 만드는
-    /// 것뿐이고, 받아 봐야 켜도 아무 일이 없는 값이 저장된다.
-    @Test("보낼 수단이 없으면 개인 알림을 정할 수 없다")
-    func cannotChooseWithoutBot() async throws {
+    /// **보낼 수단이 없어도 정해둘 수는 있다.** 화면이 두 갈래를 회색으로라도
+    /// 그리므로, 관리자가 나중에 붙이면 그때부터 그대로 간다. 막아두면 지금 정할 수
+    /// 없다는 것만 알려줄 뿐 나중에 다시 오게 만든다.
+    @Test("보낼 수단이 없어도 받을 알림은 정할 수 있다")
+    func canStillChooseWhatToReceive() async throws {
         try await withMigratedApp { app in
-            let (_, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let (user, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
             try await app.testing().test(
                 .POST, "/me/notifications",
                 headers: .form(cookie: token),
                 beforeRequest: { try $0.content.encode(["feedback": "on"], as: .urlEncodedForm) }
-            ) { response in
-                #expect(response.status == .conflict)
-            }
+            ) { #expect($0.status == .ok) }
+
+            let saved = try #require(try await User.find(try user.requireID(), on: app.db))
+            #expect(saved.notifyFeedback)
+            #expect(!saved.notifySigningFailure)
         }
     }
 
@@ -210,39 +213,36 @@ struct NotificationRoutingTests {
         }
     }
 
-    /// **실패로 적지 않는다.** 이 화면을 보는 사람은 Slack 을 고른 적이 없고 지금
-    /// 고를 수도 없다. "Slack 이 거절했습니다" 는 자기가 시킨 적 없는 일이 실패했다는
-    /// 말로 읽힌다. 무엇이 갖춰지면 고를 수 있는지를 적는다.
-    @Test("Slack DM 을 못 고르는 이유를 갖춰야 할 것으로 적는다")
-    func explainsWhatWouldMakeSlackSelectable() {
-        let email = "dev@example.com"
+    /// **Slack 이 뭐라고 했는지는 적지 않는다.** 이 화면을 보는 사람은 Slack 을 부른
+    /// 적이 없다. `invalid_auth` 같은 코드를 보여줘도 할 수 있는 것이 없다.
+    @Test("내 알림에 Slack 응답 코드가 새지 않는다")
+    func personalScreenHidesSlackInternals() async throws {
+        try await withMigratedApp(
+            overrides: [
+                "SLACK_BOT_TOKEN": "xoxb-test",
+                "SMTP_HOST": "smtp.example.com",
+                "SMTP_FROM": "alley@example.com",
+            ]
+        ) { app in
+            let (_, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
 
-        // 관리자 설정 문제. 이 사람이 할 수 있는 것은 없고, 갖춰지면 고를 수 있다.
-        let theirs = PersonalDelivery.unavailableReason(
-            SlackDirectMessageChannel.ChannelError.rejected(
-                api: "users.lookupByEmail", error: "invalid_auth"
-            ),
-            email: email
-        )
-        #expect(theirs.contains("지금 고를 수 없습니다"))
-        #expect(theirs.contains("관리자가 Slack 봇을 설정하면"))
-        // 시킨 적 없는 일이 실패했다고 읽히면 안 된다.
-        #expect(!theirs.contains("거절했습니다"))
-        // 코드는 남긴다. 관리자가 Slack 쪽에서 찾아볼 때 필요하다.
-        #expect(theirs.contains("invalid_auth"))
-
-        // 이메일이 어긋난 경우는 갖춰야 할 것이 다르다.
-        let mine = PersonalDelivery.unavailableReason(
-            SlackDirectMessageChannel.ChannelError.noSuchUser(email: email), email: email
-        )
-        #expect(mine.contains("지금 고를 수 없습니다"))
-        #expect(mine.contains(email))
-        #expect(mine.contains("이메일이 다르면"))
-
-        let passing = PersonalDelivery.unavailableReason(
-            SlackDirectMessageChannel.ChannelError.transport("연결 끊김"), email: email
-        )
-        #expect(passing.contains("잠시 뒤"))
+            try await app.testing().test(
+                .GET, "/me/notifications", headers: .sessionCookie(token)
+            ) { response in
+                #expect(response.status == .ok)
+                let body = response.body.string
+                // 쓸 수 없는 것은 목록에서 빼지 않고 회색으로 남긴다. 빼버리면 왜
+                // 메일 하나뿐인지 알 수 없다.
+                #expect(body.contains("Slack DM"))
+                #expect(body.contains("disabled"))
+                // 코드도 API 이름도 나오지 않는다. "거절" 로는 검사하지 않는다 -
+                // 템플릿 주석에도 그 글자가 들어 있어서 보이는 글이 아닌 것을 잡는다.
+                #expect(!body.contains("invalid_auth"))
+                #expect(!body.contains("users.lookupByEmail"))
+                // 대신 무엇이 갖춰져야 하는지가 그 자리에 있다.
+                #expect(body.contains("관리자가 Slack 봇을 연결하면"))
+            }
+        }
     }
 
     // MARK: - 메일 (ADR-0058)
@@ -255,7 +255,7 @@ struct NotificationRoutingTests {
         try await withMigratedApp { app in
             let (user, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
             // 기본값은 Slack DM 이다. 이 스토어에는 메일뿐이다.
-            #expect(user.notifyVia == .slackDirectMessage)
+            #expect(user.notifyVia == [.slackDirectMessage])
 
             let mail = RecordingChannel(kind: .email)
             let notifier = Notifier(database: app.db, channels: [mail], logger: app.logger)
@@ -266,12 +266,12 @@ struct NotificationRoutingTests {
         }
     }
 
-    /// 둘 다 있으면 고른 대로 간다. 양쪽에 보내지 않는 이유는 운영 알림과 같다.
-    @Test("둘 다 있으면 고른 쪽으로만 간다")
+    /// 고른 대로 간다. 하나만 골랐으면 하나로만 간다.
+    @Test("고르지 않은 쪽으로는 가지 않는다")
     func chosenWayWins() async throws {
         try await withMigratedApp { app in
             let (user, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
-            user.notifyVia = .email
+            user.notifyVia = [.email]
             try await user.save(on: app.db)
 
             let dm = RecordingChannel(kind: .slackDirectMessage)
@@ -285,14 +285,43 @@ struct NotificationRoutingTests {
         }
     }
 
-    /// 사람에게 보낼 수 없는 값이 들어와 있으면 기본으로 되돌린다. 웹훅 주소로는
-    /// 그 사람에게만 보낼 수 없다.
-    @Test("사람에게 못 쓰는 수단은 기본으로 되돌린다")
-    func nonPersonalWayFoldsBack() async throws {
+    /// 사람에게 보낼 수 없는 값은 버린다. 웹훅 주소로는 그 사람에게만 보낼 수 없다.
+    @Test("사람에게 못 쓰는 수단은 버린다")
+    func nonPersonalWayIsDropped() async throws {
         try await withMigratedApp { app in
             let (user, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
             user.notifyViaName = NotificationChannelKind.slack.rawValue
-            #expect(user.notifyVia == .slackDirectMessage)
+            #expect(user.notifyVia.isEmpty)
+        }
+    }
+
+    /// **둘 다 고를 수 있다.** 남이 정해준 것이 아니라 자기가 고른 것이라, 두 번
+    /// 오는 것도 본인이 정한 결과다.
+    @Test("둘 다 고르면 둘 다 간다")
+    func bothWaysWhenBothChosen() async throws {
+        try await withMigratedApp { app in
+            let (user, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            user.notifyVia = [.slackDirectMessage, .email]
+            try await user.save(on: app.db)
+
+            let dm = RecordingChannel(kind: .slackDirectMessage)
+            let mail = RecordingChannel(kind: .email)
+            let notifier = Notifier(database: app.db, channels: [dm, mail], logger: app.logger)
+
+            await notifier.notify(person: user, message: NotificationMessage(title: "서명이 실패했습니다"))
+
+            #expect(dm.messages.count == 1)
+            #expect(mail.messages.count == 1)
+        }
+    }
+
+    /// 한 갈래만 담던 시절의 값도 그대로 읽힌다.
+    @Test("옛 값 하나짜리도 읽는다")
+    func readsTheOldSingleValue() async throws {
+        try await withMigratedApp { app in
+            let (user, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            user.notifyViaName = "slack_dm"
+            #expect(user.notifyVia == [.slackDirectMessage])
         }
     }
 
@@ -318,24 +347,27 @@ struct NotificationRoutingTests {
         }
     }
 
-    /// 메일만 있는 스토어에서 Slack DM 을 고르면 아무 데도 가지 않는다. 화면이
-    /// 그리지 않는 값이라 여기까지 오는 길은 폼을 손으로 만드는 것뿐이다.
-    @Test("갖추지 않은 수단은 고를 수 없다")
-    func cannotChooseAWayTheStoreLacks() async throws {
+    /// 스토어가 갖추지 않은 수단은 골라도 저장되지 않는다. 화면이 회색으로 두는
+    /// 값이라 여기까지 오는 길은 폼을 손으로 만드는 것뿐이다.
+    @Test("갖추지 않은 수단은 저장되지 않는다")
+    func doesNotStoreAWayTheStoreLacks() async throws {
         try await withMigratedApp(
             overrides: ["SMTP_HOST": "smtp.example.com", "SMTP_FROM": "alley@example.com"]
         ) { app in
-            let (_, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let (user, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
 
             try await app.testing().test(
                 .POST, "/me/notifications",
                 headers: .form(cookie: token),
                 beforeRequest: {
-                    try $0.content.encode(["via": "slack_dm"], as: .urlEncodedForm)
+                    try $0.content.encode(["via": ["slack_dm"]], as: .urlEncodedForm)
                 }
-            ) { response in
-                #expect(response.status == .conflict)
-            }
+            ) { #expect($0.status == .ok) }
+
+            let saved = try #require(try await User.find(try user.requireID(), on: app.db))
+            #expect(!saved.notifyVia.contains(.email))
+            // 지금 쓸 수 없는 것은 폼이 무엇을 보내든 그대로 둔다. 새로 켜지도 않는다.
+            #expect(saved.notifyVia == [.slackDirectMessage])
         }
     }
 

@@ -452,12 +452,12 @@ struct FeedbackPageTests {
             try await app.testing().test(
                 .GET, "/apps/\(setup.appID.uuidString)",
                 headers: .sessionCookie(setup.readerToken)
-            ) { #expect(!$0.body.string.contains("올릴 수 있는 사람에게 각각")) }
+            ) { #expect(!$0.body.string.contains("앱 관리자에 개별전송")) }
 
             try await app.testing().test(
                 .GET, "/apps/\(setup.appID.uuidString)",
                 headers: .sessionCookie(setup.ownerToken)
-            ) { #expect($0.body.string.contains("올릴 수 있는 사람에게 각각")) }
+            ) { #expect($0.body.string.contains("앱 관리자에 개별전송")) }
         }
     }
 

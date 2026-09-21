@@ -25,28 +25,21 @@ struct MePagesController: RouteCollection, Sendable {
     @Sendable
     func submitNotifications(request: Request) async throws -> Response {
         let user = try request.requireUser()
-        // **여기서는 설정만 본다.** 닿는지까지 보려면 Slack 을 불러야 하는데, 그 왕복이
-        // 실패하면 체크박스를 끄지도 못한다. 스토어가 수단을 하나도 갖추지 않은
-        // 것과 내 계정을 못 찾는 것은 다른 일이다.
-        let ways = PersonalDelivery.configured(on: request)
-        // 화면이 칸을 그리지 않는 상태다. 여기까지 오는 길은 폼을 손으로 만드는
-        // 것뿐이고, 받아 봐야 켜도 아무 일이 없는 값이 저장된다.
-        guard !ways.isEmpty else {
-            throw Abort(.conflict, reason: "받을 방법이 없어 알림을 정할 수 없습니다.")
-        }
         let values = try request.content.decode(NotificationPreferenceValues.self)
 
         // 체크박스는 꺼져 있으면 아예 보내지지 않는다. 값이 없으면 끈 것이다.
         user.notifySigningFailure = values.signingFailure == "on"
         user.notifyFeedback = values.feedback == "on"
-        // 받는 방법은 고를 것이 둘일 때만 폼에 선다. 하나뿐이면 값이 오지 않고,
-        // 그때는 지금 값을 그대로 둔다. 어차피 보낼 때 있는 것으로 간다.
-        if let via = values.via.flatMap(NotificationChannelKind.init(rawValue:)) {
-            guard ways.contains(via) else {
-                throw Abort(.conflict, reason: "이 스토어가 갖추지 않은 방법입니다: \(via.displayName)")
-            }
-            user.notifyVia = via
-        }
+
+        // **비활성 칸은 폼에서 오지 않는다.** 지금 쓸 수 없는 수단은 회색으로 두는데,
+        // 그 값을 "껐다" 로 읽으면 Slack 이 잠깐 안 되는 사이에 저장을 누른 사람의
+        // 선택이 조용히 지워진다. 그래서 쓸 수 있는 것만 폼의 값으로 갈아끼우고,
+        // 나머지는 저장돼 있던 대로 둔다.
+        let usable = Set(PersonalDelivery.configured(on: request))
+        let sent = Set(
+            (values.via ?? []).compactMap(NotificationChannelKind.init(rawValue:))
+        )
+        user.notifyVia = user.notifyVia.subtracting(usable).union(sent.intersection(usable))
         try await user.save(on: request.db)
 
         // 리다이렉트하지 않는다. 바꾼 값이 그대로 보이는 화면을 다시 그리고,
@@ -60,21 +53,13 @@ struct MePagesController: RouteCollection, Sendable {
 
     private func render(saved: Bool, on request: Request) async throws -> View {
         let user = try request.requireUser()
-        let all = await PersonalDelivery.all(for: user, on: request)
-        let usable = all.filter(\.isUsable)
-
         return try await request.view.render(
             "me-notifications",
             MyNotificationsContext(
                 page: try await request.pageContext(title: "내 알림"),
                 signingFailure: user.notifySigningFailure,
                 feedback: user.notifyFeedback,
-                ways: usable,
-                // 고른 값이 아니라 **실제로 갈 곳**을 표시한다. 고른 수단이 스토어에서
-                // 빠지면 다른 것으로 가는데 (`Notifier.notify(person:)`), 화면이 고른
-                // 값을 그대로 보여주면 오지도 않는 곳을 받는 곳이라고 적게 된다.
-                chosen: (usable.first { $0.kind == user.notifyVia } ?? usable.first)?.value ?? "",
-                blocked: all.filter { !$0.isUsable },
+                ways: await PersonalDelivery.all(for: user, on: request),
                 saved: saved
             )
         ).get()
@@ -83,18 +68,16 @@ struct MePagesController: RouteCollection, Sendable {
 
 /// 나에게 오는 알림을 받을 수 있는 방법 하나.
 struct PersonalDelivery: Encodable {
-    /// `NotificationChannelKind` 의 rawValue. 라디오 값으로 그대로 쓴다.
+    /// `NotificationChannelKind` 의 rawValue. 체크박스 값으로 그대로 쓴다.
     var value: String
     /// 사람에게 보여줄 이름.
     var label: String
-    /// 어디로 가는지 한 줄. 갈 수 없으면 왜 못 가는지.
+    /// 어디로 가는지 한 줄. 지금 쓸 수 없으면 무엇이 갖춰져야 하는지.
     var detail: String
-    /// 지금 보낼 수 있나. 아니면 골라도 아무 일이 없다.
+    /// 지금 보낼 수 있나. 아니면 칸을 회색으로 둔다.
     var isUsable: Bool
-
-    var kind: NotificationChannelKind {
-        NotificationChannelKind(rawValue: value) ?? .email
-    }
+    /// 내가 골라둔 것인가.
+    var isChosen: Bool
 
     /// 이 스토어가 갖춘 개인 알림 수단들. 설정만 보고 닿는지는 보지 않는다.
     static func configured(on request: Request) -> [NotificationChannelKind] {
@@ -105,22 +88,25 @@ struct PersonalDelivery: Encodable {
         return kinds
     }
 
-    /// 화면에 그릴 수단들. 갖추지 않은 것은 아예 빠진다.
+    /// 화면에 그릴 수단들. **쓸 수 없는 것도 그린다.**
     ///
-    /// **고르기 전에 닿는지 보여준다.** 스토어 계정과 Slack 계정의 이메일이 다르면
-    /// DM 을 찾지 못하는데, 그 사실을 처음 알림이 날 때 알게 되면 늦다. 그때는
-    /// 알림이 안 온 것과 실패가 없는 것이 겉으로 같다.
+    /// 목록에서 빼버리면 왜 메일 하나뿐인지 알 수 없고, 관리자가 Slack 을 붙이면
+    /// 생긴다는 것도 모른다. 회색으로 두고 무엇이 갖춰져야 하는지를 한 줄 적는다.
     ///
-    /// Slack 을 한 번 부르는 값이라 화면을 열 때마다 왕복이 생긴다. 이 화면은 자주
-    /// 여는 곳이 아니라 그 대가를 받아들인다. 메일은 부르지 않는다. 보내 보기 전에는
-    /// 주소가 살아 있는지 알 수 없고, 알아보려고 메일을 한 통 보낼 수는 없다.
+    /// Slack 은 한 번 불러 닿는지 본다. 스토어 계정과 Slack 계정의 이메일이 다르면
+    /// 못 찾는데, 그 사실을 처음 알림이 날 때 알게 되면 늦다. 이 화면은 자주 여는
+    /// 곳이 아니라 왕복 한 번을 받아들인다. 메일은 부르지 않는다 - 보내 보기 전에는
+    /// 주소가 살아 있는지 알 수 없고, 알아보려고 한 통 보낼 수는 없다.
     static func all(for user: User, on request: Request) async -> [PersonalDelivery] {
         var ways: [PersonalDelivery] = []
 
         if let token = request.application.alleyConfig.slackBotToken {
             let channel = SlackDirectMessageChannel(client: request.client, botToken: token)
-            do {
-                let handle = try await channel.findRecipient(email: user.email)
+            // **어떻게 실패했는지는 적지 않는다.** 이 화면을 보는 사람은 Slack 을
+            // 부른 적이 없다. `invalid_auth` 같은 코드를 보여줘도 할 수 있는 것이
+            // 없고, 할 수 있는 것이 있는 경우(이메일이 다름)만 그것을 적는다.
+            switch await recipient(of: channel, email: user.email) {
+            case .found(let handle):
                 ways.append(
                     PersonalDelivery(
                         kind: .slackDirectMessage,
@@ -128,15 +114,19 @@ struct PersonalDelivery: Encodable {
                         isUsable: true
                     )
                 )
-            } catch {
+            case .noSuchUser:
                 ways.append(
                     PersonalDelivery(
                         kind: .slackDirectMessage,
-                        detail: unavailableReason(error, email: user.email),
+                        detail: "이 계정의 이메일로 Slack 사용자를 찾지 못했습니다.",
                         isUsable: false
                     )
                 )
+            case .unavailable:
+                ways.append(.unavailableSlack)
             }
+        } else {
+            ways.append(.unavailableSlack)
         }
 
         if request.application.alleyConfig.smtp != nil {
@@ -147,38 +137,74 @@ struct PersonalDelivery: Encodable {
                     isUsable: true
                 )
             )
+        } else {
+            ways.append(
+                PersonalDelivery(
+                    kind: .email,
+                    detail: "관리자가 메일을 연결하면 고를 수 있습니다.",
+                    isUsable: false
+                )
+            )
         }
 
-        return ways
+        return mark(chosenIn: ways, by: user)
     }
 
-    /// Slack DM 을 왜 지금 고를 수 없는지.
+    /// **화면이 실제로 가는 곳을 보여준다.**
     ///
-    /// **실패로 적지 않는다.** 이 화면을 보는 사람은 Slack 을 고른 적이 없고 지금
-    /// 고를 수도 없다. "Slack 이 거절했습니다" 는 자기가 시킨 적 없는 일이 실패했다는
-    /// 말로 읽힌다. 고를 수 없다는 것과, 무엇이 갖춰지면 고를 수 있는지를 적는다.
-    ///
-    /// 갈래를 나누는 이유는 **무엇이 갖춰져야 하는지가 다르기 때문이다.**
-    ///
-    /// | 무엇 | 갖춰져야 하는 것 |
-    /// | --- | --- |
-    /// | 그 이메일을 쓰는 Slack 계정이 없다 | 두 계정의 이메일이 같아지는 것 |
-    /// | Slack 이 거절했다 (토큰·권한) | 관리자의 Slack 봇 설정 |
-    /// | Slack 에 못 닿았다 | 아무것도. 지나가는 일이다 |
-    static func unavailableReason(_ error: any Error, email: String) -> String {
-        let head = "Slack DM 은 지금 고를 수 없습니다."
-        switch error {
-        case SlackDirectMessageChannel.ChannelError.noSuchUser:
-            return "\(head) \(email) 로 Slack 사용자를 찾지 못했습니다. 스토어 계정과 Slack 계정의 이메일이 다르면 관리자에게 알려주세요."
-        case SlackDirectMessageChannel.ChannelError.rejected(_, let code):
-            // 코드를 괄호에 남긴다. 읽는 사람에게는 쓸모가 없지만, 관리자가 Slack
-            // 쪽에서 찾아볼 때 이것이 필요하다.
-            return "\(head) 관리자가 Slack 봇을 설정하면 여기서 고를 수 있습니다. (Slack 응답: \(code))"
-        case SlackDirectMessageChannel.ChannelError.transport:
-            return "\(head) Slack 에 연결하지 못했습니다. 잠시 뒤 다시 열어보세요."
-        default:
-            return "\(head) \(error)"
+    /// 고른 것이 지금 쓸 수 없으면 알림은 쓸 수 있는 것 하나로 간다
+    /// (`Notifier.notify(person:)`). 그때 화면이 저장된 값만 그리면, 체크가 하나도
+    /// 없는데 메일은 오는 상태가 된다. 되짚어 가는 곳에 체크를 그려서 보이는 것과
+    /// 가는 곳을 맞춘다. 그 상태로 저장을 누르면 그것이 그대로 저장된다.
+    private static func mark(chosenIn ways: [PersonalDelivery], by user: User) -> [PersonalDelivery] {
+        let usable = ways.filter(\.isUsable).map(\.kind)
+        var effective = Set(usable.filter(user.notifyVia.contains))
+        if effective.isEmpty, let first = usable.first {
+            effective = [first]
         }
+        return ways.map { way in
+            var marked = way
+            marked.isChosen = effective.contains(way.kind)
+            return marked
+        }
+    }
+
+    private static var unavailableSlack: PersonalDelivery {
+        PersonalDelivery(
+            kind: .slackDirectMessage,
+            detail: "관리자가 Slack 봇을 연결하면 고를 수 있습니다.",
+            isUsable: false
+        )
+    }
+
+    /// Slack 에서 이 사람을 찾은 결과.
+    ///
+    /// 갈래를 셋으로 나누는 이유는 **할 수 있는 일이 다르기 때문이다.** 계정을 못
+    /// 찾은 것은 내 이메일 이야기라 관리자에게 알릴 수 있고, 나머지는 스토어 설정
+    /// 이야기라 내가 할 것이 없다.
+    private enum Recipient {
+        case found(String)
+        case noSuchUser
+        case unavailable
+    }
+
+    private static func recipient(
+        of channel: SlackDirectMessageChannel,
+        email: String
+    ) async -> Recipient {
+        do {
+            return .found(try await channel.findRecipient(email: email))
+        } catch SlackDirectMessageChannel.ChannelError.noSuchUser {
+            return .noSuchUser
+        } catch {
+            return .unavailable
+        }
+    }
+
+    /// 무엇을 고른 상태인지는 `mark(chosenIn:by:)` 가 나중에 채운다. 되짚어 가는
+    /// 곳까지 보려면 목록이 다 모인 뒤라야 알 수 있다.
+    var kind: NotificationChannelKind {
+        NotificationChannelKind(rawValue: value) ?? .email
     }
 
     init(kind: NotificationChannelKind, detail: String, isUsable: Bool) {
@@ -186,6 +212,7 @@ struct PersonalDelivery: Encodable {
         self.label = kind.displayName
         self.detail = detail
         self.isUsable = isUsable
+        self.isChosen = false
     }
 }
 
@@ -194,19 +221,16 @@ struct MyNotificationsContext: Encodable {
     var page: PageContext
     var signingFailure: Bool
     var feedback: Bool
-    /// 지금 받을 수 있는 방법들. 비어 있으면 정할 것이 없다.
+    /// 받는 방법들. 쓸 수 없는 것도 회색으로 들어 있다.
     var ways: [PersonalDelivery]
-    /// 그중 실제로 알림이 가는 것. `NotificationChannelKind` 의 rawValue.
-    var chosen: String
-    /// 스토어가 갖췄지만 지금 나에게는 닿지 않는 것들.
-    var blocked: [PersonalDelivery]
     var saved: Bool
 }
 
 struct NotificationPreferenceValues: Codable {
     var signingFailure: String?
     var feedback: String?
-    var via: String?
+    /// 체크박스 여럿이라 값도 여럿 온다. 하나도 안 고르면 오지 않는다.
+    var via: [String]?
 }
 
 extension NotificationPreferenceValues: Content {}
