@@ -210,33 +210,39 @@ struct NotificationRoutingTests {
         }
     }
 
-    /// DM 이 안 되는 이유는 갈래마다 고칠 사람이 다르다. 한 문장으로 뭉뚱그리면
-    /// 봇 토큰이 잘못된 스토어에서도 읽는 사람이 자기 이메일을 들여다본다.
-    @Test("DM 이 안 되는 이유를 갈래마다 다르게 적는다")
-    func explainsWhoFixesTheDirectMessage() {
+    /// **실패로 적지 않는다.** 이 화면을 보는 사람은 Slack 을 고른 적이 없고 지금
+    /// 고를 수도 없다. "Slack 이 거절했습니다" 는 자기가 시킨 적 없는 일이 실패했다는
+    /// 말로 읽힌다. 무엇이 갖춰지면 고를 수 있는지를 적는다.
+    @Test("Slack DM 을 못 고르는 이유를 갖춰야 할 것으로 적는다")
+    func explainsWhatWouldMakeSlackSelectable() {
         let email = "dev@example.com"
 
-        let mine = PersonalDelivery.reason(
-            SlackDirectMessageChannel.ChannelError.noSuchUser(email: email), email: email
-        )
-        #expect(mine.contains(email))
-        #expect(mine.contains("이메일이 다를 수 있습니다"))
-
-        let theirs = PersonalDelivery.reason(
+        // 관리자 설정 문제. 이 사람이 할 수 있는 것은 없고, 갖춰지면 고를 수 있다.
+        let theirs = PersonalDelivery.unavailableReason(
             SlackDirectMessageChannel.ChannelError.rejected(
                 api: "users.lookupByEmail", error: "invalid_auth"
             ),
             email: email
         )
-        // 관리자가 Slack 쪽에서 찾아볼 때 코드가 필요하다.
+        #expect(theirs.contains("지금 고를 수 없습니다"))
+        #expect(theirs.contains("관리자가 Slack 봇을 설정하면"))
+        // 시킨 적 없는 일이 실패했다고 읽히면 안 된다.
+        #expect(!theirs.contains("거절했습니다"))
+        // 코드는 남긴다. 관리자가 Slack 쪽에서 찾아볼 때 필요하다.
         #expect(theirs.contains("invalid_auth"))
-        #expect(theirs.contains("관리자"))
-        #expect(!theirs.contains("이메일이 다를 수 있습니다"))
 
-        let neither = PersonalDelivery.reason(
+        // 이메일이 어긋난 경우는 갖춰야 할 것이 다르다.
+        let mine = PersonalDelivery.unavailableReason(
+            SlackDirectMessageChannel.ChannelError.noSuchUser(email: email), email: email
+        )
+        #expect(mine.contains("지금 고를 수 없습니다"))
+        #expect(mine.contains(email))
+        #expect(mine.contains("이메일이 다르면"))
+
+        let passing = PersonalDelivery.unavailableReason(
             SlackDirectMessageChannel.ChannelError.transport("연결 끊김"), email: email
         )
-        #expect(neither.contains("잠시 뒤"))
+        #expect(passing.contains("잠시 뒤"))
     }
 
     // MARK: - 메일 (ADR-0058)
