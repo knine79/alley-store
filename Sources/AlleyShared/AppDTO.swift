@@ -602,8 +602,14 @@ public struct NotificationTargetDTO: Codable, Sendable, Identifiable, Equatable 
     /// 앱에 붙은 대상이면 그 앱. 전역 대상(워커 알림 등)이면 nil.
     public var appID: UUID?
     public var kind: NotificationChannelKind
-    /// 사람이 알아볼 이름. 웹훅 URL 자체는 비밀이라 내려주지 않는다.
+    /// 사람이 알아볼 이름.
     public var name: String
+    /// 어디로 가는지. **숨길 것이 아닐 때만 채운다.**
+    ///
+    /// 웹훅 URL 은 그 채널에 글을 쓸 수 있는 자격증명이라 등록할 때만 받고 다시
+    /// 내려주지 않는다. 메일 주소는 자격증명이 아니라 그냥 주소다. 가려놓으면 지운
+    /// 대상을 다시 만들 때 무엇이 있었는지 알 길이 없고, 이름만 보고 짐작해야 한다.
+    public var endpoint: String?
     public var createdAt: Date
 
     public init(
@@ -611,12 +617,14 @@ public struct NotificationTargetDTO: Codable, Sendable, Identifiable, Equatable 
         appID: UUID? = nil,
         kind: NotificationChannelKind,
         name: String,
+        endpoint: String? = nil,
         createdAt: Date
     ) {
         self.id = id
         self.appID = appID
         self.kind = kind
         self.name = name
+        self.endpoint = endpoint
         self.createdAt = createdAt
     }
 }

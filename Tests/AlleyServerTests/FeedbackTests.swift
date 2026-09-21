@@ -452,12 +452,12 @@ struct FeedbackPageTests {
             try await app.testing().test(
                 .GET, "/apps/\(setup.appID.uuidString)",
                 headers: .sessionCookie(setup.readerToken)
-            ) { #expect(!$0.body.string.contains("Slack 웹훅 주소")) }
+            ) { #expect(!$0.body.string.contains("대상 추가")) }
 
             try await app.testing().test(
                 .GET, "/apps/\(setup.appID.uuidString)",
                 headers: .sessionCookie(setup.ownerToken)
-            ) { #expect($0.body.string.contains("Slack 웹훅 주소")) }
+            ) { #expect($0.body.string.contains("대상 추가")) }
         }
     }
 
