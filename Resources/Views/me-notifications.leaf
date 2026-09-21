@@ -10,21 +10,23 @@
 <p class="notice notice-ok">저장했습니다.</p>
 #endif
 
-<!-- 스토어가 갖췄는데 나에게만 닿지 않는 것. Slack 계정과 스토어 계정의 이메일이
-     다르면 여기 걸린다. 고르는 자리에서 말해야 관리자에게 물을 수 있다. -->
-#for(item in blocked):
-<p class="notice notice-warn">#(item.label): #(item.detail)</p>
-#endfor
-
 <section class="section">
     <h2 class="section-title">받는 방법</h2>
 
     <!-- 받을 수 있는 방법이 하나도 없다. 켜도 아무 일이 없는 체크박스를 남겨두면
          켜둔 사람은 받고 있다고 믿는다. 그래서 칸을 아예 그리지 않는다. -->
     #if(count(ways) == 0):
+    <!-- 여기서만 경고다. 다른 수단이 있으면 알림은 그리로 가므로 이 사람에게는
+         아무 일도 일어나지 않는다. 정말로 아무 데도 안 갈 때만 붉게 띄운다. -->
+    #if(count(blocked) == 0):
     <p class="notice notice-warn">
         관리자가 Slack 봇도 메일도 연결하지 않아 알림을 받을 수 없습니다.
     </p>
+    #else:
+    #for(item in blocked):
+    <p class="notice notice-warn">#(item.detail)</p>
+    #endfor
+    #endif
     <p class="field-note">
         받을 수 있게 되면 여기서 고를 수 있습니다. 지금 정해둘 것은 없습니다.
     </p>
@@ -57,6 +59,16 @@
              한 번 오는 것보다 빨리 무시당한다. -->
         <p class="field-note">한 곳으로만 갑니다.</p>
         #endif
+
+        <!-- 지금 고를 수 없는 것. **경고가 아니다.** 알림은 위의 것으로 가고 있고,
+             이 사람이 시킨 적 없는 일이 실패한 것도 아니다. 무엇이 갖춰지면 고를 수
+             있는지만 조용히 적는다.
+
+             고를 것이 하나든 둘이든 같은 자리에 선다. 안쪽 갈래에 넣었더니 흔한
+             경우(쓸 수 있는 것 하나 + 못 고르는 것 하나)에서 빠졌다. -->
+        #for(item in blocked):
+        <p class="field-note">#(item.detail)</p>
+        #endfor
 
         <fieldset class="choice-group">
             <legend>받을 알림</legend>

@@ -132,7 +132,7 @@ struct PersonalDelivery: Encodable {
                 ways.append(
                     PersonalDelivery(
                         kind: .slackDirectMessage,
-                        detail: reason(error, email: user.email),
+                        detail: unavailableReason(error, email: user.email),
                         isUsable: false
                     )
                 )
@@ -152,28 +152,32 @@ struct PersonalDelivery: Encodable {
         return ways
     }
 
-    /// 왜 못 쓰는지, **누가 고쳐야 하는지** 함께 적는다.
+    /// Slack DM 을 왜 지금 고를 수 없는지.
     ///
-    /// 한 문장으로 뭉뚱그리면 봇 토큰이 잘못된 스토어에서도 "이 계정의 이메일로 못
-    /// 찾았다" 고 말한다. 그러면 읽는 사람은 자기 이메일을 들여다보는데, 고칠 것은
-    /// 관리자 쪽에 있다. 갈래마다 할 수 있는 일이 다르다.
+    /// **실패로 적지 않는다.** 이 화면을 보는 사람은 Slack 을 고른 적이 없고 지금
+    /// 고를 수도 없다. "Slack 이 거절했습니다" 는 자기가 시킨 적 없는 일이 실패했다는
+    /// 말로 읽힌다. 고를 수 없다는 것과, 무엇이 갖춰지면 고를 수 있는지를 적는다.
     ///
-    /// | 무엇 | 누가 고치나 |
+    /// 갈래를 나누는 이유는 **무엇이 갖춰져야 하는지가 다르기 때문이다.**
+    ///
+    /// | 무엇 | 갖춰져야 하는 것 |
     /// | --- | --- |
-    /// | 그 이메일을 쓰는 Slack 계정이 없다 | 나. 메일로 받거나 관리자에게 알린다 |
-    /// | Slack 이 거절했다 (토큰·권한) | 관리자 |
-    /// | Slack 에 못 닿았다 | 아무도. 잠시 뒤 다시 본다 |
-    static func reason(_ error: any Error, email: String) -> String {
+    /// | 그 이메일을 쓰는 Slack 계정이 없다 | 두 계정의 이메일이 같아지는 것 |
+    /// | Slack 이 거절했다 (토큰·권한) | 관리자의 Slack 봇 설정 |
+    /// | Slack 에 못 닿았다 | 아무것도. 지나가는 일이다 |
+    static func unavailableReason(_ error: any Error, email: String) -> String {
+        let head = "Slack DM 은 지금 고를 수 없습니다."
         switch error {
         case SlackDirectMessageChannel.ChannelError.noSuchUser:
-            return "\(email) 로 Slack 사용자를 찾지 못했습니다. 스토어 계정과 Slack 계정의 이메일이 다를 수 있습니다."
+            return "\(head) \(email) 로 Slack 사용자를 찾지 못했습니다. 스토어 계정과 Slack 계정의 이메일이 다르면 관리자에게 알려주세요."
         case SlackDirectMessageChannel.ChannelError.rejected(_, let code):
-            // 코드를 그대로 싣는다. 관리자가 Slack 쪽에서 찾아볼 때 이것이 필요하다.
-            return "Slack 이 거절했습니다 (\(code)). 내 계정이 아니라 스토어의 Slack 봇 설정 문제입니다. 관리자에게 알려주세요."
+            // 코드를 괄호에 남긴다. 읽는 사람에게는 쓸모가 없지만, 관리자가 Slack
+            // 쪽에서 찾아볼 때 이것이 필요하다.
+            return "\(head) 관리자가 Slack 봇을 설정하면 여기서 고를 수 있습니다. (Slack 응답: \(code))"
         case SlackDirectMessageChannel.ChannelError.transport:
-            return "Slack 에 연결하지 못했습니다. 잠시 뒤 다시 열어보세요."
+            return "\(head) Slack 에 연결하지 못했습니다. 잠시 뒤 다시 열어보세요."
         default:
-            return String(describing: error)
+            return "\(head) \(error)"
         }
     }
 
