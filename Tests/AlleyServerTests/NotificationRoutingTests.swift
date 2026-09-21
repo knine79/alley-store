@@ -339,6 +339,59 @@ struct NotificationRoutingTests {
         }
     }
 
+    /// **메일에는 이름을 묻지 않는다.** 주소가 곧 받는 곳이라 목록에서 그것으로
+    /// 알아본다. 따로 받으면 같은 것을 두 번 적게 된다.
+    @Test("메일은 이름을 비워두면 주소를 쓴다")
+    func mailTargetNamesItselfByAddress() async throws {
+        try await withMigratedApp(
+            overrides: ["SMTP_HOST": "smtp.example.com", "SMTP_FROM": "alley@example.com"]
+        ) { app in
+            let (user, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let mine = try await app.seedApp(
+                bundleID: "com.example.named", name: "내 앱", owner: user
+            )
+
+            try await app.testing().test(
+                .POST, "/apps/\(try mine.requireID())/notification-targets",
+                headers: .form(cookie: token),
+                beforeRequest: {
+                    try $0.content.encode(
+                        ["kind": "email", "name": "", "endpoint": "team@example.com"],
+                        as: .urlEncodedForm
+                    )
+                }
+            ) { #expect($0.status == .seeOther) }
+
+            let saved = try #require(try await NotificationTarget.query(on: app.db).first())
+            #expect(saved.name == "team@example.com")
+        }
+    }
+
+    /// 웹훅은 주소를 가려야 해서 이름이 그 자리를 대신한다. 그래서 그쪽만 비울 수
+    /// 없다. 비운 채로 만들면 목록에서 어느 채널인지 알 길이 없다.
+    @Test("웹훅은 이름을 비울 수 없다")
+    func webhookTargetStillNeedsAName() async throws {
+        try await withMigratedApp { app in
+            let (user, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let mine = try await app.seedApp(
+                bundleID: "com.example.unnamed", name: "내 앱", owner: user
+            )
+
+            try await app.testing().test(
+                .POST, "/apps/\(try mine.requireID())/notification-targets",
+                headers: .form(cookie: token),
+                beforeRequest: {
+                    try $0.content.encode(
+                        ["name": "", "endpoint": "https://hooks.slack.com/services/x"],
+                        as: .urlEncodedForm
+                    )
+                }
+            ) { #expect($0.status == .badRequest) }
+
+            #expect(try await NotificationTarget.query(on: app.db).count() == 0)
+        }
+    }
+
     /// 메일 설정이 없으면 메일 주소를 등록해도 갈 곳이 없다. 화면도 칸을 그리지
     /// 않는다.
     @Test("메일 설정이 없으면 앱에 메일 주소를 달 수 없다")
