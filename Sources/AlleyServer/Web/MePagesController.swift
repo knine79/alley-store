@@ -15,6 +15,104 @@ struct MePagesController: RouteCollection, Sendable {
 
         pages.get("notifications", use: notificationsForm)
         pages.post("notifications", use: submitNotifications)
+        pages.get("tokens", use: tokenList)
+        pages.post("tokens", use: issueToken)
+        pages.post("tokens", ":tokenID", "revoke", use: revokeToken)
+    }
+
+    // MARK: - 내 토큰 (ADR-0060)
+
+    @Sendable
+    func tokenList(request: Request) async throws -> View {
+        try await renderTokens(issued: nil, error: nil, on: request)
+    }
+
+    /// 토큰을 발급한다. 원문은 이 응답에만 있다.
+    @Sendable
+    func issueToken(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let values = try request.content.decode(TokenFormValues.self)
+        let name = values.name.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !name.isEmpty else {
+            let view = try await renderTokens(
+                issued: nil,
+                error: "어디에 넣을 토큰인지 적어주세요. 나중에 무엇을 끊을지 고를 때 이 이름만 보입니다.",
+                on: request
+            )
+            return htmlResponse(view, status: .badRequest)
+        }
+
+        let value = UserToken.generateToken()
+        let token = UserToken(
+            name: name,
+            tokenHash: UserToken.hash(token: value),
+            userID: try user.requireID(),
+            expiresAt: Date().addingTimeInterval(UserToken.lifetime)
+        )
+        try await token.save(on: request.db)
+        request.logger.notice("사람 토큰 발급 [사람: \(user.email), 이름: \(name)]")
+
+        // 리다이렉트하지 않는다. 원문을 한 번만 보여주는 화면이라 새로고침으로
+        // 날아가면 다시 발급받는 수밖에 없다.
+        let view = try await renderTokens(issued: value, error: nil, on: request)
+        return htmlResponse(view, status: .ok)
+    }
+
+    @Sendable
+    func revokeToken(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        guard let raw = request.parameters.get("tokenID"),
+              let tokenID = UUID(uuidString: raw)
+        else {
+            throw Abort(.badRequest, reason: "토큰을 알 수 없습니다.")
+        }
+
+        // 남의 토큰을 끊지 못하게 사람으로도 거른다. 주소를 손으로 만들면 남의
+        // 토큰 id 를 넣을 수 있다.
+        guard let token = try await UserToken.query(on: request.db)
+            .filter(\.$id == tokenID)
+            .filter(\.$user.$id == user.requireID())
+            .first()
+        else {
+            throw Abort(.notFound, reason: "그런 토큰이 없습니다.")
+        }
+
+        if token.revokedAt == nil {
+            token.revokedAt = Date()
+            try await token.save(on: request.db)
+            request.logger.notice("사람 토큰 폐기 [사람: \(user.email), 이름: \(token.name)]")
+        }
+        return request.redirect(to: "/me/tokens")
+    }
+
+    private func renderTokens(
+        issued: String?,
+        error: String?,
+        on request: Request
+    ) async throws -> View {
+        let user = try request.requireUser()
+        let tokens = try await UserToken.query(on: request.db)
+            .filter(\.$user.$id == user.requireID())
+            .sort(\.$createdAt, .descending)
+            .all()
+
+        return try await request.view.render(
+            "me-tokens",
+            MyTokensContext(
+                page: try await request.pageContext(title: "내 토큰"),
+                tokens: try tokens.map(TokenRow.init),
+                issued: issued,
+                error: error
+            )
+        ).get()
+    }
+
+    private func htmlResponse(_ view: View, status: HTTPStatus) -> Response {
+        let response = Response(status: status)
+        response.headers.contentType = .html
+        response.body = .init(buffer: view.data)
+        return response
     }
 
     @Sendable
@@ -234,3 +332,50 @@ struct NotificationPreferenceValues: Codable {
 }
 
 extension NotificationPreferenceValues: Content {}
+
+/// 내 토큰 화면이 쓰는 값 (ADR-0060).
+struct MyTokensContext: Encodable {
+    var page: PageContext
+    var tokens: [TokenRow]
+    /// 방금 발급한 토큰의 원문. 이 응답에만 있다.
+    var issued: String?
+    var error: String?
+}
+
+/// 목록에 뜨는 토큰 한 줄.
+struct TokenRow: Encodable {
+    var id: String
+    var name: String
+    var createdAt: DisplayDate
+    var expiresAt: DisplayDate
+    var lastUsedAt: DisplayDate?
+    /// 지금 쓸 수 있나. 폐기됐거나 만료됐으면 false.
+    var isUsable: Bool
+    /// 왜 못 쓰나. 쓸 수 있으면 nil.
+    ///
+    /// 만료와 폐기를 가려서 적는다. 만료는 스스로 고칠 수 있고 폐기는 끊은 것이라
+    /// 사람이 할 일이 다르다.
+    var blocked: String?
+
+    init(token: UserToken) throws {
+        self.id = try token.requireID().uuidString
+        self.name = token.name
+        self.createdAt = DateStyle.minute.display(from: token.createdAt ?? Date())
+        self.expiresAt = DateStyle.minute.display(from: token.expiresAt)
+        self.lastUsedAt = token.lastUsedAt.map { DateStyle.minute.display(from: $0) }
+        self.isUsable = token.isUsable()
+        if token.revokedAt != nil {
+            self.blocked = "폐기함"
+        } else if token.expiresAt <= Date() {
+            self.blocked = "만료됨"
+        } else {
+            self.blocked = nil
+        }
+    }
+}
+
+struct TokenFormValues: Codable {
+    var name: String
+}
+
+extension TokenFormValues: Content {}
