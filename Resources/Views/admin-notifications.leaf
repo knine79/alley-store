@@ -13,7 +13,7 @@
 </p>
 
 <section class="section">
-    <h2 class="section-title">어디로 보내나</h2>
+    <h2 class="section-title">보내는 방법</h2>
     #extend("alert-delivery")
 </section>
 

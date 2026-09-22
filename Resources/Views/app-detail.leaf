@@ -416,7 +416,7 @@
 </section>
 
 #if(canManage):
-<section class="section">
+<section class="section" id="alerts">
     <h2 class="section-title">알림</h2>
     <p class="page-lead">이 앱에 새 피드백이 오거나 서명이 실패하면 알립니다.</p>
 
@@ -425,7 +425,7 @@
 #endif
 
 #if(canManage):
-<section class="section">
+<section class="section" id="feed-tokens">
     <h2 class="section-title">자동 업데이트 피드</h2>
     <p class="page-lead">
         앱에 Sparkle 을 넣으면 스토어 앱 없이도 스스로 업데이트합니다. 여기서 낸 피드
@@ -540,7 +540,7 @@
 #endif
 
 #if(canManage):
-<section class="section">
+<section class="section" id="deploy-tokens">
     <h2 class="section-title">배포 토큰</h2>
     <p class="page-lead">
         CI 파이프라인이 이 앱에 버전을 올릴 때 쓰는 토큰입니다. 이 앱에만 통하고,
