@@ -114,10 +114,9 @@ struct AppPagesController: RouteCollection, Sendable {
 
         // **감추기만 하면 워커가 실패했을 때 찾을 방법이 없다.** 목록에서 빼되 올린
         // 사람에게는 몇 개가 걸려 있는지와 가는 길을 남긴다. 남의 것은 보이지 않는다.
-        let userID = try user.requireID()
-        let mine = try unsettled.filter { app in
-            user.role.canAdminister || app.$owner.id == userID
-        }.map { app in
+        // 판단은 `AppAccess` 한 곳에 있다. 여기서 같은 규칙을 다시 적으면 한쪽만
+        // 고쳐지는 날이 온다.
+        let mine = try unsettled.filter { try $0.canManage(user) }.map { app in
             PendingAppRow(id: try app.requireID().uuidString, name: app.name)
         }
 
@@ -187,11 +186,10 @@ struct AppPagesController: RouteCollection, Sendable {
     /// 이 사람에게 보이는 확인 중인 등록. 관리자는 전부 본다.
     private func pendingRows(for request: Request) async throws -> [PendingAppRow] {
         let user = try request.requireUser()
-        let userID = try user.requireID()
         return try await App.query(on: request.db)
             .filter(\.$bundleIDPending == true)
             .all()
-            .filter { user.role.canAdminister || $0.$owner.id == userID }
+            .filter { try $0.canManage(user) }
             .map { PendingAppRow(id: try $0.requireID().uuidString, name: $0.name) }
     }
 

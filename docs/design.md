@@ -592,6 +592,8 @@ POST  /api/v1/admin/workers            # 워커 등록 토큰 발급
 POST  /api/v1/apps/:id/deploy-tokens   # CI 배포 토큰 발급 (ADR-0015)
 POST  /api/v1/apps/:id/feed-tokens     # Sparkle 피드 토큰 발급 (ADR-0017)
 GET   /api/v1/deploy/app               # 배포 토큰이 자기 앱을 확인
+GET   /api/v1/versions/:id/signing     # 서명 상태·실패 갈래·할 일 (ADR-0060)
+GET   /api/v1/apps/:id/sparkle         # SUPublicEDKey 와 쓸 수 있는 상태 (ADR-0060)
 GET   /api/v1/apps/:id/feedback        # 별점·피드백 목록
 POST  /api/v1/versions/:id/feedback    # 별점·피드백 남기기
 POST  /api/v1/apps/:id/notification-targets  # 알림 채널 등록 (ADR-0059)

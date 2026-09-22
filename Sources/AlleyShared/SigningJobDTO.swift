@@ -336,3 +336,76 @@ public struct CreatedWorker: Codable, Sendable {
         self.token = token
     }
 }
+
+
+/// 서명이 지금 어디까지 왔는지 (ADR-0060).
+///
+/// **에이전트가 읽고 스스로 고치라고 내주는 값이다.** 화면은 실패 코드에 맞춰
+/// "entitlements 에 무엇을 넣어라" 까지 적어주는데(ADR-0023), 그것을 읽고 파일을
+/// 고치고 다시 올리는 일만 사람이 하고 있었다.
+///
+/// 로그는 싣지 않는다. 수백 줄이 오는 일이 흔하고, 무엇을 할지 정하는 데 필요한
+/// 것은 코드와 안내문이다. 전문은 화면에서 본다.
+public struct SigningStatusDTO: Codable, Sendable {
+    public var versionID: UUID
+    public var state: VersionState
+    /// 서명 잡의 상태. 잡이 아직 없으면 nil.
+    public var jobState: SigningJobState?
+    /// 지금 어느 단계인가. 돌고 있을 때만.
+    public var phase: String?
+    /// 몇 번째 시도인가.
+    public var attempt: Int?
+    /// 실패의 갈래 (ADR-0023). 에이전트는 이 값으로 갈라야 한다.
+    public var failureCode: SigningFailureCode?
+    /// 사람이 읽을 실패 이유 한 줄.
+    public var failureReason: String?
+    /// 무엇을 하면 되는지. 실패 코드가 있을 때만.
+    public var whatToDo: String?
+
+    public init(
+        versionID: UUID,
+        state: VersionState,
+        jobState: SigningJobState? = nil,
+        phase: String? = nil,
+        attempt: Int? = nil,
+        failureCode: SigningFailureCode? = nil,
+        failureReason: String? = nil,
+        whatToDo: String? = nil
+    ) {
+        self.versionID = versionID
+        self.state = state
+        self.jobState = jobState
+        self.phase = phase
+        self.attempt = attempt
+        self.failureCode = failureCode
+        self.failureReason = failureReason
+        self.whatToDo = whatToDo
+    }
+}
+
+/// 이 앱에서 Sparkle 을 쓸 수 있는 상태인가 (ADR-0057, ADR-0060).
+public struct SparkleFeedDTO: Codable, Sendable {
+    /// 앱의 `Info.plist` 에 넣을 `SUPublicEDKey`. 말할 수 없으면 nil.
+    public var publicKey: String?
+    /// 지금 피드 주소를 새로 내줄 만한가.
+    public var canIssue: Bool
+    /// 왜 안 되는지 한 줄. 문제가 없으면 nil.
+    public var blocker: String?
+    /// 이미 발급해둔 피드 토큰의 수.
+    ///
+    /// **주소는 돌려줄 수 없다.** 서버는 토큰의 해시만 갖고 있어서 발급 시점이
+    /// 지나면 그 값을 다시 만들 수 없다.
+    public var issuedFeedCount: Int
+
+    public init(
+        publicKey: String? = nil,
+        canIssue: Bool,
+        blocker: String? = nil,
+        issuedFeedCount: Int
+    ) {
+        self.publicKey = publicKey
+        self.canIssue = canIssue
+        self.blocker = blocker
+        self.issuedFeedCount = issuedFeedCount
+    }
+}
