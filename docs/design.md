@@ -283,7 +283,7 @@ Google 에서는 `hd`(hosted domain) claim 까지 함께 봅니다. 그 claim �
 
 | 테이블              | 주요 필드                                                      |
 | ---------------- | ---------------------------------------------------------- |
-| `users`          | google_sub, email, name, avatar_url, role                  |
+| `users`          | google_sub, email, name, avatar_url, role, deactivated_at  |
 | `store_settings` | 스토어 이름, 로고, 강조색, 허용 도메인, 번들 ID 프리픽스 (singleton, [ADR-0011](adr/0011-store-settings-in-database.md)) |
 | `branding_assets` | 종류(파비콘·로고·앱 아이콘), 스토리지 키, 크기 ([ADR-0045](adr/0045-branding-assets-in-storage.md)) |
 | `store_app_settings` | 스토어 앱의 번들 ID·이름·URL 스킴·베이스 번들 (singleton, [ADR-0046](adr/0046-server-assembles-store-app.md)) |

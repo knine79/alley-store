@@ -30,6 +30,8 @@ struct AdminPagesController: RouteCollection, Sendable {
         pages.post("settings", "branding", ":kind", "remove", use: removeBrandingAsset)
         pages.get("users", use: userList)
         pages.post("users", ":userID", "role", use: submitRole)
+        pages.post("users", ":userID", "deactivate", use: submitDeactivate)
+        pages.post("users", ":userID", "reactivate", use: submitReactivate)
         pages.get("workers", use: workerList)
         pages.post("workers", use: registerWorker)
         pages.post("workers", ":workerID", "revoke", use: revokeWorker)
@@ -220,6 +222,74 @@ struct AdminPagesController: RouteCollection, Sendable {
             return htmlResponse(view, status: abort.status)
         }
         return request.redirect(to: "/admin/users")
+    }
+
+    @Sendable
+    func submitDeactivate(request: Request) async throws -> Response {
+        try await changeActivation(deactivating: true, on: request)
+    }
+
+    @Sendable
+    func submitReactivate(request: Request) async throws -> Response {
+        try await changeActivation(deactivating: false, on: request)
+    }
+
+    /// 계정을 끊거나 되살린다 (ADR-0061).
+    private func changeActivation(deactivating: Bool, on request: Request) async throws -> Response {
+        let admin = try request.requireAdmin()
+        let target = try await request.findUser()
+
+        do {
+            if deactivating {
+                let moved = try await AdminOperations.deactivate(
+                    target,
+                    by: admin,
+                    on: request.db,
+                    logger: request.logger
+                )
+                await announce(deactivated: target, movedApps: moved, by: admin, on: request)
+            } else {
+                try await AdminOperations.reactivate(
+                    target,
+                    by: admin,
+                    on: request.db,
+                    logger: request.logger
+                )
+            }
+        } catch let abort as any AbortError where abort.status.code < 500 {
+            // 마지막 관리자나 자기 자신을 끊으려는 경우가 여기로 온다. 목록을 그대로
+            // 두고 왜 안 되는지만 위에 띄운다.
+            let view = try await renderUsers(error: abort.reason, viewedBy: admin, on: request)
+            return htmlResponse(view, status: abort.status)
+        }
+        return request.redirect(to: "/admin/users")
+    }
+
+    /// 계정을 끊었다고 알린다.
+    ///
+    /// **앱이 남의 손으로 넘어간 것을 당사자들이 알아야 한다.** 오너가 바뀐 것은
+    /// 화면 어디에도 뜨지 않고, 넘겨받은 사람은 자기 목록이 길어진 것을 나중에야
+    /// 본다. 운영 알림이 정해진 곳으로 한 번 갑니다 (ADR-0059).
+    private func announce(
+        deactivated target: User,
+        movedApps: [App],
+        by admin: User,
+        on request: Request
+    ) async {
+        let names = movedApps.map(\.name).sorted()
+        let body = names.isEmpty
+            ? "맡고 있던 앱은 없습니다."
+            : """
+                앱 \(names.count)개가 \(admin.name) 에게 넘어갔습니다: \(names.joined(separator: ", ")).
+                옮길 곳은 각 앱 화면에서 다시 정할 수 있습니다.
+                """
+        await request.notifier.notifyOperators(
+            NotificationMessage(
+                title: "\(target.name)(\(target.email)) 계정을 끊었습니다",
+                body: body,
+                link: "/admin/users"
+            )
+        )
     }
 
     private func renderUsers(
@@ -782,6 +852,10 @@ struct UserRow: Encodable {
     /// 자기 자신인지. 화면에서 표시만 하고 변경을 막지는 않는다.
     /// 마지막 관리자만 아니면 스스로 물러나는 것은 정당한 동작이다.
     var isSelf: Bool
+    /// 아직 쓰는 계정인가 (ADR-0061).
+    var isActive: Bool
+    /// 언제 끊었나. 쓰는 계정이면 nil.
+    var deactivatedAt: DisplayDate?
 
     init(user: User, isSelf: Bool) {
         self.id = user.id?.uuidString ?? ""
@@ -790,6 +864,8 @@ struct UserRow: Encodable {
         self.role = user.role.rawValue
         self.roleName = user.role.displayName
         self.isSelf = isSelf
+        self.isActive = user.isActive
+        self.deactivatedAt = user.deactivatedAt.map { DateStyle.minute.display(from: $0) }
     }
 }
 

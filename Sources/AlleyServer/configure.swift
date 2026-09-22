@@ -166,6 +166,9 @@ private func configureMigrations(_ app: Application) {
 
     // 워커가 Sparkle 공개키를 알린다 (ADR-0057).
     app.migrations.add(AddWorkerSparklePublicKey())
+
+    // 나간 사람을 지우지 않고 끊는다 (ADR-0061).
+    app.migrations.add(AddUserDeactivatedAt())
 }
 
 /// 미들웨어 스택.

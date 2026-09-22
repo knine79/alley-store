@@ -111,6 +111,9 @@ enum AdminOperations {
             let remaining = try await User.query(on: database)
                 .filter(\.$role == .admin)
                 .filter(\.$id != targetID)
+                // 끊은 계정은 세지 않는다 (ADR-0061). 로그인하지 못하는 사람을 남은
+                // 관리자로 치면, 아무도 들어올 수 없는 스토어가 이 검사를 통과한다.
+                .filter(\.$deactivatedAt == nil)
                 .count()
             guard remaining > 0 else {
                 throw Abort(.badRequest, reason: "마지막 관리자의 역할은 바꿀 수 없습니다. 다른 관리자를 먼저 지정하세요.")
@@ -128,6 +131,85 @@ enum AdminOperations {
         logger.notice(
             "역할 변경 [대상: \(target.email), \(previous.rawValue) → \(role.rawValue), 관리자: \(admin.email)]"
         )
+    }
+
+    /// 계정을 끊는다 (ADR-0061).
+    ///
+    /// **행을 지우지 않고 시각만 남긴다.** 누가 올렸고 누가 받아갔는지가 이 행을
+    /// 가리킨다.
+    ///
+    /// 오너로 있던 앱은 끊는 관리자가 가져간다. 주인 없는 앱을 남기면 아무도 올릴 수
+    /// 없는 상태가 조용히 생기고, 그 사실은 누군가 올리려다 막힐 때에야 드러난다.
+    /// 누른 사람이 받는 이유는 그 사람이 지금 이 화면을 보고 있어서다. 옮길 곳은
+    /// 앱 화면에서 언제든 다시 정할 수 있다.
+    ///
+    /// **멤버십과 배포 토큰은 건드리지 않는다.** 로그인이 막히니 멤버로 남아도 할 수
+    /// 있는 것이 없고, 복구하면 그대로 돌아온다. 배포 토큰은 앱의 자격증명이지 그
+    /// 사람의 것이 아니라, 퇴사로 CI 가 멈추면 엉뚱한 곳을 뒤지게 된다.
+    ///
+    /// 넘긴 앱들을 돌려준다. 알림에 무엇이 옮겨졌는지 적기 위해서다.
+    @discardableResult
+    static func deactivate(
+        _ target: User,
+        by admin: User,
+        on database: any Database,
+        logger: Logger
+    ) async throws -> [App] {
+        let targetID = try target.requireID()
+        let adminID = try admin.requireID()
+
+        // 자기 계정을 끊으면 그 순간 자기가 로그인 상태를 잃는다. 되돌릴 화면에도
+        // 못 들어간다.
+        guard targetID != adminID else {
+            throw Abort(.badRequest, reason: "자기 계정은 끊을 수 없습니다. 다른 관리자에게 부탁하세요.")
+        }
+
+        if target.role.canAdminister {
+            let remaining = try await User.query(on: database)
+                .filter(\.$role == .admin)
+                .filter(\.$id != targetID)
+                .filter(\.$deactivatedAt == nil)
+                .count()
+            guard remaining > 0 else {
+                throw Abort(.badRequest, reason: "마지막 관리자는 끊을 수 없습니다. 다른 관리자를 먼저 지정하세요.")
+            }
+        }
+
+        // 이미 끊긴 계정을 다시 눌러도 조용히 지나간다. 두 번 누른 사람에게 오류를
+        // 보일 이유가 없고, 여기서 시각을 새로 쓰면 언제 끊었는지가 사라진다.
+        guard target.isActive else { return [] }
+
+        let owned = try await App.query(on: database)
+            .filter(\.$owner.$id == targetID)
+            .all()
+        for app in owned {
+            app.$owner.id = adminID
+            try await app.save(on: database)
+        }
+
+        target.deactivatedAt = Date()
+        try await target.save(on: database)
+
+        logger.notice(
+            "계정을 끊었습니다 [대상: \(target.email), 넘긴 앱: \(owned.count)개, 관리자: \(admin.email)]"
+        )
+        return owned
+    }
+
+    /// 끊은 계정을 되돌린다.
+    ///
+    /// **넘어간 앱은 돌아오지 않는다.** 그동안 새 오너가 올렸을 수 있고, 돌려주는
+    /// 것이 맞는지 여기서는 알 수 없다. 앱 화면에서 사람이 정합니다.
+    static func reactivate(
+        _ target: User,
+        by admin: User,
+        on database: any Database,
+        logger: Logger
+    ) async throws {
+        guard !target.isActive else { return }
+        target.deactivatedAt = nil
+        try await target.save(on: database)
+        logger.notice("계정을 되살렸습니다 [대상: \(target.email), 관리자: \(admin.email)]")
     }
 
     // MARK: - 워커

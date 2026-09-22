@@ -31,6 +31,7 @@ struct AppPagesController: RouteCollection, Sendable {
         pages.get(":appID", "member-candidates", use: memberCandidates)
         pages.post(":appID", "members", use: addMember)
         pages.post(":appID", "members", ":userID", "remove", use: removeMember)
+        pages.post(":appID", "owner", use: submitOwner)
         pages.get(":appID", "versions", ":versionID", "download", use: download)
         pages.post(":appID", "feedback", ":feedbackID", "delete", use: deleteFeedback)
         pages.post(":appID", "feed-tokens", use: issueFeedToken)
@@ -654,6 +655,88 @@ struct AppPagesController: RouteCollection, Sendable {
                 )
             }
         }
+        return request.redirect(to: "/apps/\(appID.uuidString)#members")
+    }
+
+    /// 오너를 넘긴다 (ADR-0061).
+    ///
+    /// **올릴 수 있는 사람 중에서만 고른다.** 아무나 검색해 바로 주인을 바꾸게 하면
+    /// 이 앱과 관계없는 사람이 한 번의 실수로 주인이 된다. 밖의 사람에게 넘길 때는
+    /// 업로드 권한을 먼저 주면 후보에 들어온다.
+    ///
+    /// **지금 오너는 멤버로 남긴다.** 넘겼다고 올리지 못할 이유가 없고, 권한까지
+    /// 잃으면 되돌릴 사람이 그 앱에서 사라진다.
+    @Sendable
+    func submitOwner(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        try app.requireManageAccess(for: user)
+
+        let values = try request.content.decode(MemberFormValues.self)
+        let appID = try app.requireID()
+        let previousOwnerID = app.$owner.id
+
+        guard let newOwnerID = values.userID.flatMap(UUID.init(uuidString:)),
+              let newOwner = try await User.find(newOwnerID, on: request.db)
+        else {
+            let view = try await renderDetail(
+                on: request,
+                issuedToken: nil,
+                memberError: "넘길 사람을 찾을 수 없습니다. 다시 고르세요."
+            )
+            return htmlResponse(view, status: .notFound)
+        }
+
+        guard newOwnerID != previousOwnerID else {
+            return request.redirect(to: "/apps/\(appID.uuidString)#members")
+        }
+
+        // 올릴 수 있는 사람만 받는다. 폼에는 그 사람들만 나오지만, 고르는 사이에
+        // 권한이 회수됐거나 폼을 손으로 만들었을 수 있다.
+        let isUploader = try await AppMember.query(on: request.db)
+            .filter(\.$app.$id == appID)
+            .filter(\.$user.$id == newOwnerID)
+            .first() != nil
+        guard isUploader else {
+            let view = try await renderDetail(
+                on: request,
+                issuedToken: nil,
+                memberError: "올릴 수 있는 사람에게만 넘길 수 있습니다. 먼저 권한을 주세요."
+            )
+            return htmlResponse(view, status: .badRequest)
+        }
+
+        // 끊은 계정에 넘기면 그 앱은 그 자리에서 주인을 잃는다 (ADR-0061).
+        guard newOwner.isActive else {
+            let view = try await renderDetail(
+                on: request,
+                issuedToken: nil,
+                memberError: "끊은 계정에는 넘길 수 없습니다."
+            )
+            return htmlResponse(view, status: .badRequest)
+        }
+
+        app.$owner.id = newOwnerID
+        try await app.save(on: request.db)
+
+        // 새 오너의 멤버 행은 지운다. 오너는 언제나 올릴 수 있어서 표에 두지 않는
+        // 것이 이 화면의 규칙이다.
+        try await AppMember.query(on: request.db)
+            .filter(\.$app.$id == appID)
+            .filter(\.$user.$id == newOwnerID)
+            .delete()
+
+        let alreadyMember = try await AppMember.query(on: request.db)
+            .filter(\.$app.$id == appID)
+            .filter(\.$user.$id == previousOwnerID)
+            .first() != nil
+        if !alreadyMember {
+            try await AppMember(appID: appID, userID: previousOwnerID).save(on: request.db)
+        }
+
+        request.logger.notice(
+            "오너 변경 [앱: \(app.bundleID), 새 오너: \(newOwner.email), 바꾼 사람: \(user.email)]"
+        )
         return request.redirect(to: "/apps/\(appID.uuidString)#members")
     }
 

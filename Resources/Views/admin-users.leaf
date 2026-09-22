@@ -15,6 +15,7 @@
         <tr>
             <th class="table-fill">사람</th>
             <th class="table-tight">역할</th>
+            <th class="table-tight"><span class="visually-hidden">계정</span></th>
         </tr>
     </thead>
     <tbody>
@@ -23,23 +24,48 @@
             <td class="table-fill">
                 <span class="table-strong">#(person.name)</span>
                 #if(person.isSelf):<span class="badge">나</span>#endif
+                #if(person.isActive):#else:<span class="badge badge-failed">끊김</span>#endif
                 <span class="table-note">#(person.email)</span>
             </td>
             <td class="table-tight">
                 <form class="row-form" method="post" action="/admin/users/#(person.id)/role"
                       data-guard-dirty>
-                    <select class="input select" name="role" aria-label="#(person.email) 의 역할">
+                    <select class="input select" name="role" aria-label="#(person.email) 의 역할"#if(person.isActive):#else: disabled#endif>
                         #for(option in roles):
                         <option value="#(option.value)"#if(option.value == person.role): selected#endif>#(option.name)</option>
                         #endfor
                     </select>
-                    <button class="button" type="submit">변경</button>
+                    <button class="button" type="submit"#if(person.isActive):#else: disabled#endif>변경</button>
                 </form>
+            </td>
+            <!-- 끊는 것과 되살리는 것을 한 칸에 둔다. 지금 상태에 따라 하나만 보인다.
+                 자기 계정은 끊을 수 없어서(스스로 로그인을 잃는다) 아예 내지 않는다. -->
+            <td class="table-tight">
+                #if(person.isActive):
+                #if(person.isSelf):
+                <span class="table-muted">-</span>
+                #else:
+                <form class="row-form" method="post" action="/admin/users/#(person.id)/deactivate">
+                    <button class="button" type="submit">끊기</button>
+                </form>
+                #endif
+                #else:
+                <form class="row-form" method="post" action="/admin/users/#(person.id)/reactivate">
+                    <button class="button" type="submit">되살리기</button>
+                    <span class="table-note">#(person.deactivatedAt.display) 에 끊음</span>
+                </form>
+                #endif
             </td>
         </tr>
         #endfor
     </tbody>
 </table>
 </div>
+
+<p class="page-lead">
+    끊은 계정은 로그인도 막히고 이미 열려 있던 세션도 그 자리에서 끊깁니다. 맡고 있던
+    앱은 끊은 사람에게 넘어가고, 넘어간 앱은 되살려도 돌아오지 않습니다. 앱 화면에서
+    다시 정하세요.
+</p>
 #endexport
 #endextend

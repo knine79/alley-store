@@ -243,6 +243,23 @@ public struct AuthController: RouteCollection, Sendable {
         return true
     }
 
+    /// 끊은 계정이면 로그인을 거절한다 (ADR-0061).
+    ///
+    /// **세션 쪽 검사만으로는 부족하다.** 그쪽은 이미 들고 있는 토큰을 막고, 여기는
+    /// 새로 받아가는 것을 막는다. 여기가 없으면 끊은 사람이 다시 로그인해서 새 세션을
+    /// 받아간다.
+    ///
+    /// 왜 막혔는지 그대로 적는다. "로그인 실패" 만 보면 공급자를 의심하며 한참을
+    /// 헤매고, 정작 물어봐야 할 곳은 스토어 관리자다.
+    private static func rejectIfDeactivated(_ user: User, on request: Request) throws {
+        guard !user.isActive else { return }
+        request.logger.notice("끊은 계정이 로그인을 시도했습니다 [이메일: \(user.email)]")
+        throw Abort(
+            .forbidden,
+            reason: "끊은 계정입니다. 다시 쓰려면 스토어 관리자에게 말하세요."
+        )
+    }
+
     private func upsertUser(
         request: Request,
         issuer: String,
@@ -259,6 +276,7 @@ public struct AuthController: RouteCollection, Sendable {
             .filter(\.$subject == subject)
             .first()
         {
+            try Self.rejectIfDeactivated(existing, on: request)
             existing.email = email
             existing.name = name
             existing.avatarURL = avatarURL
@@ -280,6 +298,7 @@ public struct AuthController: RouteCollection, Sendable {
             .filter(\.$email == email)
             .first()
         {
+            try Self.rejectIfDeactivated(rebound, on: request)
             request.logger.notice(
                 "로그인 공급자가 바뀐 계정을 잇습니다 [\(email), \(rebound.issuer) → \(issuer)]"
             )

@@ -68,6 +68,7 @@
 | [0058](0058-mail-is-the-second-way-to-reach-a-person.md) | 사람에게 닿는 두 번째 길로 메일을 들인다 | 일부 대체됨(ADR-0059) | 2026-09-21 |
 | [0059](0059-every-alert-picks-people-or-a-channel.md) | 알림은 어디서나 "사람들" 과 "채널" 중 하나를 고른다 | 수락됨 | 2026-09-21 |
 | [0060](0060-mcp-connects-as-a-person.md) | MCP 는 사람으로 붙고, 배포 토큰은 CI 에 남긴다 | 수락됨 | 2026-09-22 |
+| [0061](0061-leavers-are-cut-off-not-deleted.md) | 나간 사람은 지우지 않고 끊는다 | 수락됨 | 2026-09-22 |
 
 ## 언제 쓰나
 
