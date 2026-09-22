@@ -133,7 +133,7 @@ struct AdminNotificationPagesController: RouteCollection, Sendable {
 
 struct AdminNotificationsContext: Encodable {
     var page: PageContext
-    /// 어디로 보내나. 앱 알림 화면과 같은 부품을 쓴다 (ADR-0059).
+    /// 보내는 방법. 앱 알림 화면과 같은 부품을 쓴다 (ADR-0059).
     var alerts: AlertDeliveryContext
 }
 

@@ -322,7 +322,7 @@ struct AppPagesController: RouteCollection, Sendable {
                 .map { try DeployTokenRow(token: $0) }
         }
 
-        // 어디로 보내나. 관리 화면과 같은 부품을 쓴다 (ADR-0059).
+        // 보내는 방법. 관리 화면과 같은 부품을 쓴다 (ADR-0059).
         var alerts: AlertDeliveryContext?
         if canManage {
             let appID = try app.requireID()
@@ -697,7 +697,7 @@ struct AppPagesController: RouteCollection, Sendable {
             on: request.db,
             logger: request.logger
         )
-        return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
+        return request.redirect(to: "/apps/\(try app.requireID().uuidString)#deploy-tokens")
     }
 
     // MARK: - 앱 치우기
@@ -838,7 +838,7 @@ struct AppPagesController: RouteCollection, Sendable {
         try await FeedTokenIssuing.revoke(
             tokenID, ofApp: app, by: user, on: request.db, logger: request.logger
         )
-        return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
+        return request.redirect(to: "/apps/\(try app.requireID().uuidString)#feed-tokens")
     }
 
     // MARK: - 알림 대상
@@ -870,7 +870,7 @@ struct AppPagesController: RouteCollection, Sendable {
             )
             return htmlResponse(view, status: abort.status)
         }
-        return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
+        return request.redirect(to: "/apps/\(try app.requireID().uuidString)#alerts")
     }
 
     /// 이 앱의 소식을 채널로 보낼지 개별로 보낼지 (ADR-0059).
@@ -900,7 +900,7 @@ struct AppPagesController: RouteCollection, Sendable {
         request.logger.notice(
             "앱 알림 대상 변경 [\(app.bundleID), \(target.rawValue), 바꾼 사람: \(user.email)]"
         )
-        return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
+        return request.redirect(to: "/apps/\(try app.requireID().uuidString)#alerts")
     }
 
     @Sendable
@@ -914,7 +914,7 @@ struct AppPagesController: RouteCollection, Sendable {
             appID: try app.requireID(),
             on: request.db
         )
-        return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
+        return request.redirect(to: "/apps/\(try app.requireID().uuidString)#alerts")
     }
 
     private func htmlResponse(_ view: View, status: HTTPStatus) -> Response {
@@ -1205,7 +1205,7 @@ struct AppDetailContext: Encodable {
     var feedError: String?
     /// Sparkle 을 실제로 쓸 수 있는 상태인가 (ADR-0057). 관리 권한이 없으면 nil.
     var sparkle: SparkleReadinessRow?
-    /// 어디로 보내나. 관리 권한이 없으면 nil (ADR-0059).
+    /// 보내는 방법. 관리 권한이 없으면 nil (ADR-0059).
     var alerts: AlertDeliveryContext?
     var feedback: [FeedbackRow]
     /// 지금 사람이 피드백을 남길 수 있는 버전들. 받아본 것만 들어온다.
