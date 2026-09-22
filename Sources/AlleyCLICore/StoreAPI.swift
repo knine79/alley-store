@@ -49,6 +49,28 @@ public struct StoreAPI: Sendable {
         try await get(APIPath.versions(ofApp: id), as: [VersionDTO].self)
     }
 
+    /// 이 사람이 손댈 수 있는 앱들.
+    ///
+    /// 배포 토큰은 앱 하나에 묶여 있어서 `currentApp()` 하나면 됐다. 사람 토큰은
+    /// 여러 앱을 다루므로 목록이 필요하다 (ADR-0060).
+    public func apps() async throws -> [AppDTO] {
+        try await get(APIPath.apps, as: [AppDTO].self)
+    }
+
+    /// 서명이 어디까지 왔는지. 실패했으면 갈래와 할 일이 함께 온다.
+    public func signingStatus(versionID: UUID) async throws -> SigningStatusDTO {
+        try await get(APIPath.signingStatus(versionID: versionID), as: SigningStatusDTO.self)
+    }
+
+    /// 앱에 넣을 `SUPublicEDKey` 와 지금 쓸 수 있는 상태인지.
+    public func sparkle(appID: UUID) async throws -> SparkleFeedDTO {
+        try await get(APIPath.sparkleFeedStatus(ofApp: appID), as: SparkleFeedDTO.self)
+    }
+
+    public func feedback(appID: UUID) async throws -> [FeedbackDTO] {
+        try await get(APIPath.feedback(ofApp: appID), as: [FeedbackDTO].self)
+    }
+
     public func createVersion(
         _ payload: CreateVersionRequest,
         ofApp id: UUID
