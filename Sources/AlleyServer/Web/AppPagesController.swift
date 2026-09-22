@@ -28,12 +28,14 @@ struct AppPagesController: RouteCollection, Sendable {
         pages.post(":appID", "portal-app-id", use: registerPortalAppID)
         pages.post(":appID", "deploy-tokens", use: issueDeployToken)
         pages.post(":appID", "deploy-tokens", ":tokenID", "revoke", use: revokeDeployToken)
+        pages.get(":appID", "member-candidates", use: memberCandidates)
         pages.post(":appID", "members", use: addMember)
         pages.post(":appID", "members", ":userID", "remove", use: removeMember)
         pages.get(":appID", "versions", ":versionID", "download", use: download)
         pages.post(":appID", "feedback", ":feedbackID", "delete", use: deleteFeedback)
         pages.post(":appID", "feed-tokens", use: issueFeedToken)
         pages.post(":appID", "feed-tokens", ":tokenID", "revoke", use: revokeFeedToken)
+        pages.post(":appID", "alerts", use: submitAlerts)
         pages.post(":appID", "notification-targets", use: addNotificationTarget)
         pages.post(
             ":appID", "notification-targets", ":targetID", "delete",
@@ -280,7 +282,7 @@ struct AppPagesController: RouteCollection, Sendable {
         if canManage, let memberQuery, !memberQuery.isEmpty {
             let found = try await findMemberCandidates(
                 matching: memberQuery,
-                excluding: members,
+                excluding: Set(members.map(\.user.id)),
                 on: request.db
             )
             memberSearchOverflowed = found.count > MemberSearch.limit
@@ -320,13 +322,30 @@ struct AppPagesController: RouteCollection, Sendable {
                 .map { try DeployTokenRow(token: $0) }
         }
 
-        var targets: [NotificationTargetDTO] = []
+        // 보내는 방법. 관리 화면과 같은 부품을 쓴다 (ADR-0059).
+        var alerts: AlertDeliveryContext?
         if canManage {
-            targets = try await NotificationTarget.query(on: request.db)
-                .filter(\.$app.$id == app.requireID())
+            let appID = try app.requireID()
+            let channels = try await NotificationTarget.query(on: request.db)
+                .filter(\.$app.$id == appID)
                 .sort(\.$name)
                 .all()
-                .map { try $0.toDTO() }
+            let uploaderCount = members.count
+            alerts = AlertDeliveryContext(
+                target: app.alerts.rawValue,
+                canReachPeople: request.application.canReachPeople,
+                peopleName: "앱 관리자에 개별전송",
+                // 뒤에 "개인이 내 알림에서 정할 수 있다" 가 템플릿에서 붙는다. 그
+                // 문장에는 링크가 들어가는데 Leaf 는 넘긴 값을 이스케이프하므로
+                // 여기에 태그를 적을 수 없다.
+                peopleNote: "앱을 수정할 수 있는 권한이 있는 \(uploaderCount)명에게 개별로 보냅니다.",
+                saveAction: "/apps/\(appID.uuidString)/alerts",
+                channelAction: "/apps/\(appID.uuidString)/notification-targets",
+                channels: AlertDeliveryContext.channels(channels) { id in
+                    "/apps/\(appID.uuidString)/notification-targets/\(id.uuidString)/delete"
+                },
+                error: notificationError
+            )
         }
 
         // 실패한 버전은 로그가 있어야 올린 사람이 스스로 고칠 수 있다.
@@ -403,9 +422,8 @@ struct AppPagesController: RouteCollection, Sendable {
                 issuedFeed: issuedFeed,
                 feedError: feedError,
                 sparkle: sparkle,
-                notificationTargets: targets,
+                alerts: alerts,
                 feedback: feedback,
-                notificationError: notificationError,
                 canUpload: canUpload,
                 canManage: canManage,
                 entitlementsWhereToFind: EntitlementsGuidance.whereToFind,
@@ -571,6 +589,36 @@ struct AppPagesController: RouteCollection, Sendable {
     /// 고른 사람에게 이 앱을 올릴 권한을 준다.
     ///
     /// 화면은 `AppController.addMember` 와 같은 규칙을 쓴다. 한 번이라도 로그인한
+    /// 치는 동안 후보를 돌려준다.
+    ///
+    /// **화면을 다시 그리는 것과 같은 것을 본다.** 스크립트가 없으면 폼이 그대로
+    /// 제출되고 서버가 같은 결과를 HTML 로 그린다. 그쪽이 사라지는 것이 아니라,
+    /// 여기가 그 일을 한 조각만 떼어 빨리 하는 것이다.
+    @Sendable
+    func memberCandidates(request: Request) async throws -> MemberCandidatesResponse {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        // 누가 이 앱을 올릴 수 있는지는 관리하는 사람만 본다. 목록을 그리는 쪽과
+        // 같은 조건이다.
+        try app.requireManageAccess(for: user)
+
+        let query = (request.query[String.self, at: "q"] ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            return MemberCandidatesResponse(candidates: [], overflowed: false)
+        }
+
+        let found = try await findMemberCandidates(
+            matching: query,
+            excluding: try await uploaderIDs(of: app, on: request.db),
+            on: request.db
+        )
+        return MemberCandidatesResponse(
+            candidates: Array(found.prefix(MemberSearch.limit)),
+            overflowed: found.count > MemberSearch.limit
+        )
+    }
+
     /// 계정만 넣을 수 있고, 오너는 이미 올릴 수 있으므로 표에 넣지 않는다.
     @Sendable
     func addMember(request: Request) async throws -> Response {
@@ -649,7 +697,7 @@ struct AppPagesController: RouteCollection, Sendable {
             on: request.db,
             logger: request.logger
         )
-        return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
+        return request.redirect(to: "/apps/\(try app.requireID().uuidString)#deploy-tokens")
     }
 
     // MARK: - 앱 치우기
@@ -710,7 +758,11 @@ struct AppPagesController: RouteCollection, Sendable {
         return request.redirect(to: "/apps/\(try app.requireID().uuidString)#feedback")
     }
 
-    /// 앱에 붙은 알림 대상에게 알린다.
+    /// 이 앱이 정한 곳으로 새 피드백을 알린다 (ADR-0059).
+    ///
+    /// 채널이냐 개별이냐는 앱 설정이 정하고, 개별이면 받는 사람이 각자 끌 수 있다.
+    /// 예전에는 채널로 보내면서 따로 켠 사람에게 한 통을 더 보냈는데, 그 "한 통 더"
+    /// 를 켠 사람이 없어서 채널을 안 걸어둔 앱은 아무 데도 가지 않았다.
     private func announce(
         _ entry: Feedback,
         version: Version,
@@ -728,38 +780,7 @@ struct AppPagesController: RouteCollection, Sendable {
             link: request.consoleLink("/apps/\(version.$app.id.uuidString)")
         )
 
-        let appID = version.$app.id
-        await request.notifier.notify(app: appID, message: message)
-        await notifyWatchers(of: appID, message: message, on: request)
-    }
-
-    /// 이 앱의 피드백을 개인으로 받겠다고 켠 사람들에게 DM 을 보낸다.
-    ///
-    /// **기본은 꺼짐이다.** 앱 하나를 여럿이 맡으면 피드백 하나에 DM 이 여러 통
-    /// 간다. 앱에 붙이는 채널이 이미 그 일을 하고 있어서, 따로 받고 싶은 사람만
-    /// 켠다 (`User.notifyFeedback`).
-    ///
-    /// 올릴 수 있는 사람까지 본다. 오너만 보면 함께 맡은 멤버가 앱 소식에서 빠진다.
-    private func notifyWatchers(
-        of appID: UUID,
-        message: NotificationMessage,
-        on request: Request
-    ) async {
-        guard let app = try? await App.find(appID, on: request.db) else { return }
-        let memberIDs = (try? await AppMember.query(on: request.db)
-            .filter(\.$app.$id == appID)
-            .all()
-            .map(\.$user.id)) ?? []
-
-        let ids = Set(memberIDs + [app.$owner.id])
-        let watchers = (try? await User.query(on: request.db)
-            .filter(\.$id ~~ Array(ids))
-            .filter(\.$notifyFeedback == true)
-            .all()) ?? []
-
-        for watcher in watchers {
-            await request.notifier.notify(person: watcher.email, message: message)
-        }
+        await request.notifier.notify(app: version.app, kind: .feedback, message: message)
     }
 
     // MARK: - 피드 토큰
@@ -769,6 +790,18 @@ struct AppPagesController: RouteCollection, Sendable {
         let user = try request.requireUser()
         let app = try await request.findApp()
         try app.requireManageAccess(for: user)
+
+        // **화면만 가리면 막은 것이 아니다.** 여기까지 오는 길은 폼을 손으로 만드는
+        // 것뿐이지만, 내주고 나면 주소가 나오고 주소가 나오면 된 줄 안다 (ADR-0057).
+        let sparkle = try await SparkleReadinessRow.of(app: app, on: request.db)
+        guard sparkle.canIssue else {
+            let view = try await renderDetail(
+                on: request,
+                issuedToken: nil,
+                feedError: sparkle.blocker ?? "지금은 피드 주소를 내줄 수 없습니다."
+            )
+            return htmlResponse(view, status: .conflict)
+        }
 
         let values = try request.content.decode(DeployTokenFormValues.self)
         do {
@@ -805,7 +838,7 @@ struct AppPagesController: RouteCollection, Sendable {
         try await FeedTokenIssuing.revoke(
             tokenID, ofApp: app, by: user, on: request.db, logger: request.logger
         )
-        return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
+        return request.redirect(to: "/apps/\(try app.requireID().uuidString)#feed-tokens")
     }
 
     // MARK: - 알림 대상
@@ -817,9 +850,12 @@ struct AppPagesController: RouteCollection, Sendable {
         try app.requireManageAccess(for: user)
 
         let values = try request.content.decode(NotificationTargetFormValues.self)
+        // **채널만 등록한다** (ADR-0059). 사람에게 보내는 길은 개별 전송이 맡고,
+        // 그쪽은 받는 사람이 각자 수단을 정하므로 여기서 주소를 받을 것이 없다.
         do {
             _ = try await NotificationTargets.create(
                 CreateNotificationTargetRequest(
+                    kind: .slack,
                     name: values.name ?? "",
                     endpoint: values.endpoint ?? ""
                 ),
@@ -834,7 +870,37 @@ struct AppPagesController: RouteCollection, Sendable {
             )
             return htmlResponse(view, status: abort.status)
         }
-        return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
+        return request.redirect(to: "/apps/\(try app.requireID().uuidString)#alerts")
+    }
+
+    /// 이 앱의 소식을 채널로 보낼지 개별로 보낼지 (ADR-0059).
+    @Sendable
+    func submitAlerts(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        try app.requireManageAccess(for: user)
+
+        let values = try request.content.decode(OperationalTargetValues.self)
+        guard let target = AlertDelivery(rawValue: values.target ?? "") else {
+            throw Abort(.badRequest, reason: "알 수 없는 값입니다: \(values.target ?? "")")
+        }
+        // 받아 봐야 아무 데도 가지 않는 설정이 저장되고, 고른 사람은 받고 있다고
+        // 믿는다. 오류 화면으로 보내지 않고 이 화면에 이유만 띄운다.
+        if target == .people, !request.application.canReachPeople {
+            let view = try await renderDetail(
+                on: request,
+                issuedToken: nil,
+                notificationError: "Slack 봇도 메일도 연결되어 있지 않아 개별 전송을 고를 수 없습니다."
+            )
+            return htmlResponse(view, status: .conflict)
+        }
+
+        app.alerts = target
+        try await app.save(on: request.db)
+        request.logger.notice(
+            "앱 알림 대상 변경 [\(app.bundleID), \(target.rawValue), 바꾼 사람: \(user.email)]"
+        )
+        return request.redirect(to: "/apps/\(try app.requireID().uuidString)#alerts")
     }
 
     @Sendable
@@ -848,7 +914,7 @@ struct AppPagesController: RouteCollection, Sendable {
             appID: try app.requireID(),
             on: request.db
         )
-        return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
+        return request.redirect(to: "/apps/\(try app.requireID().uuidString)#alerts")
     }
 
     private func htmlResponse(_ view: View, status: HTTPStatus) -> Response {
@@ -867,10 +933,9 @@ struct AppPagesController: RouteCollection, Sendable {
     /// 이미 올릴 수 있는 사람은 뺀다. 눌러도 아무 일이 없는 줄을 보여줄 이유가 없다.
     private func findMemberCandidates(
         matching query: String,
-        excluding members: [AppMemberDTO],
+        excluding already: Set<UUID>,
         on database: any Database
     ) async throws -> [MemberCandidateRow] {
-        let already = Set(members.map(\.user.id))
         let needle = "%\(query.lowercased())%"
 
         return try await User.query(on: database)
@@ -894,6 +959,19 @@ struct AppPagesController: RouteCollection, Sendable {
                     name: user.name
                 )
             }
+    }
+
+    /// 이 앱에 이미 올릴 수 있는 사람들의 id.
+    ///
+    /// **`loadMembers` 를 쓰지 않는다.** 그쪽은 오너를 미리 읽어둔 앱을 전제한다
+    /// (`app.owner`). 화면을 그리는 길은 그렇게 읽지만 다른 길은 아니라서, 거기서
+    /// 부르면 관계를 안 읽었다고 죽는다. 여기는 id 만 있으면 된다.
+    private func uploaderIDs(of app: App, on database: any Database) async throws -> Set<UUID> {
+        let members = try await AppMember.query(on: database)
+            .filter(\.$app.$id == app.requireID())
+            .all()
+            .map(\.$user.id)
+        return Set(members + [app.$owner.id])
     }
 
     private func loadMembers(of app: App, on database: any Database) async throws -> [AppMemberDTO] {
@@ -1127,11 +1205,11 @@ struct AppDetailContext: Encodable {
     var feedError: String?
     /// Sparkle 을 실제로 쓸 수 있는 상태인가 (ADR-0057). 관리 권한이 없으면 nil.
     var sparkle: SparkleReadinessRow?
-    var notificationTargets: [NotificationTargetDTO]
+    /// 보내는 방법. 관리 권한이 없으면 nil (ADR-0059).
+    var alerts: AlertDeliveryContext?
     var feedback: [FeedbackRow]
     /// 지금 사람이 피드백을 남길 수 있는 버전들. 받아본 것만 들어온다.
     /// 익명 체크박스를 띄울지. 스토어 설정에서 온다.
-    var notificationError: String?
     var canUpload: Bool
     var canManage: Bool
     /// 권한이 모자라 실패한 버전 옆에 붙일 안내. 그 파일을 어디서 구하나 (ADR-0036).
@@ -1235,6 +1313,21 @@ struct MemberCandidateRow: Encodable {
     var id: String
     var email: String
     var name: String
+}
+
+/// 치는 동안 돌려주는 후보들.
+///
+/// 내보내기만 한다. 받을 일이 없어서 `Decodable` 은 달지 않는다.
+struct MemberCandidatesResponse: Encodable, AsyncResponseEncodable {
+    var candidates: [MemberCandidateRow]
+    /// 화면에 세울 수보다 많았나. 그러면 더 좁혀 치라고 알린다.
+    var overflowed: Bool
+
+    func encodeResponse(for request: Request) async throws -> Response {
+        let response = Response(status: .ok)
+        try response.content.encode(self, as: .json)
+        return response
+    }
 }
 
 struct MemberFormValues: Codable {

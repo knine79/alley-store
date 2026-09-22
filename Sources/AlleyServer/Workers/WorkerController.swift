@@ -496,22 +496,22 @@ public struct WorkerController: RouteCollection, Sendable {
         code: SigningFailureCode?,
         on request: Request
     ) async {
-        // 올린 사람을 모르면 보낼 곳이 없다. 관계가 안 실렸을 때 여기서 던지면
+        // 앱을 모르면 어디로 보낼지도 모른다. 관계가 안 실렸을 때 여기서 던지면
         // 실패 기록까지 되돌아가므로 조용히 넘긴다.
-        guard let uploader = try? await job.version.$createdBy.get(on: request.db) else {
-            request.logger.notice("올린 사람을 찾지 못해 실패 알림을 건너뜁니다 [버전: \(job.$version.id)]")
+        guard let app = try? await job.version.$app.get(on: request.db) else {
+            request.logger.notice("앱을 찾지 못해 실패 알림을 건너뜁니다 [버전: \(job.$version.id)]")
             return
         }
-        // 끈 사람에게는 보내지 않는다. 기본은 켜짐이다 (`User.notifySigningFailure`).
-        guard uploader.notifySigningFailure else { return }
-        let app = (try? await job.version.$app.get(on: request.db))
-        let name = app?.name ?? "앱"
         let appID = job.version.$app.id
 
+        // **올린 사람 한 명이 아니라 앱이 정한 곳으로 간다** (ADR-0059). 예전에는
+        // 올린 사람에게만 갔고, 그 사람이 자리를 비우면 그 버전이 아무도 모르게
+        // 멈춰 있었다. 개별로 보낼 때도 올릴 수 있는 사람 전원이 받는다.
         await request.notifier.notify(
-            person: uploader.email,
+            app: app,
+            kind: .signingFailure,
             message: NotificationMessage(
-                title: "\(name) \(job.version.shortVersion) (\(job.version.buildNumber)) 서명이 실패했습니다",
+                title: "\(app.name) \(job.version.shortVersion) (\(job.version.buildNumber)) 서명이 실패했습니다",
                 // 갈래 이름과 무엇을 하면 되는지를 함께 싣는다. 코드만 보내면 받는
                 // 사람이 콘솔에 들어와 다시 읽어야 한다.
                 body: [

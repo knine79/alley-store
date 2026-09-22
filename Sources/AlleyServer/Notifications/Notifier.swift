@@ -22,10 +22,29 @@ public struct NotificationMessage: Sendable {
     }
 }
 
+/// 앱에서 나가는 알림의 갈래.
+///
+/// **끄는 자리가 갈래마다 다르다.** 앱 하나를 여럿이 맡으면 피드백은 소음이 되기
+/// 쉽고 서명 실패는 그렇지 않다. 하나로 묶으면 소음을 끄려다 실패까지 끄게 된다.
+public enum AppAlertKind: Sendable {
+    /// 새 피드백이 왔다.
+    case feedback
+    /// 서명이 최종적으로 실패했다.
+    case signingFailure
+
+    /// 이 사람이 이 갈래를 켜뒀나. 둘 다 기본은 켜짐이다 (ADR-0059).
+    func isOn(for user: User) -> Bool {
+        switch self {
+        case .feedback: return user.notifyFeedback
+        case .signingFailure: return user.notifySigningFailure
+        }
+    }
+}
+
 /// 알림을 실제로 보내는 곳.
 ///
-/// 지금 구현은 웹훅 하나뿐이다. 메일을 붙이게 되면 이 프로토콜을 따르는 타입이
-/// 하나 늘고, 부르는 쪽은 그대로다.
+/// 채널을 타입으로 둔 덕에 메일을 붙일 때 부르는 쪽이 그대로였다. 보내는 구현만
+/// 하나 늘었다.
 public protocol NotificationChannel: Sendable {
     var kind: NotificationChannelKind { get }
     func send(_ message: NotificationMessage, to endpoint: String) async throws
@@ -106,8 +125,22 @@ public struct Notifier: Sendable {
         self.logger = logger
     }
 
-    /// 앱에 붙은 대상들에게 보낸다.
-    public func notify(app appID: UUID, message: NotificationMessage) async {
+    /// 앱 소식. 그 앱이 정한 곳 **한 군데**로 보낸다 (ADR-0059).
+    ///
+    /// 운영 알림과 같은 규칙이다. 채널을 걸어뒀으면 채널로, 아니면 그 앱을 올릴 수
+    /// 있는 사람들에게 한 명씩 간다. 개별로 갈 때는 각자 끈 것을 본다.
+    public func notify(app: App, kind: AppAlertKind, message: NotificationMessage) async {
+        guard let appID = try? app.requireID() else { return }
+        switch app.alerts {
+        case .channel:
+            await notifyChannels(of: appID, message: message)
+        case .people:
+            await notifyEach(await uploaders(of: appID), about: kind, message: message)
+        }
+    }
+
+    /// 앱에 붙은 채널들에게 보낸다.
+    public func notifyChannels(of appID: UUID, message: NotificationMessage) async {
         let targets = (try? await NotificationTarget.query(on: database)
             .filter(\.$app.$id == appID)
             .all()) ?? []
@@ -124,28 +157,56 @@ public struct Notifier: Sendable {
 
     /// 운영 알림. 스토어가 정한 곳 **한 군데**로 보낸다.
     ///
-    /// 채널과 DM 을 함께 보내지 않는다. 같은 알림이 두 번 오면 한 번 오는 것보다
+    /// 채널과 개별을 함께 보내지 않는다. 같은 알림이 두 번 오면 한 번 오는 것보다
     /// 빨리 무시당한다. 어느 쪽인지는 관리 화면에서 정한다.
     public func notifyOperators(_ message: NotificationMessage) async {
         let settings = try? await StoreSettings.find(StoreSettings.singletonID, on: database)
-        switch settings?.operationalAlerts ?? .admins {
+        switch settings?.operationalAlerts ?? .people {
         case .channel:
             await notifyGlobal(message: message)
-        case .admins:
+        case .people:
             await notifyAdmins(message)
         }
     }
 
-    /// 관리자 전원에게 DM 을 보낸다.
+    /// 관리자 전원에게 각각 보낸다.
     ///
     /// 등록해 둘 것이 없어 설정을 잊어도 닿는다. 예전에는 전역 대상을 만들어 두지
     /// 않으면 워커가 죽어도 아무 데도 가지 않았고, 그 대상을 만드는 화면조차 없었다.
+    ///
+    /// **여기에는 끄는 자리가 없다.** 스토어가 멈추는 알림이라 받지 않겠다고 할 수
+    /// 있는 성질이 아니다. 앱 알림은 소음이 될 수 있어 갈래마다 끄는 칸을 뒀다.
     private func notifyAdmins(_ message: NotificationMessage) async {
         let admins = (try? await User.query(on: database)
             .filter(\.$role == .admin)
             .all()) ?? []
         for admin in admins {
-            await notify(person: admin.email, message: message)
+            await notify(person: admin, message: message)
+        }
+    }
+
+    /// 이 앱을 올릴 수 있는 사람들. 오너와 멤버다.
+    private func uploaders(of appID: UUID) async -> [User] {
+        let memberIDs = (try? await AppMember.query(on: database)
+            .filter(\.$app.$id == appID)
+            .all()
+            .map(\.$user.id)) ?? []
+        let ownerID = try? await App.find(appID, on: database)?.$owner.id
+        let ids = Set(memberIDs + [ownerID].compactMap { $0 })
+        guard !ids.isEmpty else { return [] }
+        return (try? await User.query(on: database)
+            .filter(\.$id ~~ Array(ids))
+            .all()) ?? []
+    }
+
+    /// 끄지 않은 사람에게만 한 통씩.
+    private func notifyEach(
+        _ people: [User],
+        about kind: AppAlertKind,
+        message: NotificationMessage
+    ) async {
+        for person in people where kind.isOn(for: person) {
+            await notify(person: person, message: message)
         }
     }
 
@@ -155,20 +216,42 @@ public struct Notifier: Sendable {
     /// 이쪽은 서버가 받는 사람을 아는 경우다. 서명이 실패하면 그 버전을 올린 사람이
     /// 고치는데, 그 사람이 미리 자기 대상을 만들어 뒀을 리 없다.
     ///
-    /// 보낼 채널이 없으면 조용히 지나간다. 봇 토큰을 넣지 않은 스토어가 그렇고,
-    /// 그때는 예전처럼 사람이 화면을 다시 보는 것으로 굴러간다.
-    public func notify(person email: String, message: NotificationMessage) async {
-        guard let channel = channels[.slackDirectMessage] else {
-            logger.debug("사람에게 보내는 알림 채널이 없어 건너뜁니다 [\(email)]")
+    /// 보낼 채널이 없으면 조용히 지나간다. 봇 토큰도 메일 설정도 없는 스토어가
+    /// 그렇고, 그때는 예전처럼 사람이 화면을 다시 보는 것으로 굴러간다.
+    public func notify(person user: User, message: NotificationMessage) async {
+        let usable = personalChannels(for: user)
+        guard !usable.isEmpty else {
+            logger.debug("사람에게 보내는 알림 채널이 없어 건너뜁니다 [\(user.email)]")
             return
         }
-        do {
-            try await channel.send(message, to: email)
-        } catch {
-            // **여기서 던지지 않는다.** 이 알림은 서명 실패를 기록하는 흐름 안에서
-            // 불린다. 알림이 실패했다고 그 기록까지 되돌리면 잡이 멈춘 채로 남는다.
-            logger.warning("알림을 보내지 못했습니다 [받는 사람: \(email), 이유: \(error)]")
+        for channel in usable {
+            do {
+                // Slack DM 도 메일도 받는 사람을 계정 이메일로 찾는다. DM 은 그 주소로
+                // Slack 계정을 뒤지고, 메일은 그 주소로 보낸다.
+                try await channel.send(message, to: user.email)
+            } catch {
+                // **여기서 던지지 않는다.** 이 알림은 서명 실패를 기록하는 흐름 안에서
+                // 불린다. 알림이 실패했다고 그 기록까지 되돌리면 잡이 멈춘 채로 남는다.
+                logger.warning("알림을 보내지 못했습니다 [받는 사람: \(user.email), 이유: \(error)]")
+            }
         }
+    }
+
+    /// 이 사람에게 실제로 쓸 채널들.
+    ///
+    /// 고른 대로 간다. 둘 다 골랐으면 둘 다 간다 - 남이 정해준 것이 아니라 자기가
+    /// 고른 것이라 두 번 오는 것도 본인이 정한 결과다.
+    ///
+    /// **고른 것이 스토어에 없으면 있는 것 하나로 보낸다.** 고를 당시에 없던 수단이
+    /// 나중에 생기고 있던 수단이 사라진다. 스토어가 Slack 봇을 떼고 메일만 남겼는데
+    /// 예전에 고른 값 때문에 알림이 사라지면, 끄지도 않은 알림이 조용히 멎는다.
+    private func personalChannels(for user: User) -> [any NotificationChannel] {
+        let chosen = NotificationChannelKind.personal
+            .filter(user.notifyVia.contains)
+            .compactMap { channels[$0] }
+        if !chosen.isEmpty { return chosen }
+        // 되짚을 때는 하나만 고른다. 고르지도 않은 것을 두 곳으로 보내지 않는다.
+        return NotificationChannelKind.personal.lazy.compactMap { channels[$0] }.prefix(1).map { $0 }
     }
 
     private func deliver(_ message: NotificationMessage, to targets: [NotificationTarget]) async {
@@ -196,12 +279,15 @@ public struct Notifier: Sendable {
 extension Application {
     /// 이 스토어가 쓸 수 있는 알림 채널들.
     ///
-    /// 봇 토큰이 없으면 DM 채널이 빠진다. 요청 경로와 주기 작업이 같은 목록을 써야
-    /// 한쪽에만 붙는 일이 없다.
+    /// 설정하지 않은 것은 빠진다. 봇 토큰이 없으면 DM 이, 메일 설정이 없으면 메일이
+    /// 빠진다. 요청 경로와 주기 작업이 같은 목록을 써야 한쪽에만 붙는 일이 없다.
     var notificationChannels: [any NotificationChannel] {
         var channels: [any NotificationChannel] = [SlackWebhookChannel(client: client)]
         if let token = alleyConfig.slackBotToken {
             channels.append(SlackDirectMessageChannel(client: client, botToken: token))
+        }
+        if let smtp = alleyConfig.smtp {
+            channels.append(EmailChannel(application: self, config: smtp))
         }
         return channels
     }

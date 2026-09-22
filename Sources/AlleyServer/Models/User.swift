@@ -58,20 +58,54 @@ public final class User: Model, @unchecked Sendable {
     @Field(key: "role_set_by_admin")
     public var roleSetByAdmin: Bool
 
-    /// 내가 올린 버전의 서명이 실패했을 때 DM 을 받을지.
+    /// 내가 올린 버전의 서명이 실패했을 때 받을지.
     ///
     /// **기본이 켜짐이다.** 내가 올린 것만 오므로 소음이 아니고, 실패를 모른 채로
     /// 두는 것이 이 알림을 만든 이유다. 끄고 싶은 사람만 끈다.
     @Field(key: "notify_signing_failure")
     public var notifySigningFailure: Bool
 
-    /// 내가 올릴 수 있는 앱에 피드백이 왔을 때 DM 을 받을지.
+    /// 내가 올릴 수 있는 앱에 피드백이 왔을 때 받을지.
     ///
-    /// **기본이 꺼짐이다.** 앱 하나를 여럿이 맡으면 피드백 하나에 DM 이 여러 통
-    /// 간다. 앱에 붙이는 채널이 이미 그 일을 하고 있어서, 개인이 따로 받고 싶을
-    /// 때만 켠다.
+    /// **기본이 켜짐이다** (ADR-0059). 한때 꺼짐이었는데, 그러면 앱이 개별 전송으로
+    /// 정해져 있어도 아무도 안 받는다. 기본이 꺼짐인 알림은 그 알림이 필요한 순간에
+    /// 꺼져 있다. 소음을 겪은 사람이 끄면 되고, 그 사람은 끄는 자리를 찾아간다.
     @Field(key: "notify_feedback")
     public var notifyFeedback: Bool
+
+    /// 나에게 오는 알림을 무엇으로 받을지. **여럿 고를 수 있다.**
+    ///
+    /// **개인이 정한다.** Slack 을 안 쓰는 사람이 있고, 봇 토큰을 받지 못한 스토어도
+    /// 있다. 관리자가 정해두면 그 둘 중 한쪽은 알림을 못 받는다.
+    ///
+    /// 쉼표로 이어 담는다. 한 갈래만 담던 시절의 값(`slack_dm`)도 그대로 읽힌다.
+    ///
+    /// 고른 것을 스토어가 갖추지 않았으면 쓸 수 있는 쪽으로 간다
+    /// (`Notifier.notify(person:)`). 고를 때는 없던 수단이 나중에 생기기도 하고,
+    /// 있던 수단이 사라지기도 한다.
+    @Field(key: "notify_via")
+    public var notifyViaName: String
+
+    public var notifyVia: Set<NotificationChannelKind> {
+        get {
+            // 사람에게 보낼 수 없는 값은 버린다. 웹훅 주소로는 그 사람에게만 보낼
+            // 수 없다.
+            Set(
+                notifyViaName
+                    .split(separator: ",")
+                    .compactMap { NotificationChannelKind(rawValue: String($0)) }
+                    .filter(NotificationChannelKind.personal.contains)
+            )
+        }
+        // 담는 순서를 고정한다. 같은 집합이 저장할 때마다 다른 문자열이 되면
+        // 데이터베이스의 값만 보고는 바뀐 것인지 알 수 없다.
+        set {
+            notifyViaName = NotificationChannelKind.personal
+                .filter(newValue.contains)
+                .map(\.rawValue)
+                .joined(separator: ",")
+        }
+    }
 
     public init() {}
 
@@ -85,7 +119,8 @@ public final class User: Model, @unchecked Sendable {
         role: UserRole,
         roleSetByAdmin: Bool = false,
         notifySigningFailure: Bool = true,
-        notifyFeedback: Bool = false
+        notifyFeedback: Bool = true,
+        notifyVia: Set<NotificationChannelKind> = [.slackDirectMessage]
     ) {
         self.id = id
         self.issuer = issuer
@@ -97,6 +132,10 @@ public final class User: Model, @unchecked Sendable {
         self.roleSetByAdmin = roleSetByAdmin
         self.notifySigningFailure = notifySigningFailure
         self.notifyFeedback = notifyFeedback
+        self.notifyViaName = NotificationChannelKind.personal
+            .filter(notifyVia.contains)
+            .map(\.rawValue)
+            .joined(separator: ",")
     }
 }
 
@@ -291,5 +330,60 @@ public struct AddNotificationPreferencesToUser: AsyncMigration {
             .deleteField("notify_signing_failure")
             .deleteField("notify_feedback")
             .update()
+    }
+}
+
+/// 나에게 오는 알림을 무엇으로 받을지 (ADR-0058).
+///
+/// 기본값을 Slack DM 으로 둔다. 이 칸이 생기기 전에는 그것뿐이었으므로, 이미 켜둔
+/// 사람의 받는 곳을 마이그레이션이 바꾸지 않는다. 메일만 갖춘 스토어에서는 값이
+/// 그대로여도 메일로 간다 (`Notifier.notify(person:)`).
+public struct AddNotifyViaToUser: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        try await database.schema(User.schema)
+            .field(
+                "notify_via",
+                .string,
+                .required,
+                .sql(.default(NotificationChannelKind.slackDirectMessage.rawValue))
+            )
+            .update()
+    }
+
+    public func revert(on database: any Database) async throws {
+        try await database.schema(User.schema)
+            .deleteField("notify_via")
+            .update()
+    }
+}
+
+/// 피드백 알림을 모두 켠다 (ADR-0059).
+///
+/// 기본값만 바꾸고 이미 있는 행은 두려고 했다. 끈 사람을 다시 켜면 끄는 버튼이
+/// 눌러도 되돌아오는 버튼이 되기 때문이다.
+///
+/// **그런데 지금까지 꺼져 있던 사람은 끈 적이 없다.** 이 값은 만들어질 때부터 꺼짐
+/// 이었고, 앱 알림이 개별로 가게 되기 전에는 켤 이유도 없었다. 그 상태로 두면 앱을
+/// 개별 전송으로 정해둬도 아무에게도 가지 않는다.
+///
+/// 한 번 켜고, 그 뒤로 끄는 것은 각자 내 알림에서 한다.
+public struct DefaultFeedbackNotificationsOn: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+        try await sql.raw("ALTER TABLE users ALTER COLUMN notify_feedback SET DEFAULT true").run()
+        try await sql.raw("UPDATE users SET notify_feedback = true").run()
+    }
+
+    public func revert(on database: any Database) async throws {
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+        try await sql.raw("ALTER TABLE users ALTER COLUMN notify_feedback SET DEFAULT false").run()
     }
 }

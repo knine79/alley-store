@@ -74,6 +74,14 @@ public final class NotificationTarget: Model, @unchecked Sendable {
             appID: $app.id,
             kind: kind,
             name: name,
+            // 여기가 무엇을 내보낼지 정하는 한 곳이다. 갈래가 늘면 컴파일러가
+            // 여기를 다시 물어본다.
+            endpoint: {
+                switch kind {
+                case .email: return endpoint
+                case .slack, .slackDirectMessage: return nil
+                }
+            }(),
             createdAt: createdAt ?? Date()
         )
     }

@@ -23,6 +23,8 @@ public struct AppConfig: Sendable {
     ///
     /// 없으면 사람에게 보내는 알림만 조용히 건너뛴다. 앱 채널로 가는 알림은 그대로다.
     public var slackBotToken: String?
+    /// 메일 보내기. 설정하지 않으면 그 길만 꺼진다.
+    public var smtp: SMTPConfig?
     /// 사용자와 워커가 접근하는 서버의 공개 주소. 콜백 URL 구성에 쓴다.
     public var publicBaseURL: String
     /// 업로드 통지 없이 버려진 `draft` 버전을 지우기까지 기다리는 시간(초).
@@ -173,6 +175,24 @@ public struct AppConfig: Sendable {
         public var keyID: String
         /// `.p8` 파일의 내용. PEM 헤더를 포함한 그대로.
         public var privateKeyPEM: String
+    }
+
+    /// 메일 보내기. 설정하지 않으면 메일로 가는 알림만 꺼진다.
+    ///
+    /// **Slack 과 다른 자리를 채운다.** Slack 은 사내 도구라 못 쓰는 사람이 있고,
+    /// 계정 이메일은 로그인에 이미 쓰고 있어서 누구에게나 있다.
+    public struct SMTPConfig: Sendable {
+        public var hostname: String
+        public var port: Int
+        /// 비우면 인증 없이 보낸다. 사내 릴레이가 그런 경우가 있다.
+        public var username: String?
+        public var password: String?
+        /// 보내는 사람으로 적을 주소.
+        public var fromAddress: String
+        /// 보내는 사람 이름. 받는 쪽 목록에 이것이 뜬다.
+        public var fromName: String
+        /// 암호화 방식. `ssl`, `starttls`, `none` 중 하나.
+        public var secure: String
     }
 
     public struct SecurityConfig: Sendable {
@@ -345,6 +365,29 @@ extension AppConfig {
             return secret
         }
 
+        /// 호스트와 보내는 주소가 있을 때만 켠다.
+        ///
+        /// 나머지는 기본값이 있다. 인증 없이 받는 사내 릴레이가 흔해서 사용자
+        /// 이름과 비밀번호는 선택이다.
+        func smtpConfig() -> SMTPConfig? {
+            guard let hostname = optional("SMTP_HOST"),
+                  let from = optional("SMTP_FROM")
+            else {
+                return nil
+            }
+            return SMTPConfig(
+                hostname: hostname,
+                port: (try? integer("SMTP_PORT", default: 587)) ?? 587,
+                username: optional("SMTP_USERNAME"),
+                password: optional("SMTP_PASSWORD"),
+                fromAddress: from,
+                fromName: optional("SMTP_FROM_NAME") ?? "Alley",
+                // 587 의 관례는 STARTTLS 다. 465 를 쓰면 처음부터 TLS 라
+                // `ssl` 로 바꿔야 한다.
+                secure: optional("SMTP_SECURE") ?? "starttls"
+            )
+        }
+
         /// 셋이 다 있을 때만 켠다.
         func appStoreConnectConfig() -> AppStoreConnectConfig? {
             guard let issuer = optional("ASC_ISSUER_ID"),
@@ -409,6 +452,7 @@ extension AppConfig {
             ),
             appStoreConnect: appStoreConnectConfig(),
             slackBotToken: optional("SLACK_BOT_TOKEN"),
+            smtp: smtpConfig(),
             publicBaseURL: try validatedPublicBaseURL(),
             // 기본 사흘. presigned 업로드 URL 의 기본 수명(1시간)의 일흔두 배라
             // 아직 올리는 중인 업로드를 지울 여지가 없고, 금요일 저녁에 버려진

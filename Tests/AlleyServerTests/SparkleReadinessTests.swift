@@ -73,7 +73,7 @@ struct SparkleReadinessTests {
                 headers: .sessionCookie(token)
             ) { response in
                 let html = response.body.string
-                #expect(html.contains("Sparkle 키가 없습니다"))
+                #expect(html.contains("Sparkle 키가 없어서"))
                 // 알려줄 공개키가 없으니 상자도 그리지 않는다.
                 #expect(!html.contains("SUPublicEDKey"))
             }
@@ -178,6 +178,87 @@ struct SparkleReadinessTests {
 
             let refreshed = try #require(try await Worker.find(try worker.requireID(), on: app.db))
             #expect(refreshed.sparklePublicKey == "PUBKEYAAA=")
+        }
+    }
+
+    // MARK: - 피드 발급
+
+    /// **화면만 가리면 막은 것이 아니다.** 주소를 내주면 넣고, 넣으면 된 줄 안다.
+    /// 경고는 그 위에 한 줄로 남을 뿐이라 읽히지 않는다.
+    @Test("워커에 Sparkle 키가 없으면 피드 주소를 내주지 않는다")
+    func doesNotIssueWithoutAKey() async throws {
+        try await withMigratedApp { app in
+            let (owner, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let registered = try await app.seedApp(
+                bundleID: "com.example.nokey", name: "키 없는 앱", owner: owner
+            )
+            let appID = try registered.requireID().uuidString
+
+            try await app.testing().test(
+                .POST, "/apps/\(appID)/feed-tokens",
+                headers: .form(cookie: token),
+                beforeRequest: { try $0.content.encode(["name": "sparkle"], as: .urlEncodedForm) }
+            ) { response in
+                #expect(response.status == .conflict)
+                // 오류 화면이 아니라 그 화면에 이유가 붙는다.
+                #expect(response.body.string.contains("서명 워커에 Sparkle 키가 없어서"))
+            }
+
+            let issued = try await FeedToken.query(on: app.db).count()
+            #expect(issued == 0)
+        }
+    }
+
+    /// 워커마다 키가 다르면 앱에 적을 값을 고를 수 없다. 키가 아예 없는 것과 같은
+    /// 규칙으로 막는다.
+    @Test("워커마다 키가 다르면 피드 주소를 내주지 않는다")
+    func doesNotIssueWithConflictingKeys() async throws {
+        try await withMigratedApp { app in
+            let (first, _) = try await app.makeWorker()
+            first.sparklePublicKey = "PUBKEYAAA="
+            try await first.save(on: app.db)
+            let (second, _) = try await app.makeWorker(name: "test-worker-2")
+            second.sparklePublicKey = "PUBKEYBBB="
+            try await second.save(on: app.db)
+
+            let (owner, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let registered = try await app.seedApp(
+                bundleID: "com.example.split", name: "갈린 앱", owner: owner
+            )
+
+            try await app.testing().test(
+                .POST, "/apps/\(try registered.requireID())/feed-tokens",
+                headers: .form(cookie: token),
+                beforeRequest: { try $0.content.encode(["name": "sparkle"], as: .urlEncodedForm) }
+            ) { response in
+                #expect(response.status == .conflict)
+            }
+        }
+    }
+
+    /// 키가 하나로 정해지면 지금까지처럼 내준다. 막는 것만 늘고 되던 것이 막히면
+    /// 안 된다.
+    @Test("키가 하나면 피드 주소를 내준다")
+    func issuesWhenTheKeyIsSettled() async throws {
+        try await withMigratedApp { app in
+            let (worker, _) = try await app.makeWorker()
+            worker.sparklePublicKey = "PUBKEYAAA="
+            try await worker.save(on: app.db)
+
+            let (owner, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let registered = try await app.seedApp(
+                bundleID: "com.example.ok", name: "멀쩡한 앱", owner: owner
+            )
+
+            try await app.testing().test(
+                .POST, "/apps/\(try registered.requireID())/feed-tokens",
+                headers: .form(cookie: token),
+                beforeRequest: { try $0.content.encode(["name": "sparkle"], as: .urlEncodedForm) }
+            ) { response in
+                #expect(response.status == .created)
+            }
+
+            #expect(try await FeedToken.query(on: app.db).count() == 1)
         }
     }
 

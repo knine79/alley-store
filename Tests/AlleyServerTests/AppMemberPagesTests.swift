@@ -40,6 +40,77 @@ struct AppMemberPagesTests {
         }
     }
 
+    // MARK: - 치는 동안 찾기
+
+    /// 화면이 다시 그려지는 것과 **같은 것을 본다.** 둘이 갈리면 스크립트가 있을
+    /// 때와 없을 때 다른 사람이 나온다.
+    @Test("치는 동안 찾는 경로가 같은 후보를 돌려준다")
+    func incrementalSearchMatchesThePage() async throws {
+        try await withMigratedApp { app in
+            let (owner, token) = try await app.makeUser(email: "owner@example.com", role: .developer)
+            _ = try await app.makeUser(email: "mate@example.com", role: .developer, name: "동료")
+            let registered = try await seedApp(on: app, owner: owner)
+            let appID = try registered.requireID().uuidString
+
+            try await app.testing().test(
+                .GET, "/apps/\(appID)/member-candidates?q=동료",
+                headers: .sessionCookie(token)
+            ) { response in
+                #expect(response.status == .ok)
+                let found = try response.content.decode(CandidatesPayload.self)
+                #expect(found.candidates.map(\.email) == ["mate@example.com"])
+                #expect(!found.overflowed)
+            }
+
+            // 오너는 이미 올릴 수 있다. 눌러도 아무 일이 없는 줄을 보여줄 이유가 없다.
+            try await app.testing().test(
+                .GET, "/apps/\(appID)/member-candidates?q=owner",
+                headers: .sessionCookie(token)
+            ) { response in
+                let found = try response.content.decode(CandidatesPayload.self)
+                #expect(found.candidates.isEmpty)
+            }
+        }
+    }
+
+    /// 빈 검색어로 전체 계정 목록이 새지 않게 한다.
+    @Test("검색어가 없으면 아무도 돌려주지 않는다")
+    func emptyQueryReturnsNothing() async throws {
+        try await withMigratedApp { app in
+            let (owner, token) = try await app.makeUser(email: "owner@example.com", role: .developer)
+            _ = try await app.makeUser(email: "mate@example.com", role: .developer, name: "동료")
+            let registered = try await seedApp(on: app, owner: owner)
+
+            try await app.testing().test(
+                .GET, "/apps/\(try registered.requireID())/member-candidates?q=%20",
+                headers: .sessionCookie(token)
+            ) { response in
+                let found = try response.content.decode(CandidatesPayload.self)
+                #expect(found.candidates.isEmpty)
+            }
+        }
+    }
+
+    /// 누가 이 앱을 올릴 수 있는지는 관리하는 사람만 본다. 목록을 그리는 쪽과 같은
+    /// 조건이어야 한다.
+    @Test("관리 권한이 없으면 후보를 볼 수 없다")
+    func candidatesNeedManageAccess() async throws {
+        try await withMigratedApp { app in
+            let (owner, _) = try await app.makeUser(email: "owner@example.com", role: .developer)
+            let (_, otherToken) = try await app.makeUser(
+                email: "other@example.com", role: .developer
+            )
+            let registered = try await seedApp(on: app, owner: owner)
+
+            try await app.testing().test(
+                .GET, "/apps/\(try registered.requireID())/member-candidates?q=owner",
+                headers: .sessionCookie(otherToken)
+            ) { response in
+                #expect(response.status == .forbidden)
+            }
+        }
+    }
+
     /// 눌러도 아무 일이 없는 줄을 보여줄 이유가 없다.
     @Test("이미 올릴 수 있는 사람은 검색에 나오지 않는다")
     func alreadyGrantedIsHidden() async throws {
@@ -133,4 +204,15 @@ struct AppMemberPagesTests {
             }
         }
     }
+}
+
+/// 후보 응답을 테스트에서 읽으려고 둔다. 서버 쪽 타입은 내보내기만 한다.
+private struct CandidatesPayload: Content {
+    struct Candidate: Content {
+        var id: String
+        var email: String
+        var name: String
+    }
+    var candidates: [Candidate]
+    var overflowed: Bool
 }
