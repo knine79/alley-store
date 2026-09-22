@@ -75,6 +75,7 @@
         #endif
     </div>
     #else:
+    <div class="table-scroll">
     <table class="table">
         <thead>
             <tr>
@@ -233,6 +234,7 @@
             #endfor
         </tbody>
     </table>
+    </div>
     #endif
 </section>
 
@@ -474,6 +476,7 @@
         <p class="empty-note">Sparkle 을 쓰지 않는 앱은 그대로 두면 됩니다.</p>
     </div>
     #else:
+    <div class="table-scroll">
     <table class="table">
         <thead>
             <tr>
@@ -509,6 +512,7 @@
             #endfor
         </tbody>
     </table>
+    </div>
     #endif
 
     <!-- **공개키를 하나로 말할 수 없으면 내주지 않는다.** 주소를 내주면 넣고, 넣으면
@@ -563,6 +567,7 @@
         <p>아직 발급한 토큰이 없습니다.</p>
     </div>
     #else:
+    <div class="table-scroll">
     <table class="table">
         <thead>
             <tr>
@@ -600,6 +605,7 @@
             #endfor
         </tbody>
     </table>
+    </div>
     #endif
 
     <form class="form" method="post" action="/apps/#(app.id)/deploy-tokens">

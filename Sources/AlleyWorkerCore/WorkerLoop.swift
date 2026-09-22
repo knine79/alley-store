@@ -162,23 +162,28 @@ public struct WorkerLoop: Sendable {
 
     private func beat(currentJobID: UUID?) async {
         do {
-            try await client.sendHeartbeat(
-                WorkerHeartbeat(
-                    workerName: config.name,
-                    osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                    currentJobID: currentJobID,
-                    workerVersion: WorkerVersion.current
-                )
-            )
+            try await client.sendHeartbeat(heartbeat(currentJobID: currentJobID))
         } catch {
             // 하트비트는 놓쳐도 다음 것이 있다. 여기서 시끄럽게 굴 이유가 없다.
             log("하트비트를 보내지 못했습니다: \(error)")
         }
     }
 
-    /// 화면에 한 줄로 뜰 실패 이유.
+    /// 이번에 보낼 하트비트.
     ///
-    /// 전체 로그는 따로 보낸다. 목록에서 읽을 것은 첫 줄이면 충분하다.
+    /// 만드는 것을 보내는 것에서 떼어둔다. 공개키를 빠뜨려도 서버는 그것을 "키를 안
+    /// 넣은 워커" 로 받아들이고 화면도 그렇게 그린다. 어디에서도 오류가 나지 않아
+    /// 실제로 한 번 빠진 채로 나갔다. 여기를 테스트가 붙잡는다.
+    func heartbeat(currentJobID: UUID?) -> WorkerHeartbeat {
+        WorkerHeartbeat(
+            workerName: config.name,
+            osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
+            currentJobID: currentJobID,
+            workerVersion: WorkerVersion.current,
+            sparklePublicKey: sparklePublicKey()
+        )
+    }
+
     /// 설정된 개인키에서 계산한 공개키. 키가 없거나 형식이 깨졌으면 nil.
     ///
     /// 형식이 깨진 것을 nil 로 접는 이유는, 그 경우에도 서명이 붙지 않기 때문이다.
@@ -188,6 +193,9 @@ public struct WorkerLoop: Sendable {
         return try? SparkleSignature.publicKey(fromPrivateKeyBase64: raw)
     }
 
+    /// 화면에 한 줄로 뜰 실패 이유.
+    ///
+    /// 전체 로그는 따로 보낸다. 목록에서 읽을 것은 첫 줄이면 충분하다.
     private func summarize(_ reason: String) -> String {
         let firstLine = reason.split(separator: "\n").first.map(String.init) ?? reason
         return firstLine.count > 300 ? String(firstLine.prefix(300)) + "…" : firstLine
