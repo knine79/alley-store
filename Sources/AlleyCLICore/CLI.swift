@@ -16,7 +16,11 @@ public enum CLI {
           upload <파일.zip>   새 버전을 올린다
           versions            이 앱의 버전 목록을 본다
           whoami              이 토큰이 어느 앱의 것인지 본다
+          mcp                 코딩 에이전트에게 스토어를 내준다 (MCP, stdio)
           version             alley 버전을 출력한다
+
+        mcp 는 사람 토큰(alleyu_)으로 붙습니다. 내 설정 > 내 토큰에서 발급하고
+        ALLEY_TOKEN 에 넣으세요. 배포 토큰으로는 업로드밖에 되지 않습니다.
 
         upload 옵션:
           --version <문자열>   사람이 보는 버전. 필수 (예: 1.2.0)
@@ -91,6 +95,13 @@ public enum CLI {
                         "\(version.shortVersion) (\(version.buildNumber))\t\(version.state.displayName)"
                     )
                 }
+                return .success
+
+            case "mcp":
+                // **표준 출력은 규약이 쓴다.** 여기서 한 줄이라도 찍으면 붙어 있던
+                // 에이전트가 그 줄을 파싱하려다 끊는다.
+                let api = StoreAPI(config: try CLIConfig.load(from: environment))
+                await MCPServer(api: api, complain: complain).run()
                 return .success
 
             case "whoami":

@@ -67,7 +67,7 @@
 | 베타 준비 | 인증서·멤버십 만료 감시 | - | 시작 전 |
 | 베타 준비 | 프로비저닝 프로필 발급 | - | 시작 전 |
 | 베타 준비 | 나간 사람 끊기 + 앱 오너 인수인계 (ADR-0061) | - | 완료 |
-| 개발자 경험 | 개발자용 MCP (ADR-0060) | - | 시작 전 |
+| 개발자 경험 | 개발자용 MCP (ADR-0060) | - | 완료 |
 
 ## 지금 무엇을 먼저 하나
 
@@ -693,7 +693,7 @@ zip 은 받은 사람에게 풀고 옮기는 일을 시킵니다. 안 옮기고 
 
 ---
 
-## 개발자용 MCP - 시작 전 ([ADR-0060](adr/0060-mcp-connects-as-a-person.md))
+## 개발자용 MCP - 완료 ([ADR-0060](adr/0060-mcp-connects-as-a-person.md))
 
 에이전트가 릴리스를 대신 돌리게 합니다. 설계는 [5.7](design.md#57-개발자용-mcp).
 
@@ -713,11 +713,15 @@ zip 은 받은 사람에게 풀고 옮기는 일을 시킵니다. 안 옮기고 
 
 **마지막이 MCP 입니다.** CLI 의 `alley mcp` 서브커맨드로 냅니다.
 
-- [ ] `upload_version` - 올리고 서명 잡이 끝날 때까지 기다린다
-- [ ] `signing_status` - 실패 코드와 로그를 그대로 준다 (ADR-0023)
-- [ ] `list_versions`, `release_version`
-- [ ] `sparkle_feed` - 주소, `SUPublicEDKey`, 쓸 수 있는 상태 (ADR-0057)
-- [ ] `app_feedback`
+- [x] stdio JSON-RPC. `initialize`·`tools/list`·`tools/call`·`ping`
+- [x] `upload_version` - 올린다. **기다리지는 않는다.** 공증까지 몇십 분 걸리는 일이
+      있어 기다리면 도구 호출이 먼저 끊긴다. 올린 뒤 `signing_status` 로 본다
+- [x] `signing_status` - 실패 갈래와 할 일을 준다 (ADR-0023)
+- [x] `list_versions`, `release_version`
+- [x] `sparkle_feed` - `SUPublicEDKey` 와 쓸 수 있는 상태 (ADR-0057)
+- [x] `app_feedback`
+- [x] `list_apps` - 나머지 도구가 받을 앱 id 를 얻을 자리
+- [x] 붙이는 법을 [설치 가이드 7번](setup.md#7-코딩-에이전트에-붙이기-원하면)에 적는다
 
 **나중에 볼 것.** 다운로드 통계, 배포 토큰·팀원 관리, 앱 만들기와 번들 ID 예약.
 운영 기능(워커, 워커 릴리스, 스토어 앱 조립)은 넣지 않습니다.
