@@ -883,11 +883,33 @@ struct WorkerRow: Encodable {
     /// 뜻이다. 이번에 dmg 를 zip 으로 풀던 워커가 정확히 그랬다.
     var isStale: Bool
 
+    /// 화면에 적을 macOS 버전.
+    ///
+    /// 워커는 `ProcessInfo.operatingSystemVersionString` 을 그대로 보낸다. 그 값은
+    /// `Version 26.6.2 (Build 25G83)` 인데, 열 제목이 이미 `macOS` 라 `Version` 은 같은
+    /// 말을 두 번 하는 것이고 빌드 번호는 이 화면에서 쓸 일이 없다.
+    ///
+    /// **길이가 문제였다.** 이 표는 칸이 대부분 `nowrap` 이라 값 하나가 폭을 그대로
+    /// 밀어낸다. 원문을 그대로 적으면 표가 본문보다 147px 넓어져서 가로로 밀렸다.
+    /// 둘을 떼면 들어간다.
+    ///
+    /// 모르는 모양이면 손대지 않는다. 옛 워커나 다른 값이 오면 원문이 낫다.
+    static func shortOSVersion(_ raw: String?) -> String? {
+        guard var text = raw?.trimmingCharacters(in: .whitespaces) else { return nil }
+        if text.hasPrefix("Version ") {
+            text.removeFirst("Version ".count)
+        }
+        if text.hasSuffix(")"), let build = text.range(of: " (Build ") {
+            text = String(text[text.startIndex ..< build.lowerBound])
+        }
+        return text
+    }
+
     init(worker: Worker) throws {
         self.id = worker.id?.uuidString ?? ""
         self.name = worker.name
         self.registeredAt = DateStyle.minute.display(from: worker.createdAt ?? Date())
-        self.osVersion = worker.osVersion
+        self.osVersion = Self.shortOSVersion(worker.osVersion)
         self.lastSeen = worker.lastSeenAt.map { DateStyle.minute.display(from: $0) }
         self.isBusy = worker.currentJobID != nil
         self.isActive = worker.isActive

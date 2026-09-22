@@ -26,6 +26,7 @@
     <p>아직 등록된 앱이 없습니다.</p>
 </div>
 #else:
+<div class="table-scroll">
 <table class="table">
     <thead>
         <tr>
@@ -57,6 +58,7 @@
         #endfor
     </tbody>
 </table>
+</div>
 <p class="field-note">
     같은 사람이 여러 번 받아도 "사람"은 하나로 셉니다. 다운로드가 0인 앱도 그대로
     보여줍니다. 아무도 안 받는 앱이 목록에서 사라지면 그 사실을 알 수 없습니다.
