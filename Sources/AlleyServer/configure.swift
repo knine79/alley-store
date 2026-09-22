@@ -51,6 +51,14 @@ public func configure(_ app: Application, config: AppConfig) async throws {
             await DraftSweep.run(on: application)
         }
     )
+    // 만료가 가까운 사람 토큰을 미리 알린다 (ADR-0060).
+    app.lifecycle.use(
+        PeriodicSweep(
+            name: "토큰 만료 예고", interval: UserTokenExpiryNotice.checkInterval
+        ) { application in
+            await UserTokenExpiryNotice.run(on: application)
+        }
+    )
     // 데이터베이스를 닫기 전에 긴 폴링을 내보낸다. 남겨두면 그것이 닫힌 데이터베이스를
     // 잡고 프로세스를 죽인다 (ADR-0052).
     app.lifecycle.use(ShutdownSignalLifecycle())
@@ -169,6 +177,9 @@ private func configureMigrations(_ app: Application) {
 
     // 나간 사람을 지우지 않고 끊는다 (ADR-0061).
     app.migrations.add(AddUserDeactivatedAt())
+
+    // 사람이 쥐는 토큰 (ADR-0060).
+    app.migrations.add(CreateUserToken())
 }
 
 /// 미들웨어 스택.
@@ -189,6 +200,9 @@ private func configureMiddleware(_ app: Application, config: AppConfig) {
         )
     )
     app.middleware.use(ConsoleErrorMiddleware())
+    // 사람 토큰으로 온 요청을 그 사람으로 인증한다 (ADR-0060). 전역에 두는 이유는
+    // `UserTokenAuthenticator` 에 적었다.
+    app.middleware.use(UserTokenAuthenticator())
     // 쿠키로 인증된 상태 변경 요청의 출처를 확인한다 (ADR-0010 후속).
     app.middleware.use(OriginCheckMiddleware())
     // 정적 파일이 브라우저에 눌러앉지 않게 한다. FileMiddleware 보다 바깥에 둬야
