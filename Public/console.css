@@ -74,18 +74,6 @@
     /* 본문 폭. 목록과 표가 주 내용이라 넓게 두면 칸이 벌어져서 읽기 나빠진다. */
     --page-width: 880px;
 
-    /* 한 줄이 얼마나 길어져도 되는가.
-     *
-     * **`ch` 로 두면 안 된다.** `ch` 는 숫자 `0` 한 글자의 폭이라 라틴 문자 기준이고,
-     * 한글 글자는 그 두 배쯤 된다. `68ch` 로 적어둔 것이 한글에서는 34 자에서 끊겼다.
-     * 화면은 훨씬 넓은데 문단만 중간에서 접혀서, 읽는 사람은 왜 여기서 끊기는지 알
-     * 수 없다.
-     *
-     * `em` 은 글꼴 크기 그대로라 한글 한 글자에 가깝다. 44em 이면 한글로 44 자쯤
-     * 되고, 그 정도가 눈이 다음 줄 첫 글자를 놓치지 않는 길이다. */
-    --measure: 44em;
-    /* 경고문처럼 짧게 끊어 읽어야 하는 것. */
-    --measure-narrow: 34em;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -266,6 +254,18 @@ code {
     margin: 0;
 }
 
+/* **본문 문단에 폭 제한을 따로 걸지 않는다.**
+ *
+ * `.page` 가 이미 880px 에서 멈추고 좌우 여백을 빼면 832px 이다. 한글로 50 자쯤이라
+ * 그 자체가 읽기 좋은 길이다. 여기에 또 제한을 걸면 화면 끝이 한참 남았는데 문단만
+ * 중간에서 접히고, 읽는 사람은 왜 여기서 끊기는지 알 수 없다.
+ *
+ * 예전에는 `max-width: 68ch` 였다. `ch` 는 숫자 `0` 한 글자의 폭이라 라틴 문자
+ * 기준이고 한글은 그 두 배쯤 되므로, 68 자로 적어둔 것이 한글에서는 34 자에서
+ * 끊겼다. 단위를 `em` 으로 바꿔도 화면보다 좁은 것은 그대로였다.
+ *
+ * 상자 폭(로그인 카드, 팝업, 이름 줄임)은 이 이야기가 아니다. 그것들은 글 길이가
+ * 아니라 요소 크기라 그대로 둔다. */
 /* ── 본문 ────────────────────────────────────────────────── */
 
 .page {
@@ -283,7 +283,6 @@ code {
 
 .page-lead {
     margin: 0 0 var(--space-6);
-    max-width: var(--measure);
     color: var(--text-muted);
 }
 
@@ -358,7 +357,6 @@ code {
    그 구역의 내용이 이어져서, 화면 머리만큼 띄우면 제목에서 떨어져 보인다. */
 .section-lead {
     margin: 0 0 var(--space-5);
-    max-width: var(--measure);
     font-size: var(--font-md);
     color: var(--text-muted);
 }
@@ -556,7 +554,6 @@ a.tab:hover {
 .danger-note {
     margin: 0;
     color: var(--text-muted);
-    max-width: var(--measure-narrow);
 }
 
 .danger-note strong {
@@ -685,7 +682,6 @@ a.tab:hover {
  * 문단 둘이 한 칸 밀려서 나오고 있었다. 그런 문단은 `.section-lead` 다. */
 .body-text {
     margin: 0 0 var(--space-5);
-    max-width: var(--measure);
     color: var(--text-muted);
     white-space: pre-wrap;
 }
@@ -1931,8 +1927,6 @@ textarea.input {
     padding-left: var(--space-3);
     /* 배지와 같은 붉은색. 표를 훑을 때 이 막대만 보고 실패한 줄을 찾는다. */
     border-left: 3px solid var(--failed);
-    /* 줄 전체를 쓰면 한 줄이 너무 길어져 눈이 다음 줄 첫 글자를 놓친다. */
-    max-width: 44rem;
 }
 
 .failure p {
@@ -2295,7 +2289,6 @@ textarea.input {
 
 .icon-field-note {
     margin: 0;
-    max-width: var(--measure);
     font-size: var(--font-sm);
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
