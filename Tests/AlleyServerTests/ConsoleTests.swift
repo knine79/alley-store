@@ -88,6 +88,47 @@ struct ConsoleViewTests {
             }
         }
     }
+
+    /// **본문 문단에 폭 제한을 따로 걸지 않는다.**
+    ///
+    /// `.page` 가 이미 880px 에서 멈춘다. 여기에 또 제한을 걸면 화면 끝이 한참
+    /// 남았는데 문단만 중간에서 접히고, 읽는 사람은 왜 여기서 끊기는지 알 수 없다.
+    ///
+    /// 두 번 겪었다. 처음에는 `max-width: 68ch` 였는데 `ch` 가 숫자 `0` 한 글자의
+    /// 폭이라 한글에서는 34 자에서 끊겼다. 단위를 `em` 으로 고쳤더니 이번에는
+    /// 44em(704px)이 화면의 832px 보다 좁아서 여전히 일찍 끊겼다. 단위가 아니라
+    /// **제한을 거는 것 자체**가 문제였다.
+    ///
+    /// 상자 폭(로그인 카드, 팝업, 이름 줄임)은 글 길이가 아니라 요소 크기라 여기서
+    /// 보지 않는다.
+    @Test("본문 문단의 줄 길이를 따로 제한하지 않는다")
+    func paragraphsUseTheFullWidth() async throws {
+        try await withMigratedApp { app in
+            try await app.testing().test(.GET, "/console.css") { response in
+                let css = response.body.string
+
+                // `ch` 는 한글 폭을 절반으로 잰다. 길이를 재는 자리 어디에도 쓰지 않는다.
+                #expect(!css.contains("ch;"))
+
+                for selector in [".page-lead", ".section-lead", ".body-text", ".failure"] {
+                    #expect(
+                        !declarations(of: selector, in: css).contains("max-width"),
+                        "\(selector) 에 줄 길이 제한이 다시 붙었습니다"
+                    )
+                }
+            }
+        }
+    }
+
+    /// 선택자 하나의 선언 블록을 꺼낸다. 앞뒤 규칙이 섞이지 않게 `{`부터 `}`까지만 본다.
+    private func declarations(of selector: String, in css: String) -> String {
+        guard let start = css.range(of: "\n\(selector) {"),
+              let end = css.range(of: "}", range: start.upperBound..<css.endIndex)
+        else {
+            return ""
+        }
+        return String(css[start.upperBound..<end.lowerBound])
+    }
 }
 
 @Suite("정적 파일 캐시")
