@@ -102,6 +102,57 @@ struct UserTokenTests {
         }
     }
 
+    // MARK: - 못 하는 것
+
+    /// 되돌릴 수 없는 일은 사람이 화면에서 한다 (ADR-0060).
+    @Test("사람 토큰으로는 지우지 못한다")
+    func deleteIsRejected() async throws {
+        try await withMigratedApp { app in
+            let (owner, _) = try await app.makeUser(email: "owner@example.com", role: .developer)
+            let (mate, _) = try await app.makeUser(email: "mate@example.com", role: .developer)
+            let registered = try await app.seedApp(
+                bundleID: "com.example.keep", name: "지키는 앱", owner: owner
+            )
+            let appID = try registered.requireID()
+            let mateID = try mate.requireID()
+            try await AppMember(appID: appID, userID: mateID).save(on: app.db)
+
+            let token = try await issue(for: owner, on: app)
+            try await app.testing().test(
+                .DELETE, "/api/v1/apps/\(appID.uuidString)/members/\(mateID.uuidString)",
+                headers: .bearer(token)
+            ) { response in
+                #expect(response.status == .forbidden)
+            }
+
+            // 실제로 남아 있어야 한다. 막았다고 말만 하고 지워지면 더 나쁘다.
+            let rows = try await AppMember.query(on: app.db)
+                .filter(\.$app.$id == appID)
+                .filter(\.$user.$id == mateID)
+                .count()
+            #expect(rows == 1)
+        }
+    }
+
+    /// 앱 삭제는 화면 경로에만 있다. 그래서 경로 자체를 막는다.
+    @Test("사람 토큰은 화면 경로에서 인증되지 않는다")
+    func webRoutesNeedASession() async throws {
+        try await withMigratedApp { app in
+            let (owner, _) = try await app.makeUser(email: "owner@example.com", role: .developer)
+            let registered = try await app.seedApp(
+                bundleID: "com.example.web", name: "화면앱", owner: owner
+            )
+            let token = try await issue(for: owner, on: app)
+
+            try await app.testing().test(
+                .GET, "/apps/\(try registered.requireID().uuidString)", headers: .bearer(token)
+            ) { response in
+                // 로그인하지 않은 것과 같이 다룬다.
+                #expect(response.status != .ok)
+            }
+        }
+    }
+
     // MARK: - 내 토큰 화면
 
     @Test("발급하면 원문이 그 화면에만 보인다")
