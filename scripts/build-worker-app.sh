@@ -118,12 +118,23 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST_EOF
 PLIST_EOF
 
 info "번들을 만들었습니다: $APP_DIR"
+echo "  번들 ID  $BUNDLE_ID"
+echo "  버전     $VERSION ($BUILD)"
 
 if [ "${1:-}" != "--sign" ]; then
     bundle_seal_adhoc "$APP_DIR"
     echo
     echo "서명하지 않은 번들입니다. 다른 맥에 설치하려면 --sign 으로 다시 만드세요."
     exit 0
+fi
+
+# 내보낼 번들인데 번들 ID 가 예시값이면 알린다.
+#
+# 기본값은 이 레포를 그대로 돌려보라고 둔 값이다. 조직이 내보내는 번들에 그대로
+# 남으면 워커 맥에 `com.example` 이 굳고, 그 뒤로는 그 번들을 갈아끼워야 바뀐다.
+# 값을 주는 것을 잊은 것과 예시값을 일부러 쓰는 것을 구별할 수 없어서 막지는 않는다.
+if [ "$BUNDLE_ID" = "com.example.alley.worker" ]; then
+    echo "경고: 번들 ID 가 예시값입니다. 조직의 값을 ALLEY_WORKER_BUNDLE_ID 로 주세요: $BUNDLE_ID" >&2
 fi
 
 # 워커에는 entitlements 를 붙이지 않는다.
