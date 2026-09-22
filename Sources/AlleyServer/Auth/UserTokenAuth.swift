@@ -1,3 +1,4 @@
+import AlleyShared
 import Fluent
 import Foundation
 import Vapor
@@ -11,6 +12,16 @@ import Vapor
 /// 전역 스택에 둔다. 컨트롤러마다 붙이면 붙이는 것을 잊은 경로가 생기고, 그 경로는
 /// 화면으로는 되는데 토큰으로는 안 되는 상태가 된다. `alleyu_` 로 시작하는 값이
 /// 없으면 아무것도 하지 않으므로 다른 인증을 방해하지 않는다.
+///
+/// **두 가지는 막는다.**
+///
+/// `/api/v1` 밖에서는 인증하지 않는다. 화면 경로에는 API 에 없는 동작이 있고, 앱
+/// 삭제가 그렇다. 사람이 브라우저에서 한 번 더 생각하고 누르는 자리를 토큰으로
+/// 열어둘 이유가 없다.
+///
+/// 그 안에서도 `DELETE` 는 거절한다. 멤버를 떼거나 토큰을 폐기하거나 출시를 되돌리는
+/// 것들이다. 도구로 내주지 않는 것과 토큰으로 못 하는 것은 다르다. 도구 목록은
+/// 언제든 늘어나지만 이 규칙은 한 자리에 있다.
 struct UserTokenAuthenticator: AsyncMiddleware {
     func respond(
         to request: Request,
@@ -20,6 +31,21 @@ struct UserTokenAuthenticator: AsyncMiddleware {
               bearer.token.hasPrefix(UserToken.prefix)
         else {
             return try await next.respond(to: request)
+        }
+
+        // 화면 경로는 세션만 받는다. 인증하지 않고 지나가면 그 뒤 가드가 로그인을
+        // 요구하므로, 토큰으로는 아무것도 되지 않는다.
+        guard request.url.path.hasPrefix(APIPath.apiRoot) else {
+            return try await next.respond(to: request)
+        }
+        guard request.method != .DELETE else {
+            throw Abort(
+                .forbidden,
+                reason: """
+                    사람 토큰으로는 지우지 못합니다. 되돌릴 수 없는 일은 웹 콘솔에서 \
+                    사람이 합니다.
+                    """
+            )
         }
 
         let hash = UserToken.hash(token: bearer.token)
