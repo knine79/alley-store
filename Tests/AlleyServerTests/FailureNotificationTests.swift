@@ -19,11 +19,12 @@ struct FailureNotificationTests {
     @Test("등록된 대상이 없어도 사람에게는 간다")
     func personGetsItWithoutTargets() async throws {
         try await withMigratedApp { app in
+            let (uploader, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
             let dm = RecordingChannel(kind: .slackDirectMessage)
             let notifier = Notifier(database: app.db, channels: [dm], logger: app.logger)
 
             await notifier.notify(
-                person: "dev@example.com",
+                person: uploader,
                 message: NotificationMessage(title: "서명이 실패했습니다")
             )
 
@@ -32,16 +33,17 @@ struct FailureNotificationTests {
         }
     }
 
-    /// 봇 토큰을 넣지 않은 스토어가 여기로 온다. 예전처럼 사람이 화면을 다시 보는
+    /// 봇 토큰도 메일 설정도 넣지 않은 스토어가 여기로 온다. 예전처럼 사람이 화면을 다시 보는
     /// 것으로 굴러가야지, 실패를 기록하는 흐름이 여기서 멈추면 안 된다.
     @Test("보낼 채널이 없으면 조용히 지나간다")
     func missingChannelIsSkipped() async throws {
         try await withMigratedApp { app in
+            let (uploader, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
             let webhookOnly = RecordingChannel(kind: .slack)
             let notifier = Notifier(database: app.db, channels: [webhookOnly], logger: app.logger)
 
             await notifier.notify(
-                person: "dev@example.com",
+                person: uploader,
                 message: NotificationMessage(title: "서명이 실패했습니다")
             )
 
@@ -54,12 +56,13 @@ struct FailureNotificationTests {
     @Test("보내다 실패해도 던지지 않는다")
     func deliveryFailureIsSwallowed() async throws {
         try await withMigratedApp { app in
+            let (uploader, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
             let dm = RecordingChannel(kind: .slackDirectMessage)
             dm.shouldFail = true
             let notifier = Notifier(database: app.db, channels: [dm], logger: app.logger)
 
             await notifier.notify(
-                person: "dev@example.com",
+                person: uploader,
                 message: NotificationMessage(title: "서명이 실패했습니다")
             )
 

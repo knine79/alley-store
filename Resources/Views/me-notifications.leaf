@@ -2,8 +2,8 @@
 #export("content"):
 <h1 class="page-title">내 알림</h1>
 <p class="page-lead">
-    나에게 오는 알림만 여기서 정합니다. 앱 채널로 가는 알림은 앱 상세의
-    <strong>알림</strong> 에서 앱마다 따로 답니다.
+    앱 관리 화면에서 앱 소식을 개별로 보내지 않고 Slack 채널로 보내도록 설정되어 있는
+    경우 이 화면에서 설정한대로 알림을 받지 못할 수 있습니다.
 </p>
 
 #if(saved):
@@ -11,50 +11,48 @@
 #endif
 
 <section class="section">
-    <h2 class="section-title">Slack DM</h2>
-
-    <!-- **켜기 전에 닿는지 보여준다.** 스토어 계정과 Slack 계정의 이메일이 다르면
-         찾지 못하는데, 그 사실을 처음 알림이 날 때 알게 되면 늦다. 그때는 알림이
-         안 온 것과 실패가 없는 것이 겉으로 같다.
-
-         닿지 않으면 칸을 아예 그리지 않는다. 켜도 아무 일이 없는 체크박스를 남겨두면
-         켜둔 사람은 받고 있다고 믿는다. -->
-    #if(!delivery.isUsable):
-    <p class="notice notice-warn">#(delivery.detail)</p>
-    <p class="field-note">
-        받을 수 있게 되면 여기서 고를 수 있습니다. 지금 정해둘 것은 없습니다.
-    </p>
-    #else:
-    <p class="fact-line">
-        <span class="fact-label">받는 곳</span>
-        <span class="fact-value">#(delivery.detail)</span>
-    </p>
-
+    <!-- **두 묶음이 같은 무게로 선다.** 받는 방법이 사실 한 줄이고 받을 알림만
+         체크박스였더니, 하나는 정하는 것이고 하나는 보는 것처럼 읽혔다. 둘 다
+         내가 정하는 것이다. -->
     <form class="form" method="post" action="/me/notifications">
         <fieldset class="choice-group">
-            <legend class="visually-hidden">받을 알림</legend>
+            <legend class="form-group-title">받는 방법</legend>
+
+            #for(way in ways):
+            <!-- 쓸 수 없는 것은 지우지 않고 비활성으로 남긴다. 없애버리면 왜 메일만
+                 있는지 알 수 없고, 관리자가 Slack 을 붙이면 생긴다는 것도 모른다. -->
+            <label class="choice #if(!way.isUsable):choice-off#endif">
+                <input type="checkbox" name="via" value="#(way.value)"
+                       #if(way.isChosen):checked#endif
+                       #if(!way.isUsable):disabled#endif>
+                <span>
+                    <span class="choice-name">#(way.label)</span>
+                    <span class="choice-note">#(way.detail)</span>
+                </span>
+            </label>
+            #endfor
+        </fieldset>
+
+        <fieldset class="choice-group">
+            <legend class="form-group-title">받을 알림</legend>
 
             <!-- 체크박스는 꺼져 있으면 아예 보내지지 않는다. 서버가 값의 유무로 읽는다. -->
             <label class="choice">
                 <input type="checkbox" name="signingFailure"
                        #if(signingFailure):checked#endif>
                 <span>
-                    <span class="choice-name">내가 올린 버전의 서명이 실패했을 때</span>
-                    <span class="choice-note">내가 올린 것만 옵니다.</span>
+                    <span class="choice-name">서명이 실패했을 때</span>
+                    <span class="choice-note">
+                        내가 올릴 수 있는 앱이면 누가 올린 것이든 옵니다.
+                    </span>
                 </span>
             </label>
 
             <label class="choice">
                 <input type="checkbox" name="feedback" #if(feedback):checked#endif>
                 <span>
-                    <span class="choice-name">내가 올릴 수 있는 앱에 피드백이 왔을 때</span>
-                    <!-- **앱 채널과 함께 간다.** 채널이 걸려 있으면 그쪽에도 그대로
-                         가고, 이것은 나에게 한 통이 더 오는 설정이다. 둘 중 하나를
-                         고르는 것으로 읽히면 켜둔 사람이 채널을 껐다고 여긴다. -->
-                    <span class="choice-note">
-                        앱에 걸어둔 채널로도 그대로 갑니다. 켜면 나에게 한 통이 더 옵니다.
-                        앱 하나를 여럿이 맡으면 켜둔 사람마다 따로 받습니다.
-                    </span>
+                    <span class="choice-name">피드백이 왔을 때</span>
+                    <span class="choice-note">내가 올릴 수 있는 앱에 옵니다.</span>
                 </span>
             </label>
         </fieldset>
@@ -63,7 +61,6 @@
             <button class="button button-primary" type="submit">저장</button>
         </div>
     </form>
-    #endif
 </section>
 
 #endexport

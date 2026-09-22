@@ -19,6 +19,9 @@ public func configure(_ app: Application, config: AppConfig) async throws {
     try await BootMigration.runIfEnabled(on: app, config: config)
     await configureJWT(app, config: config.security)
     try configureStorage(app, config: config.storage)
+    // 메일 클라이언트는 애플리케이션 한 곳의 설정을 본다. 설정이 없으면 아무것도
+    // 하지 않고, 그때는 알림 채널 목록에서도 메일이 빠진다 (ADR-0058).
+    app.configureSMTP(config.smtp)
 
     configureContentCoders()
     app.views.use(.leaf)
@@ -154,6 +157,12 @@ private func configureMigrations(_ app: Application) {
     // 알림을 어디로 받을지. 운영 알림은 스토어가 정하고 개인 알림은 각자 정한다.
     app.migrations.add(AddOperationalAlertsSetting())
     app.migrations.add(AddNotificationPreferencesToUser())
+    // 개인 알림을 메일로도 받는다 (ADR-0058).
+    app.migrations.add(AddNotifyViaToUser())
+    // 앱 알림도 운영 알림과 같은 갈래를 고른다 (ADR-0059).
+    app.migrations.add(RenameAdminsAlertTarget())
+    app.migrations.add(AddAppAlertsSetting())
+    app.migrations.add(DefaultFeedbackNotificationsOn())
 
     // 워커가 Sparkle 공개키를 알린다 (ADR-0057).
     app.migrations.add(AddWorkerSparklePublicKey())

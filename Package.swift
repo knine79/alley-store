@@ -22,6 +22,9 @@ let package = Package(
         // 서명 결과물의 SHA-256 을 계산한다. Vapor 가 이미 끌어오지만, 워커는 Vapor 를
         // 쓰지 않으므로 직접 선언한다.
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
+        // 알림을 메일로도 보낸다 (ADR-0058). 여기 있는 다른 것들과 달리 Vapor·Apple·
+        // Soto 밖의 공급자다. 그 값과 대가는 ADR 에 적었다.
+        .package(url: "https://github.com/Mikroservices/Smtp.git", from: "3.1.2"),
     ],
     targets: [
         // DTO와 API 경로 정의. 서버·워커·스토어 앱이 공유한다.
@@ -38,6 +41,7 @@ let package = Package(
                 .product(name: "Leaf", package: "leaf"),
                 .product(name: "JWT", package: "jwt"),
                 .product(name: "SotoS3", package: "soto"),
+                .product(name: "Smtp", package: "Smtp"),
             ]
         ),
 
