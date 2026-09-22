@@ -27,6 +27,7 @@ public struct VersionController: RouteCollection, Sendable {
             .grouped(APIPath.apiRoot.pathComponents)
             .grouped("versions", ":versionID")
         single.get(use: detail)
+        single.get("signing", use: signingStatus)
         single.post("complete", use: completeUpload)
         single.post("release", use: release)
         single.delete("release", use: unrelease)
@@ -69,6 +70,39 @@ public struct VersionController: RouteCollection, Sendable {
             _ = try await request.requireUploadRights(to: version.app)
         }
         return try version.toDTO()
+    }
+
+    /// 서명이 어디까지 왔는지 (ADR-0060).
+    ///
+    /// **실패했을 때가 이 경로의 이유다.** 화면은 실패 코드에 맞춰 무엇을 고치라고까지
+    /// 적어주는데(ADR-0023), 그것을 읽고 파일을 고치고 다시 올리는 일만 사람이 하고
+    /// 있었다. 에이전트가 읽으면 그 셋을 이어서 한다.
+    ///
+    /// 올릴 수 있는 사람만 본다. 실패 이유에는 그 앱의 entitlements 나 번들 구조가
+    /// 드러난다.
+    @Sendable
+    func signingStatus(request: Request) async throws -> SigningStatusDTO {
+        let version = try await request.findVersion()
+        _ = try await request.requireUploadRights(to: version.app)
+
+        let job = try await SigningJob.query(on: request.db)
+            .filter(\.$version.$id == version.requireID())
+            .sort(\.$createdAt, .descending)
+            .first()
+
+        let code = job?.failureCode
+        return SigningStatusDTO(
+            versionID: try version.requireID(),
+            state: version.state,
+            jobState: job?.state,
+            phase: job?.phaseName,
+            attempt: job?.attempt,
+            failureCode: code,
+            // 버전에 남은 이유를 먼저 본다. 잡이 여러 번 돌면 마지막 것만 남고,
+            // 사람에게 보여준 값과 같아야 한다.
+            failureReason: version.failureReason ?? job?.failureReason,
+            whatToDo: code.map(SigningFailureGuidance.whatToDo)
+        )
     }
 
     // MARK: - 생성
@@ -359,6 +393,8 @@ extension UploadKind {
 }
 
 extension VersionDTO: Content {}
+extension SigningStatusDTO: Content {}
+extension SparkleFeedDTO: Content {}
 extension UploadTicket: Content {}
 extension DownloadTicket: Content {}
 extension CreateAppRequest: Content {}

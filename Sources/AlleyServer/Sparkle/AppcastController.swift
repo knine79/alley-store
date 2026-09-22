@@ -42,6 +42,39 @@ public struct AppcastController: RouteCollection, Sendable {
         managed.get(use: list)
         managed.post(use: issue)
         managed.delete(":tokenID", use: revoke)
+
+        // 앱에 넣을 공개키와 지금 쓸 수 있는 상태인지 (ADR-0060). 화면이 말하는
+        // 것과 같은 것을 같은 코드로 내준다.
+        routes
+            .grouped(SessionAuthenticator(), User.guardMiddleware())
+            .grouped(APIPath.apps.pathComponents)
+            .get(":appID", "sparkle", use: feedStatus)
+    }
+
+    /// 이 앱에서 Sparkle 을 쓸 수 있는 상태인가.
+    ///
+    /// **앱을 만드는 사람이 `SUPublicEDKey` 를 여기서 가져간다.** 개인키를 가진
+    /// 사람을 찾아갈 필요가 없다 (ADR-0057). 막혀 있으면 무엇이 막고 있는지도
+    /// 같은 줄로 온다.
+    @Sendable
+    func feedStatus(request: Request) async throws -> SparkleFeedDTO {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        // 목록을 그리는 화면과 같은 조건이다. 피드는 앱을 관리하는 사람이 정한다.
+        try app.requireManageAccess(for: user)
+
+        let readiness = try await SparkleReadinessRow.of(app: app, on: request.db)
+        let issued = try await FeedToken.query(on: request.db)
+            .filter(\.$app.$id == app.requireID())
+            .filter(\.$revokedAt == nil)
+            .count()
+
+        return SparkleFeedDTO(
+            publicKey: readiness.publicKey,
+            canIssue: readiness.canIssue,
+            blocker: readiness.blocker,
+            issuedFeedCount: issued
+        )
     }
 
     // MARK: - 피드
