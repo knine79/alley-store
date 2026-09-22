@@ -37,22 +37,112 @@ struct UserDeactivationTests {
         }
     }
 
-    @Test("맡고 있던 앱은 끊은 관리자에게 넘어간다")
-    func ownedAppsMoveToTheAdmin() async throws {
+    /// 끊는 관리자는 대개 그 앱과 아무 관계가 없다. 함께 맡던 사람에게 간다.
+    @Test("맡던 앱은 가장 먼저 들어온 공동 담당자에게 간다")
+    func ownedAppsMoveToTheFirstUploader() async throws {
         try await withMigratedApp { app in
             let (admin, _) = try await app.makeUser(email: "admin@example.com", role: .admin)
             let (target, _) = try await app.makeUser(email: "leaver@example.com", role: .developer)
+            let (first, _) = try await app.makeUser(email: "first@example.com", role: .developer)
+            let (second, _) = try await app.makeUser(email: "second@example.com", role: .developer)
             let owned = try await app.seedApp(
                 bundleID: "com.example.left", name: "두고 간 앱", owner: target
             )
+            let appID = try owned.requireID()
+            try await AppMember(appID: appID, userID: try first.requireID()).save(on: app.db)
+            try await AppMember(appID: appID, userID: try second.requireID()).save(on: app.db)
 
-            let moved = try await AdminOperations.deactivate(
+            let result = try await AdminOperations.deactivate(
                 target, by: admin, on: app.db, logger: app.logger
             )
 
-            #expect(moved.count == 1)
-            let reloaded = try #require(try await App.find(try owned.requireID(), on: app.db))
-            #expect(reloaded.$owner.id == (try admin.requireID()))
+            #expect(result.moved.count == 1)
+            #expect(result.orphaned.isEmpty)
+            let reloaded = try #require(try await App.find(appID, on: app.db))
+            #expect(reloaded.$owner.id == (try first.requireID()))
+            // 오너가 됐으니 멤버 표에서는 빠진다.
+            #expect(try await reloaded.canUpload(first, on: app.db))
+            let rows = try await AppMember.query(on: app.db)
+                .filter(\.$app.$id == appID)
+                .filter(\.$user.$id == first.requireID())
+                .count()
+            #expect(rows == 0)
+        }
+    }
+
+    /// 아무나 지목하는 것보다 비워두고 사람이 정하는 쪽이 낫다.
+    @Test("함께 맡던 사람이 없으면 넘기지 않고 화면에 모아 보여준다")
+    func appsWithoutUploadersAreListed() async throws {
+        try await withMigratedApp { app in
+            let (admin, adminToken) = try await app.makeUser(
+                email: "admin@example.com", role: .admin
+            )
+            let (target, _) = try await app.makeUser(email: "leaver@example.com", role: .developer)
+            let alone = try await app.seedApp(
+                bundleID: "com.example.alone", name: "혼자 맡던 앱", owner: target
+            )
+
+            let result = try await AdminOperations.deactivate(
+                target, by: admin, on: app.db, logger: app.logger
+            )
+
+            #expect(result.moved.isEmpty)
+            #expect(result.orphaned.count == 1)
+            // 오너는 그대로다. 관리자가 정할 때까지 비어 있는 자리로 남는다.
+            let reloaded = try #require(try await App.find(try alone.requireID(), on: app.db))
+            #expect(reloaded.$owner.id == (try target.requireID()))
+
+            try await app.testing().test(
+                .GET, "/admin/users", headers: .sessionCookie(adminToken)
+            ) { response in
+                #expect(response.body.string.contains("주인을 정해야 하는 앱"))
+                #expect(response.body.string.contains("혼자 맡던 앱"))
+            }
+        }
+    }
+
+    @Test("관리자가 주인 없는 앱의 오너를 정한다")
+    func adminAssignsTheOwner() async throws {
+        try await withMigratedApp { app in
+            let (admin, adminToken) = try await app.makeUser(
+                email: "admin@example.com", role: .admin
+            )
+            let (target, _) = try await app.makeUser(email: "leaver@example.com", role: .developer)
+            let (heir, _) = try await app.makeUser(email: "heir@example.com", role: .developer)
+            let alone = try await app.seedApp(
+                bundleID: "com.example.assign", name: "정해줄 앱", owner: target
+            )
+            let appID = try alone.requireID()
+            try await AdminOperations.deactivate(
+                target, by: admin, on: app.db, logger: app.logger
+            )
+
+            try await app.testing().test(
+                .POST, "/admin/apps/\(appID.uuidString)/owner",
+                headers: .form(cookie: adminToken),
+                beforeRequest: {
+                    try $0.content.encode(
+                        ["userID": try heir.requireID().uuidString], as: .urlEncodedForm
+                    )
+                }
+            ) { response in
+                #expect(response.status == .seeOther)
+            }
+
+            let reloaded = try #require(try await App.find(appID, on: app.db))
+            #expect(reloaded.$owner.id == (try heir.requireID()))
+        }
+    }
+
+    @Test("끊긴 계정은 새 오너 후보에 나오지 않는다")
+    func cutOffPeopleAreNotCandidates() async throws {
+        try await withMigratedApp { app in
+            let (admin, _) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            let (gone, _) = try await app.makeUser(email: "gone@example.com", role: .developer)
+            try await AdminOperations.deactivate(gone, by: admin, on: app.db, logger: app.logger)
+
+            let found = try await PersonSearch.find(matching: "gone", on: app.db)
+            #expect(found.candidates.isEmpty)
         }
     }
 
@@ -107,10 +197,13 @@ struct UserDeactivationTests {
             let (target, targetToken) = try await app.makeUser(
                 email: "leaver@example.com", role: .developer
             )
+            let (mate, _) = try await app.makeUser(email: "mate@example.com", role: .developer)
             let owned = try await app.seedApp(
                 bundleID: "com.example.back", name: "돌아온 사람", owner: target
             )
 
+            let mateID = try mate.requireID()
+            try await AppMember(appID: try owned.requireID(), userID: mateID).save(on: app.db)
             try await AdminOperations.deactivate(target, by: admin, on: app.db, logger: app.logger)
             try await AdminOperations.reactivate(target, by: admin, on: app.db, logger: app.logger)
 
@@ -118,7 +211,7 @@ struct UserDeactivationTests {
                 #expect($0.status == .ok)
             }
             let reloaded = try #require(try await App.find(try owned.requireID(), on: app.db))
-            #expect(reloaded.$owner.id == (try admin.requireID()))
+            #expect(reloaded.$owner.id == mateID)
         }
     }
 }

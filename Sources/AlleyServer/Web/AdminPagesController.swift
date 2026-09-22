@@ -32,6 +32,7 @@ struct AdminPagesController: RouteCollection, Sendable {
         pages.post("users", ":userID", "role", use: submitRole)
         pages.post("users", ":userID", "deactivate", use: submitDeactivate)
         pages.post("users", ":userID", "reactivate", use: submitReactivate)
+        pages.post("apps", ":appID", "owner", use: submitOrphanedAppOwner)
         pages.get("workers", use: workerList)
         pages.post("workers", use: registerWorker)
         pages.post("workers", ":workerID", "revoke", use: revokeWorker)
@@ -241,13 +242,13 @@ struct AdminPagesController: RouteCollection, Sendable {
 
         do {
             if deactivating {
-                let moved = try await AdminOperations.deactivate(
+                let result = try await AdminOperations.deactivate(
                     target,
                     by: admin,
                     on: request.db,
                     logger: request.logger
                 )
-                await announce(deactivated: target, movedApps: moved, by: admin, on: request)
+                await announce(deactivated: target, result: result, by: admin, on: request)
             } else {
                 try await AdminOperations.reactivate(
                     target,
@@ -267,29 +268,119 @@ struct AdminPagesController: RouteCollection, Sendable {
 
     /// 계정을 끊었다고 알린다.
     ///
-    /// **앱이 남의 손으로 넘어간 것을 당사자들이 알아야 한다.** 오너가 바뀐 것은
-    /// 화면 어디에도 뜨지 않고, 넘겨받은 사람은 자기 목록이 길어진 것을 나중에야
-    /// 본다. 운영 알림이 정해진 곳으로 한 번 갑니다 (ADR-0059).
+    /// **오너가 바뀐 것은 화면 어디에도 뜨지 않는다.** 넘겨받은 사람은 자기 목록이
+    /// 길어진 것을 한참 뒤에야 본다. 그래서 당사자에게 따로 보낸다.
+    ///
+    /// 관리자에게는 요약이 간다. 주인을 정해야 하는 앱이 남았다면 그것이 이 알림의
+    /// 요점이다.
     private func announce(
         deactivated target: User,
-        movedApps: [App],
+        result: AdminOperations.Deactivation,
         by admin: User,
         on request: Request
     ) async {
-        let names = movedApps.map(\.name).sorted()
-        let body = names.isEmpty
-            ? "맡고 있던 앱은 없습니다."
-            : """
-                앱 \(names.count)개가 \(admin.name) 에게 넘어갔습니다: \(names.joined(separator: ", ")).
-                옮길 곳은 각 앱 화면에서 다시 정할 수 있습니다.
+        for handover in result.moved {
+            await request.notifier.notify(
+                person: handover.newOwner,
+                message: NotificationMessage(
+                    title: "'\(handover.app.name)' 의 오너가 되셨습니다",
+                    body: """
+                        \(target.name) 계정을 끊으면서 넘어왔습니다. \
+                        이 앱을 함께 맡던 사람 중 가장 먼저 들어온 분이라 자동으로 정해졌습니다. \
+                        맞지 않으면 앱 화면에서 다른 사람에게 넘길 수 있습니다.
+                        """,
+                    link: request.consoleLink("/apps/\(handover.app.id?.uuidString ?? "")")
+                )
+            )
+        }
+
+        var lines: [String] = []
+        if !result.moved.isEmpty {
+            lines.append(
+                "넘어간 앱: "
+                    + result.moved
+                    .map { "\($0.app.name) → \($0.newOwner.name)" }
+                    .sorted()
+                    .joined(separator: ", ")
+            )
+        }
+        if !result.orphaned.isEmpty {
+            lines.append(
                 """
+                **주인을 정해야 하는 앱 \(result.orphaned.count)개**: \
+                \(result.orphaned.map(\.name).sorted().joined(separator: ", ")). \
+                함께 맡던 사람이 없어 넘기지 못했습니다. 관리 > 역할 관리에서 정하세요.
+                """
+            )
+        }
+        if lines.isEmpty {
+            lines.append("맡고 있던 앱은 없습니다.")
+        }
+
         await request.notifier.notifyOperators(
             NotificationMessage(
                 title: "\(target.name)(\(target.email)) 계정을 끊었습니다",
-                body: body,
-                link: "/admin/users"
+                body: lines.joined(separator: "\n"),
+                link: request.consoleLink("/admin/users")
             )
         )
+    }
+
+    /// 주인이 끊긴 앱의 오너를 정한다 (ADR-0061).
+    ///
+    /// 앱 화면의 오너 넘기기와 규칙이 다르다. 그쪽은 올릴 수 있는 사람 중에서만
+    /// 고르는데, 여기 오는 앱들은 함께 맡던 사람이 없어서 고를 후보가 없다. 그래서
+    /// 활성 계정이면 누구든 받는다. 대신 관리자만 할 수 있다.
+    @Sendable
+    func submitOrphanedAppOwner(request: Request) async throws -> Response {
+        let admin = try request.requireAdmin()
+        guard let raw = request.parameters.get("appID"),
+              let appID = UUID(uuidString: raw),
+              let app = try await App.find(appID, on: request.db)
+        else {
+            throw Abort(.notFound, reason: "그런 앱이 없습니다.")
+        }
+
+        let values = try request.content.decode(MemberFormValues.self)
+        guard let targetID = values.userID.flatMap(UUID.init(uuidString:)),
+              let newOwner = try await User.find(targetID, on: request.db)
+        else {
+            let view = try await renderUsers(
+                error: "넘길 사람을 찾을 수 없습니다. 다시 고르세요.",
+                viewedBy: admin,
+                on: request
+            )
+            return htmlResponse(view, status: .notFound)
+        }
+        guard newOwner.isActive else {
+            let view = try await renderUsers(
+                error: "끊은 계정에는 넘길 수 없습니다.",
+                viewedBy: admin,
+                on: request
+            )
+            return htmlResponse(view, status: .badRequest)
+        }
+
+        app.$owner.id = targetID
+        try await app.save(on: request.db)
+        // 새 오너는 멤버 표에 두지 않는다. 오너는 언제나 올릴 수 있다.
+        try await AppMember.query(on: request.db)
+            .filter(\.$app.$id == appID)
+            .filter(\.$user.$id == targetID)
+            .delete()
+
+        request.logger.notice(
+            "주인이 끊긴 앱을 넘겼습니다 [앱: \(app.bundleID), 새 오너: \(newOwner.email), 관리자: \(admin.email)]"
+        )
+        await request.notifier.notify(
+            person: newOwner,
+            message: NotificationMessage(
+                title: "'\(app.name)' 의 오너가 되셨습니다",
+                body: "\(admin.name) 이 넘겼습니다. 이 앱의 설정과 업로드를 맡게 됩니다.",
+                link: request.consoleLink("/apps/\(appID.uuidString)")
+            )
+        )
+        return request.redirect(to: "/admin/users")
     }
 
     private func renderUsers(
@@ -300,6 +391,33 @@ struct AdminPagesController: RouteCollection, Sendable {
         let users = try await User.query(on: request.db).sort(\.$email).all()
         let adminID = try admin.requireID()
 
+        // 주인이 끊긴 앱. 끊을 때 함께 맡던 사람이 없어 넘기지 못한 것들이다
+        // (ADR-0061). 여기 남아 있는 동안은 아무도 올릴 수 없다.
+        let cutOffIDs = try users.filter { !$0.isActive }.map { try $0.requireID() }
+        var orphaned: [OrphanedAppRow] = []
+        if !cutOffIDs.isEmpty {
+            orphaned = try await App.query(on: request.db)
+                .filter(\.$owner.$id ~~ cutOffIDs)
+                .with(\.$owner)
+                .sort(\.$name)
+                .all()
+                .map(OrphanedAppRow.init)
+        }
+
+        // 스크립트 없이 찾을 때. 폼이 그대로 제출되면 여기서 같은 검색을 해서
+        // 그 앱 줄 아래에 후보를 그린다 (`member-search.js` 와 같은 결과).
+        let query = (request.query[String.self, at: "member"] ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let searchedAppID = request.query[String.self, at: "app"]
+        if !query.isEmpty, let searchedAppID {
+            let found = try await PersonSearch.find(matching: query, on: request.db)
+            for index in orphaned.indices where orphaned[index].id == searchedAppID {
+                orphaned[index].query = query
+                orphaned[index].candidates = found.candidates
+                orphaned[index].overflowed = found.overflowed
+            }
+        }
+
         return try await request.view.render(
             "admin-users",
             UserListPageContext(
@@ -308,6 +426,7 @@ struct AdminPagesController: RouteCollection, Sendable {
                     UserRow(user: user, isSelf: try user.requireID() == adminID)
                 },
                 roles: UserRole.allCases.map { RoleOption(value: $0.rawValue, name: $0.displayName) },
+                orphanedApps: orphaned,
                 error: error
             )
         ).get()
@@ -878,7 +997,30 @@ struct UserListPageContext: Encodable {
     var page: PageContext
     var users: [UserRow]
     var roles: [RoleOption]
+    /// 주인이 끊긴 앱들 (ADR-0061). 없으면 빈 배열이고 그 자리는 그려지지 않는다.
+    var orphanedApps: [OrphanedAppRow]
     var error: String?
+}
+
+/// 주인이 끊긴 앱 한 줄.
+struct OrphanedAppRow: Encodable {
+    var id: String
+    var name: String
+    var bundleID: String
+    /// 두고 간 사람. 누구 것이었는지 알아야 누구에게 넘길지 정할 수 있다.
+    var previousOwner: String
+    /// 스크립트 없이 찾았을 때 그 질의와 결과. 평소에는 비어 있다.
+    var query: String?
+    var candidates: [MemberCandidateRow] = []
+    var overflowed = false
+
+    init(app: App) throws {
+        self.id = try app.requireID().uuidString
+        self.name = app.name
+        self.bundleID = app.bundleID
+        let owner = app.$owner.value
+        self.previousOwner = owner.map { "\($0.name) (\($0.email))" } ?? "알 수 없음"
+    }
 }
 
 struct WorkerFormValues: Codable {

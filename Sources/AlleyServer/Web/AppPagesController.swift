@@ -281,13 +281,13 @@ struct AppPagesController: RouteCollection, Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         var memberSearchOverflowed = false
         if canManage, let memberQuery, !memberQuery.isEmpty {
-            let found = try await findMemberCandidates(
+            let found = try await PersonSearch.find(
                 matching: memberQuery,
                 excluding: Set(members.map(\.user.id)),
                 on: request.db
             )
-            memberSearchOverflowed = found.count > MemberSearch.limit
-            memberCandidates = Array(found.prefix(MemberSearch.limit))
+            memberSearchOverflowed = found.overflowed
+            memberCandidates = found.candidates
         }
 
         // 피드 주소를 내주는 화면과 같은 조건이다. 거기서만 쓴다.
@@ -609,14 +609,14 @@ struct AppPagesController: RouteCollection, Sendable {
             return MemberCandidatesResponse(candidates: [], overflowed: false)
         }
 
-        let found = try await findMemberCandidates(
+        let found = try await PersonSearch.find(
             matching: query,
             excluding: try await uploaderIDs(of: app, on: request.db),
             on: request.db
         )
         return MemberCandidatesResponse(
-            candidates: Array(found.prefix(MemberSearch.limit)),
-            overflowed: found.count > MemberSearch.limit
+            candidates: found.candidates,
+            overflowed: found.overflowed
         )
     }
 
@@ -1014,35 +1014,6 @@ struct AppPagesController: RouteCollection, Sendable {
     /// 나온다" 가 된다.
     ///
     /// 이미 올릴 수 있는 사람은 뺀다. 눌러도 아무 일이 없는 줄을 보여줄 이유가 없다.
-    private func findMemberCandidates(
-        matching query: String,
-        excluding already: Set<UUID>,
-        on database: any Database
-    ) async throws -> [MemberCandidateRow] {
-        let needle = "%\(query.lowercased())%"
-
-        return try await User.query(on: database)
-            .group(.or) { match in
-                match.filter(\.$email, .custom("ILIKE"), needle)
-                match.filter(\.$name, .custom("ILIKE"), needle)
-            }
-            .sort(\.$name)
-            // 화면에 스무 줄 넘게 깔면 고르는 것이 아니라 훑는 일이 된다. 넘치면
-            // 더 좁혀 치라고 알린다.
-            .limit(MemberSearch.limit + 1)
-            .all()
-            .filter { user in
-                guard let id = try? user.requireID() else { return false }
-                return !already.contains(id)
-            }
-            .map { user in
-                MemberCandidateRow(
-                    id: try user.requireID().uuidString,
-                    email: user.email,
-                    name: user.name
-                )
-            }
-    }
 
     /// 이 앱에 이미 올릴 수 있는 사람들의 id.
     ///
@@ -1386,11 +1357,6 @@ struct DeployTokenFormValues: Codable {
 extension DeployTokenFormValues: Content {}
 
 /// 업로드 권한을 줄 사람 찾기의 크기.
-enum MemberSearch {
-    /// 화면에 세울 후보 수. 넘으면 더 좁혀 치라고 알린다.
-    static let limit = 20
-}
-
 /// 검색 결과 한 줄.
 struct MemberCandidateRow: Encodable {
     var id: String

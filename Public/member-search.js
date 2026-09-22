@@ -102,7 +102,9 @@
             var button = document.createElement("button");
             button.className = "button button-small";
             button.type = "submit";
-            button.textContent = "권한 주기";
+            // 이 스크립트를 쓰는 화면이 둘이 됐다. 하나는 권한을 주고 하나는 앱을
+            // 넘긴다. 버튼 글자를 폼이 정하게 한다.
+            button.textContent = form.getAttribute("data-grant-label") || "권한 주기";
 
             grant.appendChild(id);
             grant.appendChild(button);
