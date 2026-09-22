@@ -235,6 +235,7 @@
     <h2 class="section-title">최근 빌드</h2>
 
     #if(count(builds) > 0):
+    <div class="table-scroll">
     <table class="table">
         <thead>
             <tr>
@@ -295,6 +296,7 @@
             #endfor
         </tbody>
     </table>
+    </div>
     #else:
     <p class="empty">아직 빌드한 적이 없습니다.</p>
     #endif
