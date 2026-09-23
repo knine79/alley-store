@@ -1,10 +1,5 @@
 #extend("layout"):
 #export("content"):
-<nav class="tabs" aria-label="내 설정">
-    <span class="tab tab-current" aria-current="page">내 알림</span>
-    <a class="tab" href="/me/tokens">내 토큰</a>
-</nav>
-
 <h1 class="page-title">내 알림</h1>
 <p class="page-lead">
     앱 관리 화면에서 앱 소식을 개별로 보내지 않고 Slack 채널로 보내도록 설정되어 있는

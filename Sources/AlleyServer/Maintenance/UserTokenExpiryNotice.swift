@@ -13,10 +13,16 @@ enum UserTokenExpiryNotice {
     /// 얼마나 자주 볼지. 만료는 급하지 않아서 자주 볼 이유가 없다.
     static let checkInterval: Duration = .seconds(6 * 3600)
 
-    static func run(on application: Application, now: Date = Date()) async {
+    /// `notifier` 는 시험이 넣는다. 실제로 보냈는지가 이 쓸기의 전부라, 아무 데도
+    /// 가지 않는 상태로 돌리면 그 부분을 확인할 수 없다.
+    static func run(
+        on application: Application,
+        now: Date = Date(),
+        notifier: Notifier? = nil
+    ) async {
         let database = application.db
         let logger = application.logger
-        let notifier = Notifier(
+        let notifier = notifier ?? Notifier(
             database: database,
             channels: application.notificationChannels,
             logger: logger
@@ -39,12 +45,14 @@ enum UserTokenExpiryNotice {
             return
         }
 
+        var notified = 0
+        var unreachable = 0
         for token in soon {
             // 끊은 사람에게는 보내지 않는다. 그 토큰은 이미 쓸 수 없다 (ADR-0061).
             guard token.user.isActive else { continue }
 
             let days = max(1, Int(token.expiresAt.timeIntervalSince(now) / (24 * 3600)))
-            await notifier.notify(
+            let delivered = await notifier.notify(
                 person: token.user,
                 message: NotificationMessage(
                     title: "토큰 '\(token.name)' 이 \(days)일 뒤 만료됩니다",
@@ -53,6 +61,15 @@ enum UserTokenExpiryNotice {
                 )
             )
 
+            // **보낸 것만 보냈다고 적는다.** 스토어에 Slack 도 메일도 없으면 아무 데도
+            // 가지 않는데, 그때 기록만 남기면 이 토큰은 다시는 여기 걸리지 않는다.
+            // 관리자가 이틀 뒤 메일을 붙여도 그 사람은 끝까지 못 듣는다.
+            guard delivered else {
+                unreachable += 1
+                continue
+            }
+
+            notified += 1
             token.expiryNoticedAt = now
             do {
                 try await token.save(on: database)
@@ -63,8 +80,13 @@ enum UserTokenExpiryNotice {
             }
         }
 
-        if !soon.isEmpty {
-            logger.notice("만료가 가까운 토큰 \(soon.count)개를 알렸습니다.")
+        if notified > 0 {
+            logger.notice("만료가 가까운 토큰 \(notified)개를 알렸습니다.")
+        }
+        if unreachable > 0 {
+            logger.notice(
+                "만료가 가까운데 닿을 길이 없는 토큰 \(unreachable)개입니다. 알림 수단을 확인하세요."
+            )
         }
     }
 }

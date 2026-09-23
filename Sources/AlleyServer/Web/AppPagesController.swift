@@ -1010,12 +1010,6 @@ struct AppPagesController: RouteCollection, Sendable {
         return request.redirect(to: "/apps/\(try app.requireID().uuidString)#alerts")
     }
 
-    private func htmlResponse(_ view: View, status: HTTPStatus) -> Response {
-        let response = Response(status: status)
-        response.headers.contentType = .html
-        response.body = .init(buffer: view.data)
-        return response
-    }
 
     /// 이 앱에 이미 올릴 수 있는 사람들의 id.
     ///

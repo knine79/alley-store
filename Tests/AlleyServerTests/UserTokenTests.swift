@@ -134,6 +134,68 @@ struct UserTokenTests {
         }
     }
 
+    /// **이것이 허용목록으로 바꾼 이유다.** 배포 토큰은 만료가 없고 계정을 끊어도
+    /// 살아남는다. 사람 토큰으로 그것을 만들 수 있으면 90일 수명과 퇴사 차단을 한
+    /// 번에 넘어간다.
+    @Test("사람 토큰으로는 다른 자격증명을 만들지 못한다")
+    func cannotMintOtherCredentials() async throws {
+        try await withMigratedApp { app in
+            let (owner, _) = try await app.makeUser(email: "owner@example.com", role: .admin)
+            let registered = try await app.seedApp(
+                bundleID: "com.example.mint", name: "발급앱", owner: owner
+            )
+            let appID = try registered.requireID().uuidString
+            let token = try await issue(for: owner, on: app)
+
+            for path in [
+                "/api/v1/apps/\(appID)/deploy-tokens",
+                "/api/v1/apps/\(appID)/feed-tokens",
+                "/api/v1/admin/workers",
+            ] {
+                try await app.testing().test(
+                    .POST, path, headers: .bearer(token),
+                    beforeRequest: { try $0.content.encode(["name": "훔친 것"]) }
+                ) { response in
+                    #expect(response.status == .forbidden)
+                }
+            }
+
+            // 만들어진 것이 없어야 한다. 막았다고 말만 하고 생기면 더 나쁘다.
+            #expect(try await DeployToken.query(on: app.db).count() == 0)
+            #expect(try await FeedToken.query(on: app.db).count() == 0)
+            #expect(try await Worker.query(on: app.db).count() == 0)
+        }
+    }
+
+    /// 도구가 쓰는 경로는 그대로 열려 있어야 한다. 좁히다 필요한 것까지 막으면
+    /// MCP 가 통째로 멈춘다.
+    ///
+    /// 서명 상태와 Sparkle 은 아직 이 브랜치에 없다. 목록에는 미리 올려두고, 실제로
+    /// 열리는지는 그 경로를 만드는 쪽에서 확인한다.
+    @Test("도구가 쓰는 경로는 열려 있다")
+    func toolPathsStayOpen() async throws {
+        try await withMigratedApp { app in
+            let (owner, _) = try await app.makeUser(email: "owner@example.com", role: .developer)
+            let registered = try await app.seedApp(
+                bundleID: "com.example.open", name: "열린앱", owner: owner
+            )
+            let appID = try registered.requireID().uuidString
+            let token = try await issue(for: owner, on: app)
+
+            for path in [
+                "/api/v1/me",
+                "/api/v1/apps",
+                "/api/v1/apps/\(appID)",
+                "/api/v1/apps/\(appID)/versions",
+                "/api/v1/apps/\(appID)/feedback",
+            ] {
+                try await app.testing().test(.GET, path, headers: .bearer(token)) { response in
+                    #expect(response.status == .ok)
+                }
+            }
+        }
+    }
+
     /// 앱 삭제는 화면 경로에만 있다. 그래서 경로 자체를 막는다.
     @Test("사람 토큰은 화면 경로에서 인증되지 않는다")
     func webRoutesNeedASession() async throws {
@@ -147,8 +209,9 @@ struct UserTokenTests {
             try await app.testing().test(
                 .GET, "/apps/\(try registered.requireID().uuidString)", headers: .bearer(token)
             ) { response in
-                // 로그인하지 않은 것과 같이 다룬다.
-                #expect(response.status != .ok)
+                // 열려 있지 않은 경로라고 분명히 말한다. `!= .ok` 로 두면 500 에도
+                // 통과해서, 가드가 사라진 것과 터진 것을 구별하지 못한다.
+                #expect(response.status == .forbidden)
             }
         }
     }
@@ -167,7 +230,8 @@ struct UserTokenTests {
                     try $0.content.encode(["name": "노트북"], as: .urlEncodedForm)
                 }
             ) { response in
-                #expect(response.status == .ok)
+                // 만든 것이 있으면 201. 배포 토큰 발급과 같다.
+                #expect(response.status == .created)
                 #expect(response.body.string.contains(UserToken.prefix))
             }
 
@@ -207,6 +271,29 @@ struct UserTokenTests {
 
     // MARK: - 만료 예고
 
+    /// 닿을 길이 없으면 알린 것으로 적지 않는다. 적어버리면 관리자가 나중에 메일을
+    /// 붙여도 그 사람은 끝까지 못 듣는다.
+    @Test("보내지 못했으면 알린 것으로 적지 않는다")
+    func doesNotMarkWhatItCouldNotSend() async throws {
+        try await withMigratedApp { app in
+            let (user, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let value = try await issue(
+                for: user, on: app, name: "곧 만료",
+                expiresAt: Date().addingTimeInterval(3 * 24 * 3600)
+            )
+
+            // 스토어에 Slack 도 메일도 없다. 보낼 데가 없다.
+            await UserTokenExpiryNotice.run(on: app)
+
+            let token = try #require(
+                try await UserToken.query(on: app.db)
+                    .filter(\.$tokenHash == UserToken.hash(token: value))
+                    .first()
+            )
+            #expect(token.expiryNoticedAt == nil)
+        }
+    }
+
     @Test("만료가 가까운 것만 알리고, 한 번만 알린다")
     func noticesOnlyOnce() async throws {
         try await withMigratedApp { app in
@@ -220,7 +307,14 @@ struct UserTokenTests {
                 expiresAt: Date().addingTimeInterval(60 * 24 * 3600)
             )
 
-            await UserTokenExpiryNotice.run(on: app)
+            // 실제로 닿는 채널을 하나 넣는다. 없으면 아무 데도 가지 않고, 그때는
+            // 알린 것으로 적지 않는 것이 맞다 (바로 위 시험).
+            let dm = RecordingChannel(kind: .slackDirectMessage)
+            await UserTokenExpiryNotice.run(
+                on: app,
+                notifier: Notifier(database: app.db, channels: [dm], logger: app.logger)
+            )
+            #expect(dm.endpoints == ["dev@example.com"])
 
             func reload(_ value: String) async throws -> UserToken {
                 try #require(
@@ -237,8 +331,13 @@ struct UserTokenTests {
             // 두 번째로 쓸고 지나가도 기록은 그대로다. 같은 말을 이레 동안 매일
             // 보내지 않는다.
             let firstNotice = noticed.expiryNoticedAt
-            await UserTokenExpiryNotice.run(on: app)
+            await UserTokenExpiryNotice.run(
+                on: app,
+                notifier: Notifier(database: app.db, channels: [dm], logger: app.logger)
+            )
             #expect(try await reload(soon).expiryNoticedAt == firstNotice)
+            // 두 번째로 쓸고 지나가도 또 보내지 않는다.
+            #expect(dm.endpoints == ["dev@example.com"])
         }
     }
 }
