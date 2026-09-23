@@ -383,14 +383,35 @@ public struct SigningStatusDTO: Codable, Sendable {
     }
 }
 
+/// Sparkle 이 지금 이 앱에서 도는지 (ADR-0057, ADR-0060).
+public enum SparkleReadiness: String, Codable, Sendable {
+    /// 쓸 수 있다. 공개키를 앱에 넣으면 된다.
+    case ready
+    /// 쓸 수 있는 워커 중 아무도 키를 갖고 있지 않다. 워커에 키를 넣어야 한다.
+    case noKey = "no_key"
+    /// 워커마다 키가 다르다. 어느 워커가 집었느냐에 따라 갈린다.
+    case conflictingKeys = "conflicting_keys"
+    /// 키는 있는데 최근 출시본에 서명이 빠져 있다. 다음 버전부터 붙는다.
+    case lastReleaseUnsigned = "last_release_unsigned"
+}
+
 /// 이 앱에서 Sparkle 을 쓸 수 있는 상태인가 (ADR-0057, ADR-0060).
 public struct SparkleFeedDTO: Codable, Sendable {
     /// 앱의 `Info.plist` 에 넣을 `SUPublicEDKey`. 말할 수 없으면 nil.
     public var publicKey: String?
     /// 지금 피드 주소를 새로 내줄 만한가.
     public var canIssue: Bool
-    /// 왜 안 되는지 한 줄. 문제가 없으면 nil.
-    public var blocker: String?
+    /// 무엇이 걸려 있는지.
+    ///
+    /// **부르는 쪽은 이 값으로 갈라야 한다.** 아래 `note` 는 사람에게 보여줄 문장이고
+    /// 화면이 언제든 고쳐 쓴다. 그 글자를 맞춰보는 코드는 문구가 바뀌는 날 조용히
+    /// 틀린다.
+    public var readiness: SparkleReadiness
+    /// 사람에게 보여줄 한 줄. 문제가 없으면 nil.
+    ///
+    /// **막힌 것과 알리는 것이 섞여 있다.** `lastReleaseUnsigned` 는 지금 고칠 것이
+    /// 없는데도 한 줄이 온다. 막혔는지는 `canIssue` 로 본다.
+    public var note: String?
     /// 이미 발급해둔 피드 토큰의 수.
     ///
     /// **주소는 돌려줄 수 없다.** 서버는 토큰의 해시만 갖고 있어서 발급 시점이
@@ -400,12 +421,14 @@ public struct SparkleFeedDTO: Codable, Sendable {
     public init(
         publicKey: String? = nil,
         canIssue: Bool,
-        blocker: String? = nil,
+        readiness: SparkleReadiness,
+        note: String? = nil,
         issuedFeedCount: Int
     ) {
         self.publicKey = publicKey
         self.canIssue = canIssue
-        self.blocker = blocker
+        self.readiness = readiness
+        self.note = note
         self.issuedFeedCount = issuedFeedCount
     }
 }
