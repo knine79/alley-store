@@ -106,6 +106,8 @@ struct AdminNotificationPagesController: RouteCollection, Sendable {
             .all()
         let adminCount = try await User.query(on: request.db)
             .filter(\.$role == .admin)
+            // 실제로 받는 사람 수와 같아야 한다 (`Notifier.notifyAdmins`).
+            .filter(\.$deactivatedAt == nil)
             .count()
 
         return try await request.view.render(

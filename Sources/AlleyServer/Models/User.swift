@@ -47,6 +47,23 @@ public final class User: Model, @unchecked Sendable {
     @OptionalField(key: "last_login_at")
     public var lastLoginAt: Date?
 
+    /// 끊은 시각. 나간 사람이다 (ADR-0061).
+    ///
+    /// **행을 지우지 않는다.** 누가 올렸고 누가 받아갔는지가 이 행을 가리킨다. 지우면
+    /// 그 기록이 함께 사라지거나 "알 수 없음" 이 된다. 감사 기록은 사람이 나갔다고
+    /// 없어져도 되는 종류가 아니다.
+    ///
+    /// 이 값이 있으면 로그인도 세션도 막힌다. 검사는 `SessionAuthenticator` 한 곳에
+    /// 있고, 요청마다 이 행을 다시 읽으므로 **이미 발급된 세션도 그 자리에서
+    /// 끊긴다.**
+    @OptionalField(key: "deactivated_at")
+    public var deactivatedAt: Date?
+
+    /// 아직 쓰는 계정인가.
+    public var isActive: Bool {
+        deactivatedAt == nil
+    }
+
     /// 관리자가 이 사람의 역할을 손으로 정했나.
     ///
     /// **웹 콘솔로 들어온 사람은 자동으로 `developer` 가 된다** (ADR-0056). 그 승격이
@@ -385,5 +402,24 @@ public struct DefaultFeedbackNotificationsOn: AsyncMigration {
             throw MigrationError.needsSQLDatabase
         }
         try await sql.raw("ALTER TABLE users ALTER COLUMN notify_feedback SET DEFAULT false").run()
+    }
+}
+
+/// 나간 사람을 끊는 자리 (ADR-0061).
+///
+/// 지우지 않고 시각만 남긴다. 무엇이 그 행을 가리키는지는 ADR 에 적어뒀다.
+public struct AddUserDeactivatedAt: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        try await database.schema(User.schema)
+            .field("deactivated_at", .datetime)
+            .update()
+    }
+
+    public func revert(on database: any Database) async throws {
+        try await database.schema(User.schema)
+            .deleteField("deactivated_at")
+            .update()
     }
 }

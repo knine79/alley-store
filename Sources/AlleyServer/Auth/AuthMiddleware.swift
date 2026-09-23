@@ -63,7 +63,15 @@ public struct SessionAuthenticator: AsyncMiddleware {
             let token = try await request.jwt.verify(rawToken, as: SessionToken.self)
             guard let userID = token.userID else { return nil }
             // 토큰은 유효한데 사용자가 사라진 경우가 있다. 계정 삭제 후 남은 토큰이다.
-            return try await User.find(userID, on: request.db)
+            guard let user = try await User.find(userID, on: request.db) else { return nil }
+            // 끊은 계정은 여기서 걸러진다 (ADR-0061). 토큰은 아직 유효하지만 신원이
+            // 더는 유효하지 않다. 요청마다 이 행을 다시 읽으므로 비활성으로 바꾼
+            // 즉시 이미 나가 있는 세션도 함께 끊긴다.
+            guard user.isActive else {
+                request.logger.notice("끊은 계정의 세션 [이메일: \(user.email)]")
+                return nil
+            }
+            return user
         } catch {
             // 만료나 서명 불일치는 인증 실패로만 다룬다. 자세한 이유는 로그에만 남긴다.
             request.logger.debug("세션 토큰 검증 실패: \(error)")

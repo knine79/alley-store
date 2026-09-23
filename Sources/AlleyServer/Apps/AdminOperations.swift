@@ -111,6 +111,9 @@ enum AdminOperations {
             let remaining = try await User.query(on: database)
                 .filter(\.$role == .admin)
                 .filter(\.$id != targetID)
+                // 끊은 계정은 세지 않는다 (ADR-0061). 로그인하지 못하는 사람을 남은
+                // 관리자로 치면, 아무도 들어올 수 없는 스토어가 이 검사를 통과한다.
+                .filter(\.$deactivatedAt == nil)
                 .count()
             guard remaining > 0 else {
                 throw Abort(.badRequest, reason: "마지막 관리자의 역할은 바꿀 수 없습니다. 다른 관리자를 먼저 지정하세요.")
@@ -128,6 +131,132 @@ enum AdminOperations {
         logger.notice(
             "역할 변경 [대상: \(target.email), \(previous.rawValue) → \(role.rawValue), 관리자: \(admin.email)]"
         )
+    }
+
+    /// 계정을 끊은 결과.
+    struct Deactivation: Sendable {
+        /// 새 주인을 찾은 앱들.
+        var moved: [(app: App, newOwner: User)] = []
+        /// 함께 맡던 사람이 없어 주인이 비어버린 앱들. 관리자가 손으로 정해야 한다.
+        var orphaned: [App] = []
+    }
+
+    /// 계정을 끊는다 (ADR-0061).
+    ///
+    /// **행을 지우지 않고 시각만 남긴다.** 누가 올렸고 누가 받아갔는지가 이 행을
+    /// 가리킨다.
+    ///
+    /// **맡던 앱은 함께 맡던 사람에게 간다.** 그 앱에 업로드 권한이 있는 사람 중
+    /// 가장 먼저 들어온 사람이다. 그 사람이 그 앱을 가장 오래 만졌을 가능성이 높고,
+    /// 끊는 관리자는 대개 그 앱과 아무 관계가 없다. 관리자에게 몰아주면 목록만
+    /// 길어지고 실제 담당자와 어긋난다.
+    ///
+    /// 함께 맡던 사람이 없으면 **넘기지 않는다.** 아무나 지목하는 것보다 비어 있는
+    /// 것이 낫다. 대신 그 앱들을 돌려줘서 관리 화면이 "주인을 정해야 하는 앱" 으로
+    /// 모아 보여준다. 끊긴 사람이 오너로 남아 있어도 그 계정은 로그인하지 못하고,
+    /// 관리자는 여전히 그 앱을 만질 수 있다.
+    ///
+    /// **멤버십과 배포 토큰은 건드리지 않는다.** 로그인이 막히니 멤버로 남아도 할 수
+    /// 있는 것이 없고, 복구하면 그대로 돌아온다. 배포 토큰은 앱의 자격증명이지 그
+    /// 사람의 것이 아니라, 퇴사로 CI 가 멈추면 엉뚱한 곳을 뒤지게 된다.
+    @discardableResult
+    static func deactivate(
+        _ target: User,
+        by admin: User,
+        on database: any Database,
+        logger: Logger
+    ) async throws -> Deactivation {
+        let targetID = try target.requireID()
+        let adminID = try admin.requireID()
+
+        // 자기 계정을 끊으면 그 순간 자기가 로그인 상태를 잃는다. 되돌릴 화면에도
+        // 못 들어간다.
+        guard targetID != adminID else {
+            throw Abort(.badRequest, reason: "자기 계정은 끊을 수 없습니다. 다른 관리자에게 부탁하세요.")
+        }
+
+        // **마지막 관리자를 따로 막지 않는다.** 여기 오는 사람은 로그인한 활성
+        // 관리자이고(`requireAdmin`), 바로 위에서 자기 자신은 끊지 못하게 했다.
+        // 그러니 끊고 나도 관리자가 최소 한 명, 곧 누른 사람이 남는다. 같은 것을
+        // 한 번 더 세는 검사를 두면 절대 지나가지 않는 분기가 생기고, 그 분기는
+        // 읽는 사람에게 "여기서 걸린다" 는 잘못된 안심을 준다.
+
+        // 이미 끊긴 계정을 다시 눌러도 조용히 지나간다. 두 번 누른 사람에게 오류를
+        // 보일 이유가 없고, 여기서 시각을 새로 쓰면 언제 끊었는지가 사라진다.
+        guard target.isActive else { return Deactivation() }
+
+        // **한 번에 되거나 아무것도 안 되거나.** 앱을 옮기다 중간에서 실패하면 일부만
+        // 주인이 바뀐 채 계정은 살아 있게 된다. 그 상태는 화면 어디에도 드러나지
+        // 않고, 다시 누르면 앞서 옮긴 것을 건너뛰어 요약이 달라진다.
+        let result = try await database.transaction { db -> Deactivation in
+            let owned = try await App.query(on: db)
+                .filter(\.$owner.$id == targetID)
+                .all()
+            var moved: [(app: App, newOwner: User)] = []
+            var orphaned: [App] = []
+            for app in owned {
+                if let heir = try await firstUploader(of: app, on: db) {
+                    app.$owner.id = try heir.requireID()
+                    try await app.save(on: db)
+                    // 오너는 언제나 올릴 수 있으므로 멤버 표에서는 뺀다. 앱 화면이
+                    // 지키는 규칙이다.
+                    try await AppMember.query(on: db)
+                        .filter(\.$app.$id == app.requireID())
+                        .filter(\.$user.$id == heir.requireID())
+                        .delete()
+                    moved.append((app: app, newOwner: heir))
+                } else {
+                    orphaned.append(app)
+                }
+            }
+
+            target.deactivatedAt = Date()
+            try await target.save(on: db)
+            return Deactivation(moved: moved, orphaned: orphaned)
+        }
+
+        logger.notice(
+            """
+            계정을 끊었습니다 [대상: \(target.email), 넘긴 앱: \(result.moved.count)개, \
+            주인을 정해야 하는 앱: \(result.orphaned.count)개, 관리자: \(admin.email)]
+            """
+        )
+        return result
+    }
+
+    /// 이 앱을 함께 맡던 사람 중 가장 먼저 들어온 사람.
+    ///
+    /// 끊긴 계정은 건너뛴다. 못 들어오는 사람에게 넘기면 그 앱은 그 자리에서 다시
+    /// 주인을 잃는다.
+    private static func firstUploader(
+        of app: App,
+        on database: any Database
+    ) async throws -> User? {
+        let members = try await AppMember.query(on: database)
+            .filter(\.$app.$id == app.requireID())
+            .sort(\.$createdAt, .ascending)
+            // 같은 시각에 들어온 둘은 정렬만으로 순서가 정해지지 않는다. 그러면
+            // "가장 먼저 들어온 사람" 이 실행할 때마다 달라진다.
+            .sort(\.$id, .ascending)
+            .with(\.$user)
+            .all()
+        return members.map(\.user).first { $0.isActive }
+    }
+
+    /// 끊은 계정을 되돌린다.
+    ///
+    /// **넘어간 앱은 돌아오지 않는다.** 그동안 새 오너가 올렸을 수 있고, 돌려주는
+    /// 것이 맞는지 여기서는 알 수 없다. 앱 화면에서 사람이 정합니다.
+    static func reactivate(
+        _ target: User,
+        by admin: User,
+        on database: any Database,
+        logger: Logger
+    ) async throws {
+        guard !target.isActive else { return }
+        target.deactivatedAt = nil
+        try await target.save(on: database)
+        logger.notice("계정을 되살렸습니다 [대상: \(target.email), 관리자: \(admin.email)]")
     }
 
     // MARK: - 워커

@@ -294,6 +294,7 @@
             <span class="person-name">#(member.user.name)</span>
             <span class="person-email">#(member.user.email)</span>
             #if(member.isOwner):<span class="badge">오너</span>#endif
+            #if(member.isActive):#else:<span class="badge badge-failed">끊김</span>#endif
             <!-- 오너는 표에 없어도 언제나 올릴 수 있다. 회수할 것이 없는데 버튼을
                  두면 눌러도 아무 일이 없다. -->
             #if(canManage):#if(!member.isOwner):
@@ -362,6 +363,37 @@
     #endif
     #endif
     </div>
+
+    <!-- 오너 넘기기.
+         **올릴 수 있는 사람 중에서만 고른다.** 아무나 검색해서 바로 주인을 바꾸게
+         하면 이 앱과 관계없는 사람이 한 번의 실수로 주인이 된다. 밖의 사람에게
+         넘길 때는 위에서 권한을 먼저 주면 여기 나온다.
+         넘기고 나면 지금 오너는 멤버로 남는다. 넘겼다고 올리지 못하게 될 이유가
+         없고, 그렇게 되면 되돌릴 사람도 사라진다. -->
+    <!-- 고를 사람이 없으면 폼을 내지 않는다. 빈 select 를 그리면 브라우저가 값을
+         아예 보내지 않고, 누른 사람은 "넘길 사람을 찾을 수 없습니다" 만 본다.
+         끊긴 계정도 후보가 아니다. 골라도 서버가 거절한다 (ADR-0061). -->
+    #if(count(ownerCandidates) > 0):
+    <form class="form-inline" method="post" action="/apps/#(app.id)/owner">
+        <label class="field">
+            <span class="field-label">오너 넘기기</span>
+            <select class="input select" name="userID" aria-label="새 오너">
+                #for(candidate in ownerCandidates):
+                <option value="#(candidate.user.id)">#(candidate.user.name) (#(candidate.user.email))</option>
+                #endfor
+            </select>
+        </label>
+        <button class="button" type="submit">넘기기</button>
+    </form>
+    <p class="field-note">
+        오너는 이 앱을 지우고 설정을 바꿀 수 있습니다. 넘기면 그 권한도 함께
+        갑니다.
+    </p>
+    #else:
+    <p class="field-note">
+        오너를 넘기려면 먼저 위에서 그 사람에게 업로드 권한을 주세요.
+    </p>
+    #endif
     #endif
 </section>
 #endif

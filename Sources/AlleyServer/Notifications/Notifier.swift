@@ -179,6 +179,9 @@ public struct Notifier: Sendable {
     private func notifyAdmins(_ message: NotificationMessage) async {
         let admins = (try? await User.query(on: database)
             .filter(\.$role == .admin)
+            // 끊은 계정은 빼고 센다 (ADR-0061). 안 그러면 "당신 계정을 끊었습니다"
+            // 를 당사자가 받는다.
+            .filter(\.$deactivatedAt == nil)
             .all()) ?? []
         for admin in admins {
             await notify(person: admin, message: message)
@@ -196,6 +199,8 @@ public struct Notifier: Sendable {
         guard !ids.isEmpty else { return [] }
         return (try? await User.query(on: database)
             .filter(\.$id ~~ Array(ids))
+            // 끊은 오너와 멤버는 받지 않는다 (ADR-0061).
+            .filter(\.$deactivatedAt == nil)
             .all()) ?? []
     }
 

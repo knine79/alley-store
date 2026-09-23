@@ -145,10 +145,10 @@ public struct AppController: RouteCollection, Sendable {
             .all()
 
         let ownerID = try owner.requireID()
-        return try [AppMemberDTO(user: owner.toDTO(), isOwner: true)]
+        return try [AppMemberDTO(user: owner.toDTO(), isOwner: true, isActive: owner.isActive)]
             + members
             .filter { $0.$user.id != ownerID }
-            .map { AppMemberDTO(user: try $0.user.toDTO(), isOwner: false) }
+            .map { AppMemberDTO(user: try $0.user.toDTO(), isOwner: false, isActive: $0.user.isActive) }
     }
 
     @Sendable
@@ -167,6 +167,11 @@ public struct AppController: RouteCollection, Sendable {
             .first()
         else {
             throw Abort(.notFound, reason: "'\(email)' 계정을 찾을 수 없습니다. 먼저 한 번 로그인해야 합니다.")
+        }
+        // 끊은 계정에는 주지 않는다 (ADR-0061). 로그인하지 못하니 쓸 수 없고, 되살리면
+        // 아무도 준 적 없는 권한이 딸려 돌아온다.
+        guard target.isActive else {
+            throw Abort(.badRequest, reason: "'\(email)' 은 끊은 계정입니다. 되살린 뒤에 주세요.")
         }
 
         let targetID = try target.requireID()

@@ -31,6 +31,7 @@ struct AppPagesController: RouteCollection, Sendable {
         pages.get(":appID", "member-candidates", use: memberCandidates)
         pages.post(":appID", "members", use: addMember)
         pages.post(":appID", "members", ":userID", "remove", use: removeMember)
+        pages.post(":appID", "owner", use: submitOwner)
         pages.get(":appID", "versions", ":versionID", "download", use: download)
         pages.post(":appID", "feedback", ":feedbackID", "delete", use: deleteFeedback)
         pages.post(":appID", "feed-tokens", use: issueFeedToken)
@@ -280,13 +281,13 @@ struct AppPagesController: RouteCollection, Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         var memberSearchOverflowed = false
         if canManage, let memberQuery, !memberQuery.isEmpty {
-            let found = try await findMemberCandidates(
+            let found = try await PersonSearch.find(
                 matching: memberQuery,
                 excluding: Set(members.map(\.user.id)),
                 on: request.db
             )
-            memberSearchOverflowed = found.count > MemberSearch.limit
-            memberCandidates = Array(found.prefix(MemberSearch.limit))
+            memberSearchOverflowed = found.overflowed
+            memberCandidates = found.candidates
         }
 
         // 피드 주소를 내주는 화면과 같은 조건이다. 거기서만 쓴다.
@@ -411,6 +412,7 @@ struct AppPagesController: RouteCollection, Sendable {
                     )
                 },
                 members: members,
+                ownerCandidates: members.filter { !$0.isOwner && $0.isActive != false },
                 memberQuery: memberQuery,
                 memberCandidates: memberCandidates,
                 memberSearchOverflowed: memberSearchOverflowed,
@@ -608,14 +610,14 @@ struct AppPagesController: RouteCollection, Sendable {
             return MemberCandidatesResponse(candidates: [], overflowed: false)
         }
 
-        let found = try await findMemberCandidates(
+        let found = try await PersonSearch.find(
             matching: query,
             excluding: try await uploaderIDs(of: app, on: request.db),
             on: request.db
         )
         return MemberCandidatesResponse(
-            candidates: Array(found.prefix(MemberSearch.limit)),
-            overflowed: found.count > MemberSearch.limit
+            candidates: found.candidates,
+            overflowed: found.overflowed
         )
     }
 
@@ -639,6 +641,15 @@ struct AppPagesController: RouteCollection, Sendable {
             )
             return htmlResponse(view, status: .notFound)
         }
+        // 검색에는 안 나오지만 폼을 손으로 만들거나 오래된 결과를 누르면 여기 온다.
+        guard target.isActive else {
+            let view = try await renderDetail(
+                on: request,
+                issuedToken: nil,
+                memberError: "끊은 계정에는 권한을 줄 수 없습니다."
+            )
+            return htmlResponse(view, status: .badRequest)
+        }
 
         let appID = try app.requireID()
         let targetID = try target.requireID()
@@ -654,6 +665,88 @@ struct AppPagesController: RouteCollection, Sendable {
                 )
             }
         }
+        return request.redirect(to: "/apps/\(appID.uuidString)#members")
+    }
+
+    /// 오너를 넘긴다 (ADR-0061).
+    ///
+    /// **올릴 수 있는 사람 중에서만 고른다.** 아무나 검색해 바로 주인을 바꾸게 하면
+    /// 이 앱과 관계없는 사람이 한 번의 실수로 주인이 된다. 밖의 사람에게 넘길 때는
+    /// 업로드 권한을 먼저 주면 후보에 들어온다.
+    ///
+    /// **지금 오너는 멤버로 남긴다.** 넘겼다고 올리지 못할 이유가 없고, 권한까지
+    /// 잃으면 되돌릴 사람이 그 앱에서 사라진다.
+    @Sendable
+    func submitOwner(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        try app.requireManageAccess(for: user)
+
+        let values = try request.content.decode(MemberFormValues.self)
+        let appID = try app.requireID()
+        let previousOwnerID = app.$owner.id
+
+        guard let newOwnerID = values.userID.flatMap(UUID.init(uuidString:)),
+              let newOwner = try await User.find(newOwnerID, on: request.db)
+        else {
+            let view = try await renderDetail(
+                on: request,
+                issuedToken: nil,
+                memberError: "넘길 사람을 찾을 수 없습니다. 다시 고르세요."
+            )
+            return htmlResponse(view, status: .notFound)
+        }
+
+        guard newOwnerID != previousOwnerID else {
+            return request.redirect(to: "/apps/\(appID.uuidString)#members")
+        }
+
+        // 올릴 수 있는 사람만 받는다. 폼에는 그 사람들만 나오지만, 고르는 사이에
+        // 권한이 회수됐거나 폼을 손으로 만들었을 수 있다.
+        let isUploader = try await AppMember.query(on: request.db)
+            .filter(\.$app.$id == appID)
+            .filter(\.$user.$id == newOwnerID)
+            .first() != nil
+        guard isUploader else {
+            let view = try await renderDetail(
+                on: request,
+                issuedToken: nil,
+                memberError: "올릴 수 있는 사람에게만 넘길 수 있습니다. 먼저 권한을 주세요."
+            )
+            return htmlResponse(view, status: .badRequest)
+        }
+
+        // 끊은 계정에 넘기면 그 앱은 그 자리에서 주인을 잃는다 (ADR-0061).
+        guard newOwner.isActive else {
+            let view = try await renderDetail(
+                on: request,
+                issuedToken: nil,
+                memberError: "끊은 계정에는 넘길 수 없습니다."
+            )
+            return htmlResponse(view, status: .badRequest)
+        }
+
+        app.$owner.id = newOwnerID
+        try await app.save(on: request.db)
+
+        // 새 오너의 멤버 행은 지운다. 오너는 언제나 올릴 수 있어서 표에 두지 않는
+        // 것이 이 화면의 규칙이다.
+        try await AppMember.query(on: request.db)
+            .filter(\.$app.$id == appID)
+            .filter(\.$user.$id == newOwnerID)
+            .delete()
+
+        let alreadyMember = try await AppMember.query(on: request.db)
+            .filter(\.$app.$id == appID)
+            .filter(\.$user.$id == previousOwnerID)
+            .first() != nil
+        if !alreadyMember {
+            try await AppMember(appID: appID, userID: previousOwnerID).save(on: request.db)
+        }
+
+        request.logger.notice(
+            "오너 변경 [앱: \(app.bundleID), 새 오너: \(newOwner.email), 바꾼 사람: \(user.email)]"
+        )
         return request.redirect(to: "/apps/\(appID.uuidString)#members")
     }
 
@@ -924,43 +1017,6 @@ struct AppPagesController: RouteCollection, Sendable {
         return response
     }
 
-    /// 멤버로 넣을 후보를 찾는다.
-    ///
-    /// 이름과 이메일 어느 쪽으로 쳐도 걸리게 한다. 사람을 부르는 이름과 계정을
-    /// 가리키는 이메일이 머릿속에서 따로 놀아서, 한쪽만 받으면 "분명 있는데 안
-    /// 나온다" 가 된다.
-    ///
-    /// 이미 올릴 수 있는 사람은 뺀다. 눌러도 아무 일이 없는 줄을 보여줄 이유가 없다.
-    private func findMemberCandidates(
-        matching query: String,
-        excluding already: Set<UUID>,
-        on database: any Database
-    ) async throws -> [MemberCandidateRow] {
-        let needle = "%\(query.lowercased())%"
-
-        return try await User.query(on: database)
-            .group(.or) { match in
-                match.filter(\.$email, .custom("ILIKE"), needle)
-                match.filter(\.$name, .custom("ILIKE"), needle)
-            }
-            .sort(\.$name)
-            // 화면에 스무 줄 넘게 깔면 고르는 것이 아니라 훑는 일이 된다. 넘치면
-            // 더 좁혀 치라고 알린다.
-            .limit(MemberSearch.limit + 1)
-            .all()
-            .filter { user in
-                guard let id = try? user.requireID() else { return false }
-                return !already.contains(id)
-            }
-            .map { user in
-                MemberCandidateRow(
-                    id: try user.requireID().uuidString,
-                    email: user.email,
-                    name: user.name
-                )
-            }
-    }
-
     /// 이 앱에 이미 올릴 수 있는 사람들의 id.
     ///
     /// **`loadMembers` 를 쓰지 않는다.** 그쪽은 오너를 미리 읽어둔 앱을 전제한다
@@ -981,10 +1037,10 @@ struct AppPagesController: RouteCollection, Sendable {
             .with(\.$user)
             .all()
 
-        return try [AppMemberDTO(user: app.owner.toDTO(), isOwner: true)]
+        return try [AppMemberDTO(user: app.owner.toDTO(), isOwner: true, isActive: app.owner.isActive)]
             + members
             .filter { $0.$user.id != ownerID }
-            .map { AppMemberDTO(user: try $0.user.toDTO(), isOwner: false) }
+            .map { AppMemberDTO(user: try $0.user.toDTO(), isOwner: false, isActive: $0.user.isActive) }
     }
 }
 
@@ -1189,6 +1245,11 @@ struct AppDetailContext: Encodable {
     var app: AppRow
     var versions: [VersionRow]
     var members: [AppMemberDTO]
+    /// 오너로 넘길 수 있는 사람들. 오너 자신과 끊긴 계정을 뺀 멤버들이다.
+    ///
+    /// 화면에서 거르지 않고 여기서 거른다. 비어 있으면 폼 자체를 내지 않아야 하는데,
+    /// 템플릿에서는 거른 뒤의 수를 셀 수 없다.
+    var ownerCandidates: [AppMemberDTO]
     /// 방금 친 검색어. 다시 그릴 때 칸에 그대로 남긴다.
     var memberQuery: String?
     /// 그 검색어로 찾은 사람들. 이미 올릴 수 있는 사람은 빠져 있다.
@@ -1301,12 +1362,6 @@ struct DeployTokenFormValues: Codable {
 }
 
 extension DeployTokenFormValues: Content {}
-
-/// 업로드 권한을 줄 사람 찾기의 크기.
-enum MemberSearch {
-    /// 화면에 세울 후보 수. 넘으면 더 좁혀 치라고 알린다.
-    static let limit = 20
-}
 
 /// 검색 결과 한 줄.
 struct MemberCandidateRow: Encodable {
