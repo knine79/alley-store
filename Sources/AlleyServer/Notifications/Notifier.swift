@@ -223,23 +223,31 @@ public struct Notifier: Sendable {
     ///
     /// 보낼 채널이 없으면 조용히 지나간다. 봇 토큰도 메일 설정도 없는 스토어가
     /// 그렇고, 그때는 예전처럼 사람이 화면을 다시 보는 것으로 굴러간다.
-    public func notify(person user: User, message: NotificationMessage) async {
+    /// 한 군데라도 실제로 보냈으면 true.
+    ///
+    /// 부르는 쪽이 "보냈다" 를 기록해야 할 때가 있다. 토큰 만료 예고가 그렇다. 보낸
+    /// 적 없는데 보냈다고 적으면 그 사람은 영영 못 듣는다 (`UserTokenExpiryNotice`).
+    @discardableResult
+    public func notify(person user: User, message: NotificationMessage) async -> Bool {
         let usable = personalChannels(for: user)
         guard !usable.isEmpty else {
             logger.debug("사람에게 보내는 알림 채널이 없어 건너뜁니다 [\(user.email)]")
-            return
+            return false
         }
+        var delivered = false
         for channel in usable {
             do {
                 // Slack DM 도 메일도 받는 사람을 계정 이메일로 찾는다. DM 은 그 주소로
                 // Slack 계정을 뒤지고, 메일은 그 주소로 보낸다.
                 try await channel.send(message, to: user.email)
+                delivered = true
             } catch {
                 // **여기서 던지지 않는다.** 이 알림은 서명 실패를 기록하는 흐름 안에서
                 // 불린다. 알림이 실패했다고 그 기록까지 되돌리면 잡이 멈춘 채로 남는다.
                 logger.warning("알림을 보내지 못했습니다 [받는 사람: \(user.email), 이유: \(error)]")
             }
         }
+        return delivered
     }
 
     /// 이 사람에게 실제로 쓸 채널들.

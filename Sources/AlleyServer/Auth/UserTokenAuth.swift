@@ -13,16 +13,19 @@ import Vapor
 /// 화면으로는 되는데 토큰으로는 안 되는 상태가 된다. `alleyu_` 로 시작하는 값이
 /// 없으면 아무것도 하지 않으므로 다른 인증을 방해하지 않는다.
 ///
-/// **두 가지는 막는다.**
+/// **부를 수 있는 경로를 목록으로 정한다** (`UserTokenScope`).
 ///
-/// `/api/v1` 밖에서는 인증하지 않는다. 화면 경로에는 API 에 없는 동작이 있고, 앱
-/// 삭제가 그렇다. 사람이 브라우저에서 한 번 더 생각하고 누르는 자리를 토큰으로
-/// 열어둘 이유가 없다.
+/// 처음에는 "지우는 것만 막자" 로 두었다가 뒤집었다. `DELETE` 만 걸러내면
+/// `POST /api/v1/apps/:id/deploy-tokens` 가 그대로 열려 있고, 그것으로 만든 배포
+/// 토큰은 **만료도 없고 계정을 끊어도 살아남는다.** 90일 수명과 퇴사 차단을 한
+/// 번에 넘어간다. 피드 토큰도, 관리자라면 워커 등록과 역할 변경도 같다.
 ///
-/// 그 안에서도 `DELETE` 는 거절한다. 멤버를 떼거나 토큰을 폐기하거나 출시를 되돌리는
-/// 것들이다. 도구로 내주지 않는 것과 토큰으로 못 하는 것은 다르다. 도구 목록은
-/// 언제든 늘어나지만 이 규칙은 한 자리에 있다.
+/// 막을 것을 세는 방식은 경로가 늘어날 때마다 새는 곳이 생긴다. 열 것을 세면 새
+/// 경로는 기본이 닫힘이다.
 struct UserTokenAuthenticator: AsyncMiddleware {
+    /// 마지막 사용 시각을 다시 쓰기까지 기다리는 시간.
+    static let usageResolution: TimeInterval = 300
+
     func respond(
         to request: Request,
         chainingTo next: any AsyncResponder
@@ -31,21 +34,6 @@ struct UserTokenAuthenticator: AsyncMiddleware {
               bearer.token.hasPrefix(UserToken.prefix)
         else {
             return try await next.respond(to: request)
-        }
-
-        // 화면 경로는 세션만 받는다. 인증하지 않고 지나가면 그 뒤 가드가 로그인을
-        // 요구하므로, 토큰으로는 아무것도 되지 않는다.
-        guard request.url.path.hasPrefix(APIPath.apiRoot) else {
-            return try await next.respond(to: request)
-        }
-        guard request.method != .DELETE else {
-            throw Abort(
-                .forbidden,
-                reason: """
-                    사람 토큰으로는 지우지 못합니다. 되돌릴 수 없는 일은 웹 콘솔에서 \
-                    사람이 합니다.
-                    """
-            )
         }
 
         let hash = UserToken.hash(token: bearer.token)
@@ -74,9 +62,33 @@ struct UserTokenAuthenticator: AsyncMiddleware {
             throw Abort(.unauthorized, reason: "끊은 계정입니다.")
         }
 
+        // **무엇을 부를 수 있는지는 인증을 통과한 뒤에 본다.** 순서를 바꾸면 발급된
+        // 적 없는 값에도 "그 경로는 못 부릅니다" 가 돌아가고, 그것만으로 `alleyu_`
+        // 가 쓰이는 접두어라는 것이 새어 나간다. 폐기와 만료를 가려 말하는 것도
+        // 같은 이유로 여기 뒤에 있어야 한다.
+        guard UserTokenScope.allows(method: request.method, path: request.url.path) else {
+            request.logger.notice(
+                "사람 토큰이 열리지 않은 경로를 불렀습니다 [\(request.method) \(request.url.path)]"
+            )
+            throw Abort(
+                .forbidden,
+                reason: """
+                    사람 토큰으로 부를 수 있는 경로가 아닙니다. 지우거나 자격증명을 \
+                    만드는 일은 웹 콘솔에서 사람이 합니다.
+                    """
+            )
+        }
+
         // 마지막으로 쓴 때를 남긴다. "이 토큰 아직 쓰나" 를 이것으로 판단한다.
-        token.lastUsedAt = Date()
-        try await token.save(on: request.db)
+        //
+        // **매 요청마다 쓰지 않는다.** 에이전트는 상태를 확인하려고 같은 경로를 짧은
+        // 간격으로 부른다. 그때마다 UPDATE 를 끼우면 읽기만 하는 왕복이 두 배가 되고,
+        // 그 쓰기가 실패하면 멀쩡한 조회가 500 이 된다. 분 단위로 안다면 충분하다.
+        if token.lastUsedAt.map({ Date().timeIntervalSince($0) > Self.usageResolution }) ?? true {
+            token.lastUsedAt = Date()
+            // 실패해도 요청은 계속 간다. 마지막 사용 시각은 다음 요청에 다시 쓴다.
+            try? await token.save(on: request.db)
+        }
 
         request.auth.login(token.user)
         return try await next.respond(to: request)
