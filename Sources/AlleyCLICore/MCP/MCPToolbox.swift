@@ -15,6 +15,18 @@ enum MCPToolbox {
         case missingArgument(String)
         case badUUID(String)
         case appNotFound(String)
+        case notANumber(String, String)
+        case relativePath(String)
+
+        /// 붙어 있는 쪽이 규약을 어긴 것인가.
+        ///
+        /// 없는 도구를 부르는 것은 도구 목록을 잘못 읽은 것이라 모델이 고칠 수 없다.
+        /// 나머지(앱 이름 오타, 빠진 인자)는 모델이 읽고 다시 부르면 되는 사실이라
+        /// 결과로 돌려준다.
+        var isProtocolViolation: Bool {
+            if case .unknownTool = self { return true }
+            return false
+        }
 
         var description: String {
             switch self {
@@ -26,6 +38,14 @@ enum MCPToolbox {
                 return "id 로 읽을 수 없습니다: \(value)"
             case .appNotFound(let value):
                 return "그런 앱을 찾지 못했습니다: \(value). list_apps 로 이름을 확인하세요."
+            case .notANumber(let name, let value):
+                return "\(name) 은 숫자여야 합니다: \(value)"
+            case .relativePath(let value):
+                return """
+                    파일 경로는 절대 경로여야 합니다: \(value). 이 서버는 에이전트를 \
+                    띄운 쪽의 디렉터리에서 돌기 때문에, 작업 디렉터리 기준 경로는 \
+                    엉뚱한 자리를 가리킵니다.
+                    """
             }
         }
     }
@@ -42,10 +62,15 @@ enum MCPToolbox {
         MCPTool(
             name: "list_versions",
             description: """
-                한 앱의 버전 목록. 상태(draft·signing·released·failed)와 빌드 번호가 \
-                함께 온다. 무엇을 출시할지 고르거나 마지막 빌드 번호를 알아낼 때 쓴다.
+                한 앱의 버전 목록. 최신 빌드가 먼저 온다. 무엇을 출시할지 고르거나 \
+                마지막 빌드 번호를 알아낼 때 쓴다. 상태는 draft·uploaded·signing· \
+                notarizing·ready·released·failed 일곱 가지이고, **출시할 수 있는 것은 \
+                ready 뿐이다.**
                 """,
-            inputSchema: MCPTool.schema(required: ["app": "앱 id 또는 번들 ID"])
+            inputSchema: MCPTool.schema(
+                required: ["app": "앱 id 또는 번들 ID"],
+                optional: ["limit": "몇 개까지 볼지. 비우면 20개"]
+            )
         ),
         MCPTool(
             name: "upload_version",
@@ -58,13 +83,14 @@ enum MCPToolbox {
             inputSchema: MCPTool.schema(
                 required: [
                     "app": "앱 id 또는 번들 ID",
-                    "file": "올릴 zip 의 경로",
+                    "file": "올릴 zip 의 **절대** 경로",
                     "version": "버전 문자열. 예: 1.2.0",
                 ],
                 optional: [
                     "build": "빌드 번호. 비우면 마지막 것 다음으로 매긴다",
                     "notes": "릴리스 노트",
-                    "entitlements": "entitlements plist 의 경로",
+                    "min_os": "실행에 필요한 최소 macOS 버전. 예: 14.0",
+                    "entitlements": "entitlements plist 의 절대 경로",
                 ]
             )
         ),
@@ -80,7 +106,7 @@ enum MCPToolbox {
         MCPTool(
             name: "release_version",
             description: """
-                서명이 끝난 버전을 출시한다. 이때부터 사람들이 받아간다. \
+                상태가 ready 인 버전을 출시한다. 이때부터 사람들이 받아간다. \
                 되돌릴 수 없으니 사람이 그러라고 했을 때만 부른다.
                 """,
             inputSchema: MCPTool.schema(required: ["version": "버전 id"])
@@ -96,10 +122,13 @@ enum MCPToolbox {
         MCPTool(
             name: "app_feedback",
             description: """
-                그 앱에 들어온 별점과 피드백. 버그 제보를 티켓으로 옮기거나 \
-                무엇부터 고칠지 정할 때 쓴다.
+                그 앱에 들어온 별점과 피드백. 최근 것이 먼저 온다. 버그 제보를 \
+                티켓으로 옮기거나 무엇부터 고칠지 정할 때 쓴다.
                 """,
-            inputSchema: MCPTool.schema(required: ["app": "앱 id 또는 번들 ID"])
+            inputSchema: MCPTool.schema(
+                required: ["app": "앱 id 또는 번들 ID"],
+                optional: ["limit": "몇 개까지 볼지. 비우면 20개"]
+            )
         ),
     ]
 
@@ -116,8 +145,9 @@ enum MCPToolbox {
         case "list_versions":
             let app = try await resolveApp(arguments, api: api)
             let versions = try await api.versions(ofApp: app.id)
+                .sorted { $0.buildNumber > $1.buildNumber }
             return try MCPToolResult.json(
-                versions.sorted { $0.buildNumber > $1.buildNumber }
+                Array(versions.prefix(try limit(in: arguments)))
             )
 
         case "upload_version":
@@ -128,16 +158,19 @@ enum MCPToolbox {
             guard let shortVersion = arguments["version"]?.stringValue, !shortVersion.isEmpty else {
                 throw ToolError.missingArgument("version")
             }
-            let entitlements = try arguments["entitlements"]?.stringValue.map {
-                try String(contentsOfFile: $0, encoding: .utf8)
-            }
+            // 붙일 파일도 CLI 와 같은 검사를 지난다. plist 가 아닌 것을 서버까지
+            // 보내면 서명 한 바퀴를 돈 뒤에야 알게 된다.
+            let entitlements = try CLI.readEntitlements(
+                at: try arguments["entitlements"]?.stringValue.map(absolutePath)
+            )
             let uploaded = try await UploadCommand(api: api, log: { _ in })
                 .run(
                     UploadCommand.Options(
-                        file: URL(fileURLWithPath: path),
+                        file: URL(fileURLWithPath: try absolutePath(path)),
                         shortVersion: shortVersion,
-                        buildNumber: arguments["build"]?.stringValue.flatMap(Int.init),
+                        buildNumber: try integer(named: "build", in: arguments),
                         releaseNotes: arguments["notes"]?.stringValue,
+                        minimumOSVersion: arguments["min_os"]?.stringValue,
                         entitlements: entitlements,
                         app: app
                     )
@@ -158,7 +191,10 @@ enum MCPToolbox {
 
         case "app_feedback":
             let app = try await resolveApp(arguments, api: api)
-            return try MCPToolResult.json(try await api.feedback(appID: app.id))
+            let feedback = try await api.feedback(appID: app.id)
+            return try MCPToolResult.json(
+                Array(feedback.prefix(try limit(in: arguments)))
+            )
 
         default:
             throw ToolError.unknownTool(name)
@@ -178,7 +214,9 @@ enum MCPToolbox {
         guard let raw = arguments["app"]?.stringValue, !raw.isEmpty else {
             throw ToolError.missingArgument("app")
         }
-        let apps = try await api.apps()
+        // 도구를 부를 때마다 목록을 다시 받아오면 왕복이 두 배가 된다. 한 세션
+        // 안에서 앱 목록은 거의 바뀌지 않는다.
+        let apps = try await AppDirectory.shared.apps(using: api)
         if let id = UUID(uuidString: raw), let found = apps.first(where: { $0.id == id }) {
             return found
         }
@@ -186,6 +224,51 @@ enum MCPToolbox {
             return found
         }
         throw ToolError.appNotFound(raw)
+    }
+
+    /// 목록을 몇 개까지 실을지.
+    ///
+    /// **한 번에 다 쏟지 않는다.** 피드백이 300개면 그것이 통째로 모델의 창을
+    /// 차지한다. `AppSummary` 가 칸 셋을 아끼는 것과 같은 이유다.
+    private static func limit(in arguments: [String: JSONValue]) throws -> Int {
+        let given = try integer(named: "limit", in: arguments) ?? defaultLimit
+        return max(1, min(given, maximumLimit))
+    }
+
+    static let defaultLimit = 20
+    static let maximumLimit = 200
+
+    /// 숫자 인자. 모델은 `42` 로도 `"42"` 로도 보낸다.
+    ///
+    /// **못 읽으면 말한다.** 조용히 nil 로 접으면 서버가 다음 번호를 매기고, 도구는
+    /// 성공을 알린다. 부른 쪽은 자기가 적은 번호로 올라갔다고 믿는다.
+    private static func integer(
+        named name: String,
+        in arguments: [String: JSONValue]
+    ) throws -> Int? {
+        guard let value = arguments[name], value != .null else { return nil }
+        switch value {
+        case .number(let number):
+            return Int(number)
+        case .string(let text) where !text.isEmpty:
+            guard let parsed = Int(text) else { throw ToolError.notANumber(name, text) }
+            return parsed
+        case .string:
+            return nil
+        default:
+            throw ToolError.notANumber(name, String(describing: value))
+        }
+    }
+
+    /// 파일 경로는 절대 경로만 받는다.
+    ///
+    /// 이 프로세스의 작업 디렉터리는 에이전트를 띄운 쪽의 것이다. 모델이 자기 눈에
+    /// 보이는 `build/MyApp.zip` 을 넘기면 엉뚱한 자리를 찾고, 돌아오는 말은 "그런
+    /// 파일이 없습니다" 뿐이라 왜 없는지 알 수 없다.
+    private static func absolutePath(_ raw: String) throws -> String {
+        let expanded = (raw as NSString).expandingTildeInPath
+        guard expanded.hasPrefix("/") else { throw ToolError.relativePath(raw) }
+        return expanded
     }
 
     private static func uuid(named name: String, in arguments: [String: JSONValue]) throws -> UUID {
@@ -207,10 +290,34 @@ struct AppSummary: Encodable {
     var id: UUID
     var bundleID: String
     var name: String
+    /// 번들 ID 가 아직 정해지지 않았나 (ADR-0034).
+    ///
+    /// **뺄 수 없는 칸이다.** dmg 로 올린 앱은 서버가 자리표시자를 넣어두는데, 그것을
+    /// 진짜 ID 로 알고 설정에 적거나 사람에게 알리면 틀린 값이 퍼진다. 그 앱은 아직
+    /// 출시할 수도 없다.
+    var bundleIDPending: Bool?
 
     init(_ app: AppDTO) {
         self.id = app.id
         self.bundleID = app.bundleID
         self.name = app.name
+        self.bundleIDPending = app.bundleIDPending == true ? true : nil
+    }
+}
+
+/// 한 세션 동안의 앱 목록.
+///
+/// 도구 다섯이 앱을 id 나 번들 ID 로 받는데, 그때마다 목록을 다시 받아오면 한
+/// 세션에 같은 응답을 여러 번 받는다. 그 응답에는 아이콘 주소와 별점까지 들어 있다.
+actor AppDirectory {
+    static let shared = AppDirectory()
+
+    private var cached: [AppDTO]?
+
+    func apps(using api: StoreAPI) async throws -> [AppDTO] {
+        if let cached { return cached }
+        let fetched = try await api.apps()
+        cached = fetched
+        return fetched
     }
 }

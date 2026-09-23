@@ -107,8 +107,23 @@ struct MCPServerTests {
                 #"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"signing_status","arguments":{}}}"#
             )
         )
-        #expect(response["error"]?["code"] == .number(-32602))
-        #expect(response["error"]?["message"]?.stringValue?.contains("version") == true)
+        // 인자가 빠진 것은 모델이 다시 부르면 되는 일이라 결과로 돌려준다.
+        #expect(response["error"] == nil)
+        #expect(response["result"]?["isError"] == .bool(true))
+    }
+
+    /// 규약을 어긴 것과 모델이 고칠 수 있는 것을 가른다. 후자를 오류로 던지면 그
+    /// 사실이 모델에 닿지 않고 도구 호출만 깨진다.
+    @Test("고칠 수 있는 실패는 결과로 온다")
+    func recoverableFailuresComeBackAsResults() async throws {
+        let response = try #require(
+            await ask(
+                #"{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"signing_status","arguments":{"version":"버전아님"}}}"#
+            )
+        )
+        // 오류가 아니라 결과다. 내용에 무엇이 잘못됐는지가 들어 있다.
+        #expect(response["error"] == nil)
+        #expect(response["result"]?["isError"] == .bool(true))
     }
 
     @Test("읽을 수 없는 줄은 건너뛴다")
