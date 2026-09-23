@@ -52,7 +52,7 @@
                 #else:
                 <form class="row-form" method="post" action="/admin/users/#(person.id)/reactivate">
                     <button class="button" type="submit">되살리기</button>
-                    <span class="table-note">#(person.deactivatedAt.display) 에 끊음</span>
+                    <span class="table-note"><time datetime="#(person.deactivatedAt.iso)" data-date-only="#(person.deactivatedAt.dateOnly)">#(person.deactivatedAt.display)</time> 에 끊음</span>
                 </form>
                 #endif
             </td>
@@ -89,7 +89,6 @@
              (`member-search.js` 는 폼마다 붙는다). 스크립트가 없으면 이 폼이
              그대로 제출되고 서버가 아래를 같은 모양으로 그린다. -->
         <form class="form-inline" method="get" action="/admin/users"
-              data-app="#(app.id)"
               data-candidates-url="/apps/#(app.id)/member-candidates"
               data-grant-url="/admin/apps/#(app.id)/owner"
               data-grant-label="오너로 정하기"

@@ -185,6 +185,9 @@ public struct AuthController: RouteCollection, Sendable {
         try await authCode.save(on: request.db)
 
         let user = authCode.user
+        // **세 번째 문이다** (ADR-0061). 코드를 받아둔 뒤에 끊긴 계정이 여기로 와서
+        // 새 세션을 받아가면, 앱은 "로그인됨" 을 보여주고 그다음 요청마다 401 이 난다.
+        try Self.rejectIfDeactivated(user, on: request)
         let token = try await signSession(request: request, userID: try user.requireID())
         return TokenExchangeResponse(
             token: token,
@@ -251,7 +254,10 @@ public struct AuthController: RouteCollection, Sendable {
     ///
     /// 왜 막혔는지 그대로 적는다. "로그인 실패" 만 보면 공급자를 의심하며 한참을
     /// 헤매고, 정작 물어봐야 할 곳은 스토어 관리자다.
-    private static func rejectIfDeactivated(_ user: User, on request: Request) throws {
+    ///
+    /// private 이 아닌 이유는 시험이 이 판정만 따로 부르기 때문이다. 로그인 왕복은
+    /// 재현할 수 없다 (`promoteIfConsoleVisitor` 와 같은 사정).
+    static func rejectIfDeactivated(_ user: User, on request: Request) throws {
         guard !user.isActive else { return }
         request.logger.notice("끊은 계정이 로그인을 시도했습니다 [이메일: \(user.email)]")
         throw Abort(

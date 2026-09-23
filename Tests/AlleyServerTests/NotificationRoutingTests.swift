@@ -101,6 +101,29 @@ struct NotificationRoutingTests {
         }
     }
 
+    /// 끊은 계정은 받는 사람이 아니다 (ADR-0061). 안 그러면 "당신 계정을 끊었습니다"
+    /// 를 당사자가 받는다.
+    @Test("끊은 관리자에게는 보내지 않는다")
+    func cutOffAdminsAreSkipped() async throws {
+        try await withMigratedApp { app in
+            let (staying, _) = try await app.makeUser(email: "stay@example.com", role: .admin)
+            let (leaving, _) = try await app.makeUser(email: "gone@example.com", role: .admin)
+            let stored = try await settings(on: app)
+            stored.operationalAlerts = .people
+            try await stored.save(on: app.db)
+
+            try await AdminOperations.deactivate(
+                leaving, by: staying, on: app.db, logger: app.logger
+            )
+
+            let dm = RecordingChannel(kind: .slackDirectMessage)
+            let notifier = Notifier(database: app.db, channels: [dm], logger: app.logger)
+            await notifier.notifyOperators(NotificationMessage(title: "워커가 조용합니다"))
+
+            #expect(dm.endpoints == ["stay@example.com"])
+        }
+    }
+
     /// 알 수 없는 값은 개별 전송으로 접는다. 채널은 등록해 둔 것이 있어야 닿고
     /// 개별은 설정 없이 닿는다. 알 수 없는 상태에서는 닿는 쪽이 맞다.
     @Test("모르는 값은 개별 전송으로 접는다")

@@ -15,7 +15,7 @@ struct UserDeactivationTests {
     @Test("끊으면 이미 들고 있던 세션도 막힌다")
     func existingSessionStopsWorking() async throws {
         try await withMigratedApp { app in
-            let (admin, adminToken) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            let (admin, _) = try await app.makeUser(email: "admin@example.com", role: .admin)
             let (target, targetToken) = try await app.makeUser(
                 email: "leaver@example.com", role: .developer
             )
@@ -28,7 +28,6 @@ struct UserDeactivationTests {
             try await AdminOperations.deactivate(
                 target, by: admin, on: app.db, logger: app.logger
             )
-            _ = adminToken
 
             // 토큰은 아직 유효하다. 막는 것은 신원 쪽이다.
             try await app.testing().test(.GET, "/api/v1/me", headers: .bearer(targetToken)) {
@@ -134,6 +133,92 @@ struct UserDeactivationTests {
         }
     }
 
+    /// 세션과 로그인 말고 문이 하나 더 있다. 앱이 받아둔 코드를 세션으로 바꾸는
+    /// 자리다 (ADR-0061).
+    @Test("받아둔 코드로도 새 세션을 받지 못한다")
+    func authCodeExchangeIsBlocked() async throws {
+        try await withMigratedApp { app in
+            let (admin, _) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            let (target, _) = try await app.makeUser(email: "leaver@example.com", role: .developer)
+            let (plaintext, code) = AuthCode.issue(userID: try target.requireID())
+            try await code.save(on: app.db)
+
+            try await AdminOperations.deactivate(
+                target, by: admin, on: app.db, logger: app.logger
+            )
+
+            try await app.testing().test(
+                .POST, APIPath.tokenExchange,
+                beforeRequest: { try $0.content.encode(["code": plaintext]) }
+            ) { response in
+                #expect(response.status == .forbidden)
+            }
+        }
+    }
+
+    @Test("끊은 계정에는 업로드 권한을 줄 수 없다")
+    func cannotGrantUploadToACutOffAccount() async throws {
+        try await withMigratedApp { app in
+            let (admin, _) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            let (owner, token) = try await app.makeUser(email: "owner@example.com", role: .developer)
+            let (gone, _) = try await app.makeUser(email: "gone@example.com", role: .developer)
+            let registered = try await app.seedApp(
+                bundleID: "com.example.grant", name: "권한앱", owner: owner
+            )
+            try await AdminOperations.deactivate(gone, by: admin, on: app.db, logger: app.logger)
+
+            try await app.testing().test(
+                .POST, "/apps/\(try registered.requireID().uuidString)/members",
+                headers: .form(cookie: token),
+                beforeRequest: {
+                    try $0.content.encode(
+                        ["userID": try gone.requireID().uuidString], as: .urlEncodedForm
+                    )
+                }
+            ) { response in
+                #expect(response.status == .badRequest)
+            }
+
+            let reloaded = try #require(
+                try await App.find(try registered.requireID(), on: app.db)
+            )
+            #expect(!(try await reloaded.canUpload(gone, on: app.db)))
+        }
+    }
+
+    /// 화면을 오래 열어두면 그 사이에 다른 관리자가 정했을 수 있다.
+    @Test("이미 주인이 있는 앱은 다시 정하지 못한다")
+    func cannotReassignAnAppThatHasAnOwner() async throws {
+        try await withMigratedApp { app in
+            let (admin, adminToken) = try await app.makeUser(
+                email: "admin@example.com", role: .admin
+            )
+            let (owner, _) = try await app.makeUser(email: "owner@example.com", role: .developer)
+            let (other, _) = try await app.makeUser(email: "other@example.com", role: .developer)
+            let registered = try await app.seedApp(
+                bundleID: "com.example.taken", name: "주인 있는 앱", owner: owner
+            )
+            _ = admin
+
+            try await app.testing().test(
+                .POST, "/admin/apps/\(try registered.requireID().uuidString)/owner",
+                headers: .form(cookie: adminToken),
+                beforeRequest: {
+                    try $0.content.encode(
+                        ["userID": try other.requireID().uuidString], as: .urlEncodedForm
+                    )
+                }
+            ) { response in
+                #expect(response.status == .conflict)
+            }
+
+            let reloaded = try #require(
+                try await App.find(try registered.requireID(), on: app.db)
+            )
+            #expect(reloaded.$owner.id == (try owner.requireID()))
+        }
+    }
+
     @Test("끊긴 계정은 새 오너 후보에 나오지 않는다")
     func cutOffPeopleAreNotCandidates() async throws {
         try await withMigratedApp { app in
@@ -143,6 +228,31 @@ struct UserDeactivationTests {
 
             let found = try await PersonSearch.find(matching: "gone", on: app.db)
             #expect(found.candidates.isEmpty)
+        }
+    }
+
+    /// 제외를 질의에 넣지 않으면, 앞쪽이 전부 이미 권한 있는 사람일 때 결과가
+    /// 통째로 비어 "찾은 사람이 없습니다" 가 뜬다.
+    @Test("이미 권한 있는 사람이 많아도 나머지가 보인다")
+    func exclusionDoesNotEatTheWholePage() async throws {
+        try await withMigratedApp { app in
+            var excluded: Set<UUID> = []
+            for index in 0..<(PersonSearch.limit + 1) {
+                let (user, _) = try await app.makeUser(
+                    email: "kim\(String(format: "%02d", index))@example.com",
+                    role: .developer,
+                    name: "김아무개\(index)"
+                )
+                excluded.insert(try user.requireID())
+            }
+            let (late, _) = try await app.makeUser(
+                email: "kim99@example.com", role: .developer, name: "김마지막"
+            )
+
+            let found = try await PersonSearch.find(
+                matching: "김", excluding: excluded, on: app.db
+            )
+            #expect(found.candidates.map(\.id) == [try late.requireID().uuidString])
         }
     }
 

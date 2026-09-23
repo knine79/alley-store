@@ -175,44 +175,45 @@ enum AdminOperations {
             throw Abort(.badRequest, reason: "자기 계정은 끊을 수 없습니다. 다른 관리자에게 부탁하세요.")
         }
 
-        if target.role.canAdminister {
-            let remaining = try await User.query(on: database)
-                .filter(\.$role == .admin)
-                .filter(\.$id != targetID)
-                .filter(\.$deactivatedAt == nil)
-                .count()
-            guard remaining > 0 else {
-                throw Abort(.badRequest, reason: "마지막 관리자는 끊을 수 없습니다. 다른 관리자를 먼저 지정하세요.")
-            }
-        }
+        // **마지막 관리자를 따로 막지 않는다.** 여기 오는 사람은 로그인한 활성
+        // 관리자이고(`requireAdmin`), 바로 위에서 자기 자신은 끊지 못하게 했다.
+        // 그러니 끊고 나도 관리자가 최소 한 명, 곧 누른 사람이 남는다. 같은 것을
+        // 한 번 더 세는 검사를 두면 절대 지나가지 않는 분기가 생기고, 그 분기는
+        // 읽는 사람에게 "여기서 걸린다" 는 잘못된 안심을 준다.
 
         // 이미 끊긴 계정을 다시 눌러도 조용히 지나간다. 두 번 누른 사람에게 오류를
         // 보일 이유가 없고, 여기서 시각을 새로 쓰면 언제 끊었는지가 사라진다.
         guard target.isActive else { return Deactivation() }
-        _ = adminID
 
-        let owned = try await App.query(on: database)
-            .filter(\.$owner.$id == targetID)
-            .all()
-        var result = Deactivation()
-        for app in owned {
-            if let heir = try await firstUploader(of: app, on: database) {
-                app.$owner.id = try heir.requireID()
-                try await app.save(on: database)
-                // 오너는 언제나 올릴 수 있으므로 멤버 표에서는 뺀다. 앱 화면이
-                // 지키는 규칙이다.
-                try await AppMember.query(on: database)
-                    .filter(\.$app.$id == app.requireID())
-                    .filter(\.$user.$id == heir.requireID())
-                    .delete()
-                result.moved.append((app: app, newOwner: heir))
-            } else {
-                result.orphaned.append(app)
+        // **한 번에 되거나 아무것도 안 되거나.** 앱을 옮기다 중간에서 실패하면 일부만
+        // 주인이 바뀐 채 계정은 살아 있게 된다. 그 상태는 화면 어디에도 드러나지
+        // 않고, 다시 누르면 앞서 옮긴 것을 건너뛰어 요약이 달라진다.
+        let result = try await database.transaction { db -> Deactivation in
+            let owned = try await App.query(on: db)
+                .filter(\.$owner.$id == targetID)
+                .all()
+            var moved: [(app: App, newOwner: User)] = []
+            var orphaned: [App] = []
+            for app in owned {
+                if let heir = try await firstUploader(of: app, on: db) {
+                    app.$owner.id = try heir.requireID()
+                    try await app.save(on: db)
+                    // 오너는 언제나 올릴 수 있으므로 멤버 표에서는 뺀다. 앱 화면이
+                    // 지키는 규칙이다.
+                    try await AppMember.query(on: db)
+                        .filter(\.$app.$id == app.requireID())
+                        .filter(\.$user.$id == heir.requireID())
+                        .delete()
+                    moved.append((app: app, newOwner: heir))
+                } else {
+                    orphaned.append(app)
+                }
             }
-        }
 
-        target.deactivatedAt = Date()
-        try await target.save(on: database)
+            target.deactivatedAt = Date()
+            try await target.save(on: db)
+            return Deactivation(moved: moved, orphaned: orphaned)
+        }
 
         logger.notice(
             """
@@ -234,6 +235,9 @@ enum AdminOperations {
         let members = try await AppMember.query(on: database)
             .filter(\.$app.$id == app.requireID())
             .sort(\.$createdAt, .ascending)
+            // 같은 시각에 들어온 둘은 정렬만으로 순서가 정해지지 않는다. 그러면
+            // "가장 먼저 들어온 사람" 이 실행할 때마다 달라진다.
+            .sort(\.$id, .ascending)
             .with(\.$user)
             .all()
         return members.map(\.user).first { $0.isActive }

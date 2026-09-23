@@ -412,6 +412,7 @@ struct AppPagesController: RouteCollection, Sendable {
                     )
                 },
                 members: members,
+                ownerCandidates: members.filter { !$0.isOwner && $0.isActive != false },
                 memberQuery: memberQuery,
                 memberCandidates: memberCandidates,
                 memberSearchOverflowed: memberSearchOverflowed,
@@ -639,6 +640,15 @@ struct AppPagesController: RouteCollection, Sendable {
                 memberError: "고른 계정을 찾을 수 없습니다. 다시 검색해주세요."
             )
             return htmlResponse(view, status: .notFound)
+        }
+        // 검색에는 안 나오지만 폼을 손으로 만들거나 오래된 결과를 누르면 여기 온다.
+        guard target.isActive else {
+            let view = try await renderDetail(
+                on: request,
+                issuedToken: nil,
+                memberError: "끊은 계정에는 권한을 줄 수 없습니다."
+            )
+            return htmlResponse(view, status: .badRequest)
         }
 
         let appID = try app.requireID()
@@ -1007,14 +1017,6 @@ struct AppPagesController: RouteCollection, Sendable {
         return response
     }
 
-    /// 멤버로 넣을 후보를 찾는다.
-    ///
-    /// 이름과 이메일 어느 쪽으로 쳐도 걸리게 한다. 사람을 부르는 이름과 계정을
-    /// 가리키는 이메일이 머릿속에서 따로 놀아서, 한쪽만 받으면 "분명 있는데 안
-    /// 나온다" 가 된다.
-    ///
-    /// 이미 올릴 수 있는 사람은 뺀다. 눌러도 아무 일이 없는 줄을 보여줄 이유가 없다.
-
     /// 이 앱에 이미 올릴 수 있는 사람들의 id.
     ///
     /// **`loadMembers` 를 쓰지 않는다.** 그쪽은 오너를 미리 읽어둔 앱을 전제한다
@@ -1035,10 +1037,10 @@ struct AppPagesController: RouteCollection, Sendable {
             .with(\.$user)
             .all()
 
-        return try [AppMemberDTO(user: app.owner.toDTO(), isOwner: true)]
+        return try [AppMemberDTO(user: app.owner.toDTO(), isOwner: true, isActive: app.owner.isActive)]
             + members
             .filter { $0.$user.id != ownerID }
-            .map { AppMemberDTO(user: try $0.user.toDTO(), isOwner: false) }
+            .map { AppMemberDTO(user: try $0.user.toDTO(), isOwner: false, isActive: $0.user.isActive) }
     }
 }
 
@@ -1243,6 +1245,11 @@ struct AppDetailContext: Encodable {
     var app: AppRow
     var versions: [VersionRow]
     var members: [AppMemberDTO]
+    /// 오너로 넘길 수 있는 사람들. 오너 자신과 끊긴 계정을 뺀 멤버들이다.
+    ///
+    /// 화면에서 거르지 않고 여기서 거른다. 비어 있으면 폼 자체를 내지 않아야 하는데,
+    /// 템플릿에서는 거른 뒤의 수를 셀 수 없다.
+    var ownerCandidates: [AppMemberDTO]
     /// 방금 친 검색어. 다시 그릴 때 칸에 그대로 남긴다.
     var memberQuery: String?
     /// 그 검색어로 찾은 사람들. 이미 올릴 수 있는 사람은 빠져 있다.
@@ -1356,7 +1363,6 @@ struct DeployTokenFormValues: Codable {
 
 extension DeployTokenFormValues: Content {}
 
-/// 업로드 권한을 줄 사람 찾기의 크기.
 /// 검색 결과 한 줄.
 struct MemberCandidateRow: Encodable {
     var id: String

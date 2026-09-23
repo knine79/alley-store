@@ -361,6 +361,19 @@ struct AdminPagesController: RouteCollection, Sendable {
             return htmlResponse(view, status: .badRequest)
         }
 
+        // **정말 주인이 없는 앱인지 본다.** 이 화면은 오래 열어두게 되고, 그 사이에
+        // 다른 관리자가 정했거나 옛 오너가 되살아났을 수 있다. 확인하지 않으면 멀쩡한
+        // 오너가 남의 화면에서 밀려난다.
+        let previousOwner = try await User.find(app.$owner.id, on: request.db)
+        guard previousOwner?.isActive != true else {
+            let view = try await renderUsers(
+                error: "이미 주인이 있는 앱입니다. 화면을 새로 고치고 다시 보세요.",
+                viewedBy: admin,
+                on: request
+            )
+            return htmlResponse(view, status: .conflict)
+        }
+
         app.$owner.id = targetID
         try await app.save(on: request.db)
         // 새 오너는 멤버 표에 두지 않는다. 오너는 언제나 올릴 수 있다.
@@ -394,14 +407,26 @@ struct AdminPagesController: RouteCollection, Sendable {
         // 주인이 끊긴 앱. 끊을 때 함께 맡던 사람이 없어 넘기지 못한 것들이다
         // (ADR-0061). 여기 남아 있는 동안은 아무도 올릴 수 없다.
         let cutOffIDs = try users.filter { !$0.isActive }.map { try $0.requireID() }
+        let activeIDs = Set(try users.filter(\.isActive).map { try $0.requireID() })
         var orphaned: [OrphanedAppRow] = []
         if !cutOffIDs.isEmpty {
-            orphaned = try await App.query(on: request.db)
+            let candidates = try await App.query(on: request.db)
                 .filter(\.$owner.$id ~~ cutOffIDs)
                 .with(\.$owner)
                 .sort(\.$name)
                 .all()
-                .map(OrphanedAppRow.init)
+            for app in candidates {
+                // **올릴 수 있는 사람이 하나도 없는 앱만 남긴다.** "오너가 끊겼다" 로
+                // 고르면, 누가 멤버를 넣어준 뒤에도 목록에 남아서 "아무도 못 올린다"
+                // 는 설명이 거짓이 된다. 끊을 때 쓰는 규칙과 같은 것을 본다.
+                let hasActiveUploader = try await AppMember.query(on: request.db)
+                    .filter(\.$app.$id == app.requireID())
+                    .all()
+                    .contains { activeIDs.contains($0.$user.id) }
+                if !hasActiveUploader {
+                    orphaned.append(try OrphanedAppRow(app: app))
+                }
+            }
         }
 
         // 스크립트 없이 찾을 때. 폼이 그대로 제출되면 여기서 같은 검색을 해서
@@ -409,8 +434,21 @@ struct AdminPagesController: RouteCollection, Sendable {
         let query = (request.query[String.self, at: "member"] ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let searchedAppID = request.query[String.self, at: "app"]
-        if !query.isEmpty, let searchedAppID {
-            let found = try await PersonSearch.find(matching: query, on: request.db)
+        if !query.isEmpty, let searchedAppID, let appID = UUID(uuidString: searchedAppID) {
+            // 스크립트가 부르는 `/apps/:id/member-candidates` 와 같은 조건이어야 한다.
+            // 한쪽만 업로더를 빼면 스크립트가 있을 때와 없을 때 다른 사람이 나온다.
+            var already = Set(
+                try await AppMember.query(on: request.db)
+                    .filter(\.$app.$id == appID)
+                    .all()
+                    .map(\.$user.id)
+            )
+            if let owner = try await App.find(appID, on: request.db)?.$owner.id {
+                already.insert(owner)
+            }
+            let found = try await PersonSearch.find(
+                matching: query, excluding: already, on: request.db
+            )
             for index in orphaned.indices where orphaned[index].id == searchedAppID {
                 orphaned[index].query = query
                 orphaned[index].candidates = found.candidates
