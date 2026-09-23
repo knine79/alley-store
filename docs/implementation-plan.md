@@ -714,8 +714,8 @@ zip 은 받은 사람에게 풀고 옮기는 일을 시킵니다. 안 옮기고 
 **마지막이 MCP 입니다.** CLI 의 `alley mcp` 서브커맨드로 냅니다.
 
 - [x] stdio JSON-RPC. `initialize`·`tools/list`·`tools/call`·`ping`
-- [x] `upload_version` - 올린다. **기다리지는 않는다.** 공증까지 몇십 분 걸리는 일이
-      있어 기다리면 도구 호출이 먼저 끊긴다. 올린 뒤 `signing_status` 로 본다
+- [x] `upload_version` - 올린다. **기다리지는 않는다** (ADR-0062). 공증까지 몇십 분
+      걸리는 일이 있어 기다리면 도구 호출이 먼저 끊긴다. 올린 뒤 `signing_status` 로 본다
 - [x] `signing_status` - 실패 갈래와 할 일을 준다 (ADR-0023)
 - [x] `list_versions`, `release_version`
 - [x] `sparkle_feed` - `SUPublicEDKey` 와 쓸 수 있는 상태 (ADR-0057)

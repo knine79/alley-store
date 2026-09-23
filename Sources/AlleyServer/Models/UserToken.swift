@@ -78,7 +78,7 @@ public final class UserToken: Model, @unchecked Sendable {
     ///
     /// 워커(`alleyw_`)·배포(`alleyd_`)·운영(`alleyo_`)·피드(`alleyf_`) 다음이다.
     /// 설정 파일에 엉뚱한 것을 넣었을 때 "이건 배포 토큰입니다" 를 말해줄 수 있다.
-    public static let prefix = "alleyu_"
+    public static let prefix = UserTokenPrefix.person
 
     public static func generateToken() -> String {
         var bytes = [UInt8](repeating: 0, count: 32)
