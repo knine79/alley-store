@@ -254,6 +254,11 @@ Google 에서는 `hd`(hosted domain) claim 까지 함께 봅니다. 그 claim �
   - 최초 로그인 시 기본 `user`
   - 서버 설정의 초기 관리자 목록에 있으면 `admin`
   - `admin`이 웹 콘솔에서 `developer`로 승격
+- **사람 토큰으로도 붙습니다** ([ADR-0060](adr/0060-mcp-connects-as-a-person.md)).
+`alleyu_` 로 시작하는 값이고, 인증에 성공하면 그 사람으로 로그인시킵니다. 그 사람이
+**부를 수 있는 경로는 목록으로 정해져 있습니다**(`UserTokenScope`). 거기 없으면 그
+사람이 화면에서 할 수 있는 일이어도 되지 않습니다. 90일이면 만료되고, 계정을 끊으면
+함께 폐기됩니다
 - 다운로드 API도 인증 필수. 누가 언제 무슨 버전을 받았는지 기록합니다
 - 예외는 스토어 앱 자신을 받는 `/get` 하나입니다. 스토어 앱이 없는 사람에게 로그인을
   먼저 요구하면 순서가 막힙니다. 받아간 사실은 익명으로 남습니다
@@ -296,6 +301,7 @@ Google 에서는 `hd`(hosted domain) claim 까지 함께 봅니다. 그 claim �
 | `downloads`      | user_id, version_id, timestamp                             |
 | `deploy_tokens`  | app_id, 이름, 토큰 해시 (CI 업로드용, ADR-0015)                     |
 | `feed_tokens`    | app_id, 이름, 토큰 해시 (Sparkle 피드용, ADR-0017)                 |
+| `user_tokens`    | user_id, 이름, 토큰 해시, 만료 (에이전트용, [ADR-0060](adr/0060-mcp-connects-as-a-person.md)) |
 | `feedback`       | app_id, version_id, user_id, 별점, 글, 스크린샷, 익명 여부             |
 | `notification_targets` | app_id(nullable), 종류, 이름, 엔드포인트                     |
 

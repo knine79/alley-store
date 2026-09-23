@@ -210,7 +210,17 @@ enum AdminOperations {
                 }
             }
 
-            target.deactivatedAt = Date()
+            // 사람 토큰도 함께 끊는다 (ADR-0060). 90일을 사는 값이라 나간 사람 손에
+            // 남겨둘 수 없다. 토큰 쪽에서도 사람이 끊겼는지 보지만, 살아 있는 값을
+            // 남겨두는 것과 끊어두는 것은 다르다.
+            let now = Date()
+            try await UserToken.query(on: db)
+                .filter(\.$user.$id == targetID)
+                .filter(\.$revokedAt == nil)
+                .set(\.$revokedAt, to: now)
+                .update()
+
+            target.deactivatedAt = now
             try await target.save(on: db)
             return Deactivation(moved: moved, orphaned: orphaned)
         }
