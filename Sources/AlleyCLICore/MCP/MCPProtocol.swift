@@ -35,7 +35,6 @@ struct RPCError: Encodable {
     /// JSON-RPC 가 정해둔 값들. 우리가 쓰는 것만 적는다.
     static let methodNotFound = -32601
     static let invalidParams = -32602
-    static let internalError = -32603
 }
 
 /// 도구 하나의 생김새.
@@ -107,7 +106,8 @@ enum MCPToolResult {
     static func json(_ value: some Encodable) throws -> JSONValue {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        // 보기 좋게 들여쓰지 않는다. 줄바꿈과 공백이 모델의 창을 차지한다.
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         let data = try encoder.encode(value)
         return text(String(decoding: data, as: UTF8.self))
     }

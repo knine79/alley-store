@@ -55,11 +55,6 @@ public enum JSONValue: Codable, Sendable, Equatable {
         return nil
     }
 
-    public var boolValue: Bool? {
-        if case .bool(let value) = self { return value }
-        return nil
-    }
-
     public var objectValue: [String: JSONValue]? {
         if case .object(let value) = self { return value }
         return nil
@@ -67,17 +62,5 @@ public enum JSONValue: Codable, Sendable, Equatable {
 
     public subscript(key: String) -> JSONValue? {
         objectValue?[key]
-    }
-
-    /// 어떤 `Encodable` 이든 JSON 을 거쳐 이 상자로 옮긴다.
-    ///
-    /// DTO 를 그대로 도구 결과에 실을 때 쓴다. 필드를 손으로 옮겨 적으면 DTO 가
-    /// 늘어날 때마다 여기도 고쳐야 하고, 빠뜨린 것은 조용하다.
-    public static func encoding(_ value: some Encodable) throws -> JSONValue {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(value)
-        let decoder = JSONDecoder()
-        return try decoder.decode(JSONValue.self, from: data)
     }
 }

@@ -20,7 +20,7 @@ public struct MCPServer: Sendable {
 
     public init(
         api: StoreAPI,
-        write: @escaping @Sendable (String) -> Void = { print($0) },
+        write: @escaping @Sendable (String) -> Void = MCPServer.writeLine,
         complain: @escaping @Sendable (String) -> Void = {
             FileHandle.standardError.write(Data(($0 + "\n").utf8))
         }
@@ -30,10 +30,49 @@ public struct MCPServer: Sendable {
         self.complain = complain
     }
 
+    /// 한 줄을 표준 출력으로 내보낸다.
+    ///
+    /// **`print` 를 쓰지 않는다.** 표준 출력이 파이프면 libc 가 블록 단위로 모았다가
+    /// 내보내고, 그 버퍼는 프로세스가 끝날 때까지 비지 않는다. 우리 쪽은 답을 다
+    /// 만들어놓고 상대는 아무것도 못 받은 채 핸드셰이크에서 시간을 다 쓴다. 붙는
+    /// 상대가 언제나 파이프라서 이 경로에서는 늘 그렇게 된다. 워커도 같은 이유로
+    /// `FileHandle` 에 직접 쓴다.
+    public static func writeLine(_ line: String) {
+        // 요청을 나란히 처리하므로 두 응답이 같은 순간에 나갈 수 있다. 섞이면 두 줄
+        // 다 읽을 수 없는 것이 된다.
+        outputLock.lock()
+        defer { outputLock.unlock() }
+        FileHandle.standardOutput.write(Data((line + "\n").utf8))
+    }
+
+    private static let outputLock = NSLock()
+
     /// 표준 입력이 닫힐 때까지 한 줄씩 처리한다.
+    ///
+    /// **읽는 것과 처리하는 것을 나눈다.** 한 줄을 끝까지 처리하고 다음 줄을 읽으면,
+    /// 한 시간 걸리는 업로드 동안 상대가 보낸 `ping` 과 취소가 파이프에 쌓인 채
+    /// 읽히지 않는다. 그 사이에 상대는 서버가 죽었다고 보고 프로세스를 끊는다.
+    ///
+    /// 읽기는 전용 스레드에서 한다. `readLine` 은 값이 올 때까지 돌아오지 않는데,
+    /// 그것을 async 함수 안에서 그대로 부르면 협력 스레드 하나가 그동안 묶인다
+    /// (`Shell.runDetached` 가 같은 이유로 같은 일을 한다).
     public func run() async {
-        while let line = readLine(strippingNewline: true) {
-            await handleLine(line)
+        let lines = AsyncStream<String> { continuation in
+            let thread = Thread {
+                while let line = readLine(strippingNewline: true) {
+                    continuation.yield(line)
+                }
+                continuation.finish()
+            }
+            thread.name = "alley-mcp-stdin"
+            thread.start()
+        }
+
+        await withTaskGroup(of: Void.self) { group in
+            for await line in lines {
+                group.addTask { await handleLine(line) }
+            }
+            await group.waitForAll()
         }
     }
 
@@ -98,13 +137,14 @@ public struct MCPServer: Sendable {
         do {
             let result = try await MCPToolbox.run(name, arguments: arguments, api: api)
             send(.ok(id: id, result))
-        } catch let error as MCPToolbox.ToolError {
-            // 모르는 도구는 규약 오류다. 나머지는 결과로 돌려준다.
+        } catch let error as MCPToolbox.ToolError where error.isProtocolViolation {
+            // 없는 도구를 부르는 것은 규약을 어긴 것이다. 모델이 고쳐 쓸 것이 아니라
+            // 붙어 있는 쪽이 도구 목록을 잘못 읽은 것이다.
             send(.failed(id: id, code: RPCError.invalidParams, message: String(describing: error)))
         } catch {
-            // **실패를 결과로 돌려준다.** 서명이 실패했다거나 권한이 없다는 것은
-            // 에이전트가 읽고 다음 수를 정해야 하는 사실이다. JSON-RPC 오류로
-            // 던지면 그 사실이 모델에 닿지 않고 도구 호출만 깨진다.
+            // **나머지는 결과로 돌려준다.** 앱 이름을 잘못 적었다거나 서명이
+            // 실패했다는 것은 모델이 읽고 다음 수를 정해야 하는 사실이다. JSON-RPC
+            // 오류로 던지면 그 사실이 모델에 닿지 않고 도구 호출만 깨진다.
             send(.ok(id: id, MCPToolResult.failure(String(describing: error))))
         }
     }
