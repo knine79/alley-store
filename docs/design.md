@@ -619,9 +619,9 @@ GET   /api/v1/admin/portal/certificates      # 인증서 만료 현황 (ASC API)
 | 도구 | 하는 일 |
 | --- | --- |
 | `upload_version` | 올리고 서명 잡이 끝날 때까지 기다린다 |
-| `signing_status` | 실패 코드와 로그를 그대로 준다 |
+| `signing_status` | 실패 갈래와 무엇을 하면 되는지. 로그는 싣지 않는다 |
 | `list_versions` / `release_version` | 올린 것 중에 무엇을 내보낼지 |
-| `sparkle_feed` | 피드 주소, `SUPublicEDKey`, 지금 쓸 수 있는 상태인지 (ADR-0057) |
+| `sparkle_feed` | `SUPublicEDKey` 와 지금 쓸 수 있는 상태인지 (ADR-0057). 피드 주소는 서버도 모른다 |
 | `app_feedback` | 그 앱에 들어온 별점과 피드백 |
 
 **운영 기능은 넣지 않습니다.** 워커 조작, 워커 릴리스 올리기, 스토어 앱 조립은

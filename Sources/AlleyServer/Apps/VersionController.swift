@@ -85,23 +85,34 @@ public struct VersionController: RouteCollection, Sendable {
         let version = try await request.findVersion()
         _ = try await request.requireUploadRights(to: version.app)
 
-        let job = try await SigningJob.query(on: request.db)
-            .filter(\.$version.$id == version.requireID())
-            .sort(\.$createdAt, .descending)
+        let versionID = try version.requireID()
+        let running = try await SigningJob.query(on: request.db)
+            .filter(\.$version.$id == versionID)
+            .sort(\.$attempt, .descending)
             .first()
+        // 화면과 같은 판정을 쓴다. `createdAt` 으로 집으면 다시 올린 직후의 빈 잡이
+        // 앞선 실패를 지운다.
+        let report = try await SigningJob.latestReport(ofVersion: versionID, on: request.db)
 
-        let code = job?.failureCode
+        // **끝난 실패만 실패로 말한다.** 워커가 옮기다 끊긴 것 같은 일시적 실패는
+        // 서버가 큐로 되돌려 다시 시도하는데(ADR-0018), 그때도 잡에는 갈래가 남아
+        // 있다. 그것을 그대로 내주면 에이전트가 아직 서명 중인 버전을 고치겠다고
+        // 파일을 다시 올린다. 화면이 재시도 버튼을 `failed` 에서만 내는 것과 같은
+        // 기준이다.
+        let isFinalFailure = version.state == .failed
+        let code = isFinalFailure ? report?.failureCode : nil
+
         return SigningStatusDTO(
-            versionID: try version.requireID(),
+            versionID: versionID,
             state: version.state,
-            jobState: job?.state,
-            phase: job?.phaseName,
-            attempt: job?.attempt,
+            jobState: running?.state,
+            phase: running?.phaseName,
+            attempt: running?.attempt,
             failureCode: code,
             // 버전에 남은 이유를 먼저 본다. 잡이 여러 번 돌면 마지막 것만 남고,
             // 사람에게 보여준 값과 같아야 한다.
-            failureReason: version.failureReason ?? job?.failureReason,
-            whatToDo: code.map(SigningFailureGuidance.whatToDo)
+            failureReason: isFinalFailure ? (version.failureReason ?? running?.failureReason) : nil,
+            whatToDo: code.map(SigningFailureGuidance.forAgent)
         )
     }
 
@@ -394,7 +405,6 @@ extension UploadKind {
 
 extension VersionDTO: Content {}
 extension SigningStatusDTO: Content {}
-extension SparkleFeedDTO: Content {}
 extension UploadTicket: Content {}
 extension DownloadTicket: Content {}
 extension CreateAppRequest: Content {}
