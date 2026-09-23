@@ -107,6 +107,16 @@ public enum APIPath {
         "\(version(versionID))/release"
     }
 
+    /// 서명이 어디까지 왔는지 (ADR-0060).
+    public static func signingStatus(versionID: UUID) -> String {
+        "\(version(versionID))/signing"
+    }
+
+    /// 이 앱에서 Sparkle 을 쓸 수 있는 상태인가 (ADR-0060).
+    public static func sparkleFeedStatus(ofApp id: UUID) -> String {
+        "\(app(id))/sparkle"
+    }
+
     public static func download(versionID: UUID) -> String {
         "\(version(versionID))/download"
     }

@@ -316,6 +316,25 @@ extension Application {
 }
 
 extension Application {
+    /// 테스트용 사람 토큰 (ADR-0060). 원문을 돌려준다.
+    ///
+    /// 두 시험 묶음이 같은 것을 만든다. 각자 적어두면 `UserToken` 에 칸이 하나
+    /// 늘었을 때 한쪽만 고쳐진다.
+    func makeUserToken(
+        for user: User,
+        name: String = "에이전트",
+        expiresAt: Date = Date().addingTimeInterval(UserToken.lifetime)
+    ) async throws -> String {
+        let value = UserToken.generateToken()
+        try await UserToken(
+            name: name,
+            tokenHash: UserToken.hash(token: value),
+            userID: try user.requireID(),
+            expiresAt: expiresAt
+        ).save(on: db)
+        return value
+    }
+
     /// 테스트용 워커를 등록하고 토큰을 함께 준다.
     func makeWorker(name: String = "test-worker") async throws -> (worker: Worker, token: String) {
         let token = Worker.generateToken()

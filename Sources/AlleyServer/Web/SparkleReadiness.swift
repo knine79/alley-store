@@ -77,6 +77,17 @@ struct SparkleReadinessRow: Encodable {
         return nil
     }
 
+    /// 무엇이 걸려 있는지를 기계가 읽을 수 있는 값으로 (ADR-0060).
+    ///
+    /// 화면은 `blocker` 한 줄이면 되지만 API 는 갈래가 필요하다. 문구를 맞춰보는
+    /// 코드는 그 문장을 고치는 날 조용히 틀린다.
+    var state: SparkleReadiness {
+        if hasConflictingKeys { return .conflictingKeys }
+        if publicKey == nil { return .noKey }
+        if !hasNoRelease, !latestReleaseIsSigned { return .lastReleaseUnsigned }
+        return .ready
+    }
+
     static func of(app: App, on database: any Database) async throws -> SparkleReadinessRow {
         // 폐기된 워커는 보지 않는다. 더 이상 서명하지 않으므로 그 키가 달라도
         // 지금 배포에 영향이 없다.

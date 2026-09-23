@@ -34,14 +34,51 @@ public struct AppcastController: RouteCollection, Sendable {
         // 폐기 예정. 이미 배포된 앱이 들고 있는 형식이라 아직 받는다.
         open.get(":appID", "appcast.xml", use: legacyFeed)
 
-        let managed = routes
+        // 로그인한 사람이 앱 단위로 부르는 것들. 인증을 두 번 적지 않는다. 한쪽에만
+        // 미들웨어를 더하는 날 그 경로만 조용히 헐거워진다.
+        let ofApp = routes
             .grouped(SessionAuthenticator(), User.guardMiddleware())
             .grouped(APIPath.apps.pathComponents)
-            .grouped(":appID", "feed-tokens")
 
+        let managed = ofApp.grouped(":appID", "feed-tokens")
         managed.get(use: list)
         managed.post(use: issue)
         managed.delete(":tokenID", use: revoke)
+
+        // 앱에 넣을 공개키와 지금 쓸 수 있는 상태인지 (ADR-0060). 화면이 말하는
+        // 것과 같은 것을 같은 코드로 내준다.
+        ofApp.get(":appID", "sparkle", use: feedStatus)
+    }
+
+    /// 이 앱에서 Sparkle 을 쓸 수 있는 상태인가.
+    ///
+    /// **앱을 만드는 사람이 `SUPublicEDKey` 를 여기서 가져간다.** 개인키를 가진
+    /// 사람을 찾아갈 필요가 없다 (ADR-0057). 막혀 있으면 무엇이 막고 있는지도
+    /// 같은 줄로 온다.
+    @Sendable
+    func feedStatus(request: Request) async throws -> SparkleFeedDTO {
+        let app = try await request.findApp()
+        // **올릴 수 있는 사람이면 본다.** 피드 토큰을 발급하는 것과 다른 기준이다.
+        // 여기서 나가는 공개키는 워커 전체가 공유하는 공개 정보이고, 그것을 개인키
+        // 가진 사람 찾아가지 않고 얻게 하는 것이 ADR-0057 의 요점이다. 버전을 올리는
+        // 사람이 자기 앱의 `SUPublicEDKey` 를 못 보는 것은 앞뒤가 안 맞는다.
+        _ = try await request.requireUploadRights(to: app)
+
+        // 서로 기다릴 이유가 없다. 에이전트가 짧은 간격으로 부르는 자리다.
+        async let readinessTask = SparkleReadinessRow.of(app: app, on: request.db)
+        async let issuedTask = FeedToken.query(on: request.db)
+            .filter(\.$app.$id == app.requireID())
+            .filter(\.$revokedAt == nil)
+            .count()
+        let (readiness, issued) = try await (readinessTask, issuedTask)
+
+        return SparkleFeedDTO(
+            publicKey: readiness.publicKey,
+            canIssue: readiness.canIssue,
+            readiness: readiness.state,
+            note: readiness.blocker,
+            issuedFeedCount: issued
+        )
     }
 
     // MARK: - 피드
@@ -282,6 +319,7 @@ enum FeedTokenIssuing {
     }
 }
 
+extension SparkleFeedDTO: Content {}
 extension FeedTokenDTO: Content {}
 extension CreateFeedTokenRequest: Content {}
 extension CreatedFeedToken: Content {}
