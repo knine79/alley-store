@@ -36,7 +36,11 @@ public struct CLIConfig: Sendable {
         guard let token = environment["ALLEY_TOKEN"], !token.isEmpty else {
             throw ConfigError.missing(
                 "ALLEY_TOKEN",
-                hint: "웹 콘솔의 앱 상세 화면에서 발급한 배포 토큰입니다."
+                hint: """
+                    앱 상세 화면에서 발급한 배포 토큰(alleyd_), 또는 내 설정 > 내 \
+                    토큰에서 발급한 사람 토큰(alleyu_)입니다. mcp 는 사람 토큰이어야 \
+                    합니다.
+                    """
             )
         }
         guard let url = normalize(serverAddress: rawURL) else {

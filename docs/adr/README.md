@@ -69,6 +69,7 @@
 | [0059](0059-every-alert-picks-people-or-a-channel.md) | 알림은 어디서나 "사람들" 과 "채널" 중 하나를 고른다 | 수락됨 | 2026-09-21 |
 | [0060](0060-mcp-connects-as-a-person.md) | MCP 는 사람으로 붙고, 배포 토큰은 CI 에 남긴다 | 수락됨 | 2026-09-22 |
 | [0061](0061-leavers-are-cut-off-not-deleted.md) | 나간 사람은 지우지 않고 끊는다 | 수락됨 | 2026-09-22 |
+| [0062](0062-mcp-does-not-wait-and-answers-with-results.md) | MCP 는 올리고 기다리지 않고, 실패를 결과로 돌려준다 | 수락됨 | 2026-09-24 |
 
 ## 언제 쓰나
 

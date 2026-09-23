@@ -112,6 +112,11 @@ public enum APIPath {
         "\(version(versionID))/signing"
     }
 
+    /// 이 앱에 달린 별점과 피드백.
+    public static func feedback(ofApp id: UUID) -> String {
+        "\(apps)/\(id.uuidString)/feedback"
+    }
+
     /// 이 앱에서 Sparkle 을 쓸 수 있는 상태인가 (ADR-0060).
     public static func sparkleFeedStatus(ofApp id: UUID) -> String {
         "\(app(id))/sparkle"
