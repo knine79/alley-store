@@ -1,12 +1,9 @@
 #extend("layout"):
 #export("content"):
-<!-- 내 화면이 둘이 됐다. 껍데기의 이름을 누르면 알림으로 가는데, 그 화면에서
-     여기로 올 길이 없으면 주소를 외워야 한다. -->
-<nav class="tabs" aria-label="내 설정">
-    <a class="tab" href="/me/notifications">내 알림</a>
-    <span class="tab tab-current" aria-current="page">내 토큰</span>
-</nav>
-
+<!-- 발급은 리다이렉트하지 않는다. 원문이 이 응답에만 있어서다. 새로고침이 폼을
+     다시 보내면 90일짜리 토큰이 하나 더 생기므로 주소를 목록으로 바꿔둔다
+     (`no-resubmit.js`). 서버도 같은 이름을 거절한다. -->
+<div hidden data-resubmit-guard="/me/tokens"></div>
 <h1 class="page-title">내 토큰</h1>
 <p class="page-lead">
     코딩 에이전트가 나 대신 스토어를 다룰 때 쓰는 값입니다. 내가 화면에서 할 수 있는
@@ -32,7 +29,7 @@
     <h2 class="section-title">발급한 토큰</h2>
 #if(count(tokens) == 0):
 <div class="empty">
-    <p>발급한 토큰이 없습니다.</p>
+    <p>쓸 수 있는 토큰이 없습니다.</p>
     <p class="empty-note">아래에서 만들면 됩니다. 쓰는 곳마다 따로 만들면 하나를 끊어도 나머지는 그대로입니다.</p>
 </div>
 #else:
@@ -75,6 +72,38 @@
 </table>
 </div>
 #endif
+
+    <!-- 90일이면 다 만료된다. 한 목록에 두면 시간이 갈수록 죽은 줄이 쌓여서
+         "마지막 사용" 을 읽을 수 없게 된다. 기록은 남기되 접어둔다. -->
+    #if(count(retired) > 0):
+    <details class="archive">
+        <summary>지난 토큰 #count(retired)개 보기</summary>
+        <div class="table-scroll">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th class="table-fill">이름</th>
+                    <th class="table-tight">상태</th>
+                    <th class="table-tight">만료</th>
+                    <th class="table-tight">마지막 사용</th>
+                </tr>
+            </thead>
+            <tbody>
+                #for(token in retired):
+                <tr>
+                    <td class="table-fill table-muted">#(token.name)</td>
+                    <td class="table-tight"><span class="badge badge-failed">#(token.blocked)</span></td>
+                    <td class="table-tight table-muted"><time datetime="#(token.expiresAt.iso)" data-date-only="#(token.expiresAt.dateOnly)">#(token.expiresAt.display)</time></td>
+                    <td class="table-tight table-muted">
+                        #if(token.lastUsedAt):<time datetime="#(token.lastUsedAt.iso)" data-date-only="#(token.lastUsedAt.dateOnly)">#(token.lastUsedAt.display)</time>#else:쓴 적 없음#endif
+                    </td>
+                </tr>
+                #endfor
+            </tbody>
+        </table>
+        </div>
+    </details>
+    #endif
 
     <form class="form" method="post" action="/me/tokens">
         <label class="field">

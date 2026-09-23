@@ -850,12 +850,6 @@ struct AdminPagesController: RouteCollection, Sendable {
         return String(describing: error)
     }
 
-    private func htmlResponse(_ view: View, status: HTTPStatus) -> Response {
-        let response = Response(status: status)
-        response.headers.contentType = .html
-        response.body = .init(buffer: view.data)
-        return response
-    }
 }
 
 // MARK: - 화면별 데이터

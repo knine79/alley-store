@@ -8,6 +8,9 @@ import Vapor
 /// 역할 관리와 달리 이것은 그 사람의 취향이고, 잘못 정해도 다른 사람에게 영향이
 /// 없다.
 struct MePagesController: RouteCollection, Sendable {
+    /// 토큰 이름의 길이 상한. 목록에서 읽을 수 있을 만큼만 받는다.
+    static let maximumTokenNameLength = 60
+
     func boot(routes: any RoutesBuilder) throws {
         let pages = routes
             .grouped(SessionAuthenticator(), User.guardMiddleware())
@@ -42,6 +45,32 @@ struct MePagesController: RouteCollection, Sendable {
             )
             return htmlResponse(view, status: .badRequest)
         }
+        guard name.count <= Self.maximumTokenNameLength else {
+            let view = try await renderTokens(
+                issued: nil,
+                error: "이름이 너무 깁니다. \(Self.maximumTokenNameLength)자 안으로 적어주세요.",
+                on: request
+            )
+            return htmlResponse(view, status: .badRequest)
+        }
+
+        // **같은 이름은 거절한다.** 이 화면은 리다이렉트하지 않아서 새로고침하면 폼이
+        // 다시 제출된다. `no-resubmit.js` 가 주소를 바꿔주지만 스크립트가 없을 수도
+        // 있고, 그때마다 90일짜리 자격증명이 하나씩 더 생긴다. 배포 토큰과 워커
+        // 토큰이 같은 이유로 같은 검사를 한다.
+        let duplicate = try await UserToken.query(on: request.db)
+            .filter(\.$user.$id == user.requireID())
+            .filter(\.$name == name)
+            .filter(\.$revokedAt == nil)
+            .first()
+        if let duplicate, duplicate.isUsable() {
+            let view = try await renderTokens(
+                issued: nil,
+                error: "'\(name)' 은 이미 쓰고 있는 이름입니다. 다른 이름을 쓰거나 그 토큰을 먼저 폐기하세요.",
+                on: request
+            )
+            return htmlResponse(view, status: .conflict)
+        }
 
         let value = UserToken.generateToken()
         let token = UserToken(
@@ -56,7 +85,8 @@ struct MePagesController: RouteCollection, Sendable {
         // 리다이렉트하지 않는다. 원문을 한 번만 보여주는 화면이라 새로고침으로
         // 날아가면 다시 발급받는 수밖에 없다.
         let view = try await renderTokens(issued: value, error: nil, on: request)
-        return htmlResponse(view, status: .ok)
+        // 배포 토큰 발급과 같은 응답을 준다. 만든 것이 있으면 201 이다.
+        return htmlResponse(view, status: .created)
     }
 
     @Sendable
@@ -78,11 +108,14 @@ struct MePagesController: RouteCollection, Sendable {
             throw Abort(.notFound, reason: "그런 토큰이 없습니다.")
         }
 
-        if token.revokedAt == nil {
-            token.revokedAt = Date()
-            try await token.save(on: request.db)
-            request.logger.notice("사람 토큰 폐기 [사람: \(user.email), 이름: \(token.name)]")
+        // 이미 죽은 것을 또 폐기하면 그렇다고 말한다. 조용히 넘기면 두 번 누른 사람과
+        // 한 번에 성공한 사람이 같은 화면을 본다 (`DeployTokenIssuing.revoke` 와 같다).
+        guard token.revokedAt == nil else {
+            throw Abort(.conflict, reason: "이미 폐기된 토큰입니다.")
         }
+        token.revokedAt = Date()
+        try await token.save(on: request.db)
+        request.logger.notice("사람 토큰 폐기 [사람: \(user.email), 이름: \(token.name)]")
         return request.redirect(to: "/me/tokens")
     }
 
@@ -97,22 +130,19 @@ struct MePagesController: RouteCollection, Sendable {
             .sort(\.$createdAt, .descending)
             .all()
 
+        // 쓸 수 있는 것과 죽은 것을 나눈다. 90일이면 다 만료되므로, 한 목록에 두면
+        // 시간이 갈수록 죽은 줄이 쌓여 "마지막 사용" 을 읽을 수 없게 된다.
+        let rows = try tokens.map(TokenRow.init)
         return try await request.view.render(
             "me-tokens",
             MyTokensContext(
-                page: try await request.pageContext(title: "내 토큰"),
-                tokens: try tokens.map(TokenRow.init),
+                page: try await request.pageContext(title: "내 토큰", myTab: .tokens),
+                tokens: rows.filter(\.isUsable),
+                retired: rows.filter { !$0.isUsable },
                 issued: issued,
                 error: error
             )
         ).get()
-    }
-
-    private func htmlResponse(_ view: View, status: HTTPStatus) -> Response {
-        let response = Response(status: status)
-        response.headers.contentType = .html
-        response.body = .init(buffer: view.data)
-        return response
     }
 
     @Sendable
@@ -142,11 +172,7 @@ struct MePagesController: RouteCollection, Sendable {
 
         // 리다이렉트하지 않는다. 바꾼 값이 그대로 보이는 화면을 다시 그리고,
         // 저장됐다는 것만 위에 띄운다.
-        let view = try await render(saved: true, on: request)
-        let response = Response(status: .ok)
-        response.headers.contentType = .html
-        response.body = .init(buffer: view.data)
-        return response
+        return htmlResponse(try await render(saved: true, on: request), status: .ok)
     }
 
     private func render(saved: Bool, on request: Request) async throws -> View {
@@ -154,7 +180,7 @@ struct MePagesController: RouteCollection, Sendable {
         return try await request.view.render(
             "me-notifications",
             MyNotificationsContext(
-                page: try await request.pageContext(title: "내 알림"),
+                page: try await request.pageContext(title: "내 알림", myTab: .notifications),
                 signingFailure: user.notifySigningFailure,
                 feedback: user.notifyFeedback,
                 ways: await PersonalDelivery.all(for: user, on: request),
@@ -336,7 +362,10 @@ extension NotificationPreferenceValues: Content {}
 /// 내 토큰 화면이 쓰는 값 (ADR-0060).
 struct MyTokensContext: Encodable {
     var page: PageContext
+    /// 지금 쓸 수 있는 것.
     var tokens: [TokenRow]
+    /// 폐기했거나 만료된 것. 접어서 보여준다.
+    var retired: [TokenRow]
     /// 방금 발급한 토큰의 원문. 이 응답에만 있다.
     var issued: String?
     var error: String?
@@ -363,10 +392,13 @@ struct TokenRow: Encodable {
         self.createdAt = DateStyle.minute.display(from: token.createdAt ?? Date())
         self.expiresAt = DateStyle.minute.display(from: token.expiresAt)
         self.lastUsedAt = token.lastUsedAt.map { DateStyle.minute.display(from: $0) }
-        self.isUsable = token.isUsable()
+        // 시계를 한 번만 읽는다. 두 번 읽으면 그 사이에 만료된 토큰이 "쓸 수 있는데
+        // 만료됨" 으로 그려진다.
+        let usable = token.isUsable()
+        self.isUsable = usable
         if token.revokedAt != nil {
             self.blocked = "폐기함"
-        } else if token.expiresAt <= Date() {
+        } else if !usable {
             self.blocked = "만료됨"
         } else {
             self.blocked = nil

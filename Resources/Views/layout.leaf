@@ -42,6 +42,7 @@
 
     <main class="page">
         #extend("admin-nav")
+        #extend("my-nav")
         #import("content")
     </main>
 
