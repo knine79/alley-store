@@ -754,6 +754,34 @@ a.tab:hover {
     transform: translateY(1px);
 }
 
+/* 누를 수 없는 카드. 카드 안에 고르는 칸이 들어 있어서 카드 자체는 링크가 아니다.
+   `.card` 의 뜨는 효과를 그대로 두면 눌러볼 것처럼 보이고, 눌러도 아무 일이 없다.
+   탈퇴 화면이 앱마다 소유권 이전받을 사람을 고르게 하는 자리에 쓴다. */
+.card-static,
+.card-static:hover {
+    box-shadow: none;
+    border-color: var(--border);
+}
+
+.card-static:active {
+    transform: none;
+}
+
+/* 카드 안에 고르는 칸이 들어올 때 제목과 붙지 않게 띄운다. 앱 목록의 카드는
+   제목 아래가 설명이라 붙어도 한 덩어리로 읽히는데, 칸은 따로 선 것이라 붙으면
+   제목에 딸린 라벨처럼 보인다. */
+.card-head + .field,
+.card-head + .form-inline,
+.card-head + .field-note {
+    margin-top: var(--space-3);
+}
+
+/* 카드 목록 뒤에 다음 묶음 제목이 오면 위를 띄운다. 안 띄우면 앞 묶음의 마지막
+   카드에 붙어서 그 카드에 딸린 설명처럼 읽힌다. */
+.card-list + .form-group-title {
+    margin-top: var(--space-7);
+}
+
 /* 목록에 선 앱의 얼굴.
  *
  * 스토어 앱 목록에는 아이콘이 있는데 웹에는 없었다. 이름만 늘어선 목록은 다 같아
@@ -963,6 +991,15 @@ a.tab:hover {
 }
 
 .table-muted {
+    color: var(--text-muted);
+}
+
+
+/* 화면 맨 아래에 조용히 두는 줄. 탈퇴처럼 자주 누를 일이 없는 것이 여기 온다.
+   눈에 띄면 눌러볼 것처럼 보이고, 너무 숨기면 찾다가 관리자에게 묻게 된다. */
+.page-footnote {
+    margin: var(--space-8) 0 0;
+    font-size: var(--font-sm);
     color: var(--text-muted);
 }
 

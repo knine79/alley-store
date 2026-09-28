@@ -70,6 +70,7 @@
 | [0060](0060-mcp-connects-as-a-person.md) | MCP 는 사람으로 붙고, 배포 토큰은 CI 에 남긴다 | 수락됨 | 2026-09-22 |
 | [0061](0061-leavers-are-cut-off-not-deleted.md) | 나간 사람은 지우지 않고 탈퇴 처리한다 | 수락됨 | 2026-09-22 |
 | [0062](0062-mcp-does-not-wait-and-answers-with-results.md) | MCP 는 올리고 기다리지 않고, 실패를 결과로 돌려준다 | 수락됨 | 2026-09-24 |
+| [0063](0063-leaving-is-something-you-can-do-yourself.md) | 나가는 것은 본인도 할 수 있다 | 수락됨 | 2026-09-28 |
 
 ## 언제 쓰나
 

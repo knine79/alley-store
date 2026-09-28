@@ -1,5 +1,6 @@
 import AlleyShared
 import Fluent
+import SQLKit
 import Foundation
 import Vapor
 
@@ -104,29 +105,35 @@ enum AdminOperations {
         on database: any Database,
         logger: Logger
     ) async throws {
-        // 마지막 관리자가 스스로 강등하면 아무도 설정을 못 바꾸게 된다.
-        // 남은 관리자가 없어지는 변경만 막는다.
-        if target.role.canAdminister, !role.canAdminister {
-            let targetID = try target.requireID()
-            let remaining = try await User.query(on: database)
-                .filter(\.$role == .admin)
-                .filter(\.$id != targetID)
-                // 탈퇴 처리된 계정은 세지 않는다 (ADR-0061). 로그인하지 못하는 사람을 남은
-                // 관리자로 치면, 아무도 들어올 수 없는 스토어가 이 검사를 통과한다.
-                .filter(\.$deactivatedAt == nil)
-                .count()
-            guard remaining > 0 else {
-                throw Abort(.badRequest, reason: "마지막 관리자의 역할은 바꿀 수 없습니다. 다른 관리자를 먼저 지정하세요.")
-            }
-        }
-
         let previous = target.role
-        target.role = role
-        // 여기를 지나면 자동 승격이 이 계정을 건너뛴다 (ADR-0056). 이 표시가 없으면
-        // `user` 로 내려둔 계정이 다음 웹 로그인에 다시 `developer` 가 되어, 누르기는
-        // 하는데 아무것도 바뀌지 않는 버튼이 된다.
-        target.roleSetByAdmin = true
-        try await target.save(on: database)
+        try await database.transaction { db in
+            // 마지막 관리자가 스스로 강등하면 아무도 설정을 못 바꾸게 된다.
+            // 남은 관리자가 없어지는 변경만 막는다.
+            if target.role.canAdminister, !role.canAdminister {
+                // 세고 나서 바꾸는 사이에 남이 끼어들면 답이 틀린다. 직접 탈퇴도
+                // 같은 것을 세므로 같은 잠금을 잡는다.
+                try await AdminCensus.lock(on: db)
+
+                let targetID = try target.requireID()
+                let remaining = try await User.query(on: db)
+                    .filter(\.$role == .admin)
+                    .filter(\.$id != targetID)
+                    // 탈퇴 처리된 계정은 세지 않는다 (ADR-0061). 로그인하지 못하는 사람을 남은
+                    // 관리자로 치면, 아무도 들어올 수 없는 스토어가 이 검사를 통과한다.
+                    .filter(\.$deactivatedAt == nil)
+                    .count()
+                guard remaining > 0 else {
+                    throw Abort(.badRequest, reason: "마지막 관리자의 역할은 바꿀 수 없습니다. 다른 관리자를 먼저 지정하세요.")
+                }
+            }
+
+            target.role = role
+            // 여기를 지나면 자동 승격이 이 계정을 건너뛴다 (ADR-0056). 이 표시가 없으면
+            // `user` 로 내려둔 계정이 다음 웹 로그인에 다시 `developer` 가 되어, 누르기는
+            // 하는데 아무것도 바뀌지 않는 버튼이 된다.
+            target.roleSetByAdmin = true
+            try await target.save(on: db)
+        }
 
         logger.notice(
             "역할 변경 [대상: \(target.email), \(previous.rawValue) → \(role.rawValue), 관리자: \(admin.email)]"
@@ -137,7 +144,7 @@ enum AdminOperations {
     struct Deactivation: Sendable {
         /// 새 소유자를 찾은 앱들.
         var moved: [(app: App, newOwner: User)] = []
-        /// 함께 맡던 사람이 없어 소유자가 비어버린 앱들. 관리자가 손으로 정해야 한다.
+        /// 공동 관리자가 없어 소유자가 비어버린 앱들. 관리자가 손으로 정해야 한다.
         var orphaned: [App] = []
     }
 
@@ -146,12 +153,12 @@ enum AdminOperations {
     /// **행을 지우지 않고 시각만 남긴다.** 누가 올렸고 누가 받아갔는지가 이 행을
     /// 가리킨다.
     ///
-    /// **맡던 앱은 함께 맡던 사람에게 간다.** 그 앱에 업로드 권한이 있는 사람 중
+    /// **소유하던 앱은 공동 관리자에게 간다.** 그 앱에 업로드 권한이 있는 사람 중
     /// 가장 먼저 들어온 사람이다. 그 사람이 그 앱을 가장 오래 만졌을 가능성이 높고,
     /// 탈퇴 처리하는 관리자는 대개 그 앱과 아무 관계가 없다. 관리자에게 몰아주면 목록만
     /// 길어지고 실제 담당자와 어긋난다.
     ///
-    /// 함께 맡던 사람이 없으면 **넘기지 않는다.** 아무나 지목하는 것보다 비어 있는
+    /// 공동 관리자가 없으면 **이전하지 않는다.** 아무나 지목하는 것보다 비어 있는
     /// 것이 낫다. 대신 그 앱들을 돌려줘서 관리 화면이 "소유자를 정해야 하는 앱" 으로
     /// 모아 보여준다. 탈퇴 처리된 사람이 소유자로 남아 있어도 그 계정은 로그인하지 못하고,
     /// 관리자는 여전히 그 앱을 만질 수 있다.
@@ -227,14 +234,14 @@ enum AdminOperations {
 
         logger.notice(
             """
-            계정을 탈퇴 처리했습니다 [대상: \(target.email), 넘긴 앱: \(result.moved.count)개, \
+            계정을 탈퇴 처리했습니다 [대상: \(target.email), 이전한 앱: \(result.moved.count)개, \
             소유자를 정해야 하는 앱: \(result.orphaned.count)개, 관리자: \(admin.email)]
             """
         )
         return result
     }
 
-    /// 이 앱을 함께 맡던 사람 중 가장 먼저 들어온 사람.
+    /// 이 앱의 공동 관리자 중 가장 먼저 들어온 사람.
     ///
     /// 탈퇴 처리된 계정은 건너뛴다. 못 들어오는 사람에게 넘기면 그 앱은 그 자리에서 다시
     /// 소유자를 잃는다.
@@ -251,6 +258,120 @@ enum AdminOperations {
             .with(\.$user)
             .all()
         return members.map(\.user).first { $0.isActive }
+    }
+
+    /// 본인이 직접 탈퇴한 결과.
+    struct Withdrawal: Sendable {
+        /// 나가는 사람이 직접 지목해 넘긴 앱들.
+        var handedOver: [(app: App, newOwner: User)] = []
+    }
+
+    /// 본인이 직접 탈퇴한다 (ADR-0063).
+    ///
+    /// `deactivate` 와 끝 상태는 같지만 가는 길이 다르다. 저쪽은 나간 뒤에 관리자가
+    /// 치우는 자리라 앱을 규칙으로 넘기고 남는 것은 화면에 모아둔다. 이쪽은 아직
+    /// 나가지 않은 사람이 누르는 자리다. **누가 이어받을지 가장 잘 아는 사람이
+    /// 그 자리에 있으므로, 앱을 하나도 빠짐없이 지목하게 하고 남기지 않는다.**
+    ///
+    /// **마지막 관리자는 나갈 수 없다.** `deactivate` 는 누른 사람이 관리자로 남아서
+    /// 이 검사가 필요 없었다. 여기서는 누른 사람이 사라지므로, 막지 않으면 아무도
+    /// 들어올 수 없는 스토어가 된다.
+    @discardableResult
+    static func withdraw(
+        _ user: User,
+        handingOver assignments: [UUID: UUID],
+        on database: any Database,
+        logger: Logger
+    ) async throws -> Withdrawal {
+        let userID = try user.requireID()
+        guard user.isActive else {
+            throw Abort(.badRequest, reason: "이미 탈퇴한 계정입니다.")
+        }
+
+        let result = try await database.transaction { db -> Withdrawal in
+            // **관리자 수를 세는 일은 한 번에 하나만 한다.** 마지막 둘이 같은 순간에
+            // 누르면 둘 다 "나 말고 한 명 남았다" 를 보고 둘 다 나간다. 관리자가
+            // 없는 스토어는 아무도 설정을 바꿀 수 없다.
+            //
+            // 세는 것을 트랜잭션 안으로 옮기는 것만으로는 모자란다. Postgres 의
+            // 기본 격리 수준에서는 옆 트랜잭션이 아직 커밋하지 않은 변경이 보이지
+            // 않아서, 둘 다 여전히 한 명을 센다. 이 구간을 아예 줄 세운다.
+            try await AdminCensus.lock(on: db)
+
+            if user.role.canAdminister {
+                let remaining = try await User.query(on: db)
+                    .filter(\.$role == .admin)
+                    .filter(\.$id != userID)
+                    .filter(\.$deactivatedAt == nil)
+                    .count()
+                guard remaining > 0 else {
+                    throw Abort(
+                        .badRequest,
+                        reason: "마지막 관리자는 탈퇴할 수 없습니다. 다른 사람을 관리자로 지정한 뒤에 하세요."
+                    )
+                }
+            }
+
+            // **화면을 그린 뒤에 앱이 늘었을 수 있다.** 그 사이 누군가 이 사람에게
+            // 앱을 넘겼다면 지목되지 않은 앱이 남는다. 그것을 소유자 없이 두면
+            // 앱을 다 넘기게 한 뜻이 없어진다.
+            let owned = try await App.query(on: db)
+                .filter(\.$owner.$id == userID)
+                .all()
+            var handedOver: [(app: App, newOwner: User)] = []
+            for app in owned {
+                let appID = try app.requireID()
+                guard let newOwnerID = assignments[appID] else {
+                    throw Abort(
+                        .badRequest,
+                        reason: "'\(app.name)' 의 소유권을 이전할 사람을 고르지 않았습니다. 화면을 새로 고치고 다시 하세요."
+                    )
+                }
+                guard newOwnerID != userID else {
+                    throw Abort(.badRequest, reason: "'\(app.name)' 의 소유권을 자기 자신에게 이전할 수 없습니다.")
+                }
+                // **올릴 수 있는 사람으로 좁히지 않는다.** 앱 화면의 소유권 이전은
+                // 이미 권한이 있는 사람 중에서만 고르게 한다. 거기서는 아무나 골라
+                // 관계없는 사람이 한 번의 실수로 소유자가 되는 것을 막는 것이 맞다.
+                //
+                // 여기서는 단독으로 관리하던 앱에 후보가 아예 없다. 좁히면 권한을
+                // 먼저 주고 와서 다시 탈퇴하라는 말이 되고, 그러다 안 하고 만다.
+                // 주인 없는 앱에 소유자를 정하는 자리도 같은 이유로 활성 계정이면
+                // 누구든 받는다 (ADR-0061). 살아 있는 계정인지만 본다.
+                guard let newOwner = try await User.find(newOwnerID, on: db), newOwner.isActive else {
+                    throw Abort(
+                        .badRequest,
+                        reason: "'\(app.name)' 의 소유권을 이전할 사람을 찾지 못했습니다. 화면을 새로 고치고 다시 하세요."
+                    )
+                }
+
+                app.$owner.id = newOwnerID
+                try await app.save(on: db)
+                // 소유자는 언제나 올릴 수 있으므로 멤버 표에서는 뺀다.
+                try await AppMember.query(on: db)
+                    .filter(\.$app.$id == appID)
+                    .filter(\.$user.$id == newOwnerID)
+                    .delete()
+                handedOver.append((app: app, newOwner: newOwner))
+            }
+
+            // 사람 토큰은 여기서도 함께 폐기한다 (ADR-0060).
+            let now = Date()
+            try await UserToken.query(on: db)
+                .filter(\.$user.$id == userID)
+                .filter(\.$revokedAt == nil)
+                .set(\.$revokedAt, to: now)
+                .update()
+
+            user.deactivatedAt = now
+            try await user.save(on: db)
+            return Withdrawal(handedOver: handedOver)
+        }
+
+        logger.notice(
+            "직접 탈퇴했습니다 [대상: \(user.email), 이전한 앱: \(result.handedOver.count)개]"
+        )
+        return result
     }
 
     /// 탈퇴 처리된 계정을 되돌린다.
