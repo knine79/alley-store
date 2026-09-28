@@ -18,6 +18,8 @@ struct PageContext: Encodable {
     /// 않으므로, 관리자 화면이 아닌 곳에 탭이 새어 나오는 일은 값을 넘기지 않는 것으로
     /// 막힌다. 화면마다 빼는 것을 기억할 필요가 없다.
     var adminTabs: [AdminTabLink]
+    /// 내 설정 화면 탭. 관리자 탭과 같은 이유로 여기 둔다.
+    var myTabs: [AdminTabLink]
     /// 정적 파일 주소에 붙는 지문. `AssetVersion` 참고.
     var assetVersion: String
     /// 폼을 POST 로 받아 그 자리에서 그린 화면인가.
@@ -84,7 +86,8 @@ extension Request {
     ///     넘기면 그려지지 않는다.
     func pageContext(
         title: String? = nil,
-        adminTab: AdminTab? = nil
+        adminTab: AdminTab? = nil,
+        myTab: MyTab? = nil
     ) async throws -> PageContext {
         let user = auth.get(User.self)
         return PageContext(
@@ -95,6 +98,7 @@ extension Request {
             user: user.flatMap { try? $0.toDTO() },
             isAdmin: user?.role.canAdminister ?? false,
             adminTabs: adminTab.map(AdminTab.links(current:)) ?? [],
+            myTabs: myTab.map(MyTab.links(current:)) ?? [],
             assetVersion: application.assetVersion.value,
             isFormResult: method == .POST
         )
