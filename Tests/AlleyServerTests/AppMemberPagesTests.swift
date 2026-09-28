@@ -62,7 +62,7 @@ struct AppMemberPagesTests {
                 #expect(!found.overflowed)
             }
 
-            // 오너는 이미 올릴 수 있다. 눌러도 아무 일이 없는 줄을 보여줄 이유가 없다.
+            // 소유자는 이미 올릴 수 있다. 눌러도 아무 일이 없는 줄을 보여줄 이유가 없다.
             try await app.testing().test(
                 .GET, "/apps/\(appID)/member-candidates?q=owner",
                 headers: .sessionCookie(token)
@@ -129,7 +129,7 @@ struct AppMemberPagesTests {
                 #expect(response.body.string.contains("권한 주기"))
             }
 
-            // 오너는 표에 없어도 올릴 수 있다. 그래서 후보에도 없다.
+            // 소유자는 표에 없어도 올릴 수 있다. 그래서 후보에도 없다.
             try await app.testing().test(
                 .GET, "/apps/\(appID)?member=owner",
                 headers: .sessionCookie(token)
@@ -178,7 +178,7 @@ struct AppMemberPagesTests {
         }
     }
 
-    /// 멤버는 올릴 수만 있고 관리하지는 못한다. 남을 끌어들이는 것은 오너 몫이다.
+    /// 멤버는 올릴 수만 있고 관리하지는 못한다. 남을 끌어들이는 것은 소유자 몫이다.
     @Test("멤버는 다른 사람에게 권한을 주지 못한다")
     func membersCannotGrant() async throws {
         try await withMigratedApp { app in

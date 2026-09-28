@@ -57,7 +57,7 @@ struct AppRemovalTests {
         }
     }
 
-    /// 멤버는 버전을 올릴 수는 있어도 등록 자체를 없애지는 못한다. 그건 오너의
+    /// 멤버는 버전을 올릴 수는 있어도 등록 자체를 없애지는 못한다. 그건 소유자의
     /// 결정이다 (`requireManageAccess`).
     @Test("남은 지우지 못한다")
     func otherPeopleCannot() async throws {

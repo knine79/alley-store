@@ -78,7 +78,7 @@ extension Feedback {
     /// 화면에 내보낼 형태로 바꾼다.
     ///
     /// - Parameters:
-    ///   - viewer: 지금 보는 사람. 자기 것인지 판단하고, 익명이라도 오너에게는
+    ///   - viewer: 지금 보는 사람. 자기 것인지 판단하고, 익명이라도 소유자에게는
     ///             보여줄지 결정하는 자리다.
     ///   - revealAuthor: 익명이어도 이름을 보여줄지. 지금은 언제나 false 다.
     public func toDTO(
