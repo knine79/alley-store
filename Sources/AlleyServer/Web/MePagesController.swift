@@ -225,7 +225,15 @@ struct MePagesController: RouteCollection, Sendable {
                     .sorted()
             )
 
-            if let pickedID = chosen[appID], let picked = try await User.find(pickedID, on: request.db) {
+            // **고른 사람이 받을 수 있는 사람인지 여기서도 본다.** 고른 값은
+            // 주소에 실려 오므로 손으로 만들 수 있다. 확인하지 않으면 탈퇴한
+            // 계정이나 자기 자신을 넣어도 화면은 "정해졌다" 로 그리고 버튼까지
+            // 풀린다. 눌러야 비로소 서버가 거절해서, 사람은 다 해놓고 마지막에
+            // 막힌다. 보내는 쪽에서 거절할 것은 그리는 쪽에서도 거절한다.
+            if let pickedID = chosen[appID],
+               pickedID != userID,
+               let picked = try await User.find(pickedID, on: request.db),
+               picked.isActive {
                 row.chosenID = pickedID.uuidString
                 row.chosenName = picked.name
                 row.chosenEmail = picked.email
