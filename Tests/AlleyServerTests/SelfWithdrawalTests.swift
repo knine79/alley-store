@@ -268,4 +268,78 @@ struct SelfWithdrawalTests {
             }
         }
     }
+
+    /// 주소는 손으로 만들 수 있다. 보내는 쪽에서 거절할 것은 그리는 쪽에서도
+    /// 거절해야 한다. 안 그러면 다 해놓고 마지막에 막힌다.
+    @Test("탈퇴한 사람을 주소로 넣어도 정해진 것으로 보이지 않는다")
+    func acraftedChoiceOfADepartedUserIsIgnored() async throws {
+        try await withMigratedApp { app in
+            let (admin, _) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            let (leaving, token) = try await app.makeUser(
+                email: "leaving@example.com", role: .developer
+            )
+            let (gone, _) = try await app.makeUser(email: "gone@example.com", role: .developer)
+            let solo = try await app.seedApp(
+                bundleID: "com.example.solo", name: "혼자 관리하는 앱", owner: leaving
+            )
+            try await AdminOperations.deactivate(gone, by: admin, on: app.db, logger: app.logger)
+            let pair = "\(try solo.requireID().uuidString):\(try gone.requireID().uuidString)"
+
+            try await app.testing().test(
+                .GET, "/me/withdraw?assignment=\(pair)", headers: .sessionCookie(token)
+            ) { response in
+                #expect(response.status == .ok)
+                #expect(!response.body.string.contains("gone@example.com"))
+                #expect(response.body.string.contains("아직 소유권 이전 받을 사람을 정하지 않은 앱이 있습니다"))
+            }
+        }
+    }
+
+    @Test("자기 자신을 주소로 넣어도 정해진 것으로 보이지 않는다")
+    func acraftedChoiceOfYourselfIsIgnored() async throws {
+        try await withMigratedApp { app in
+            _ = try await app.makeUser(email: "admin@example.com", role: .admin)
+            let (leaving, token) = try await app.makeUser(
+                email: "leaving@example.com", role: .developer
+            )
+            let solo = try await app.seedApp(
+                bundleID: "com.example.solo", name: "혼자 관리하는 앱", owner: leaving
+            )
+            let pair = "\(try solo.requireID().uuidString):\(try leaving.requireID().uuidString)"
+
+            try await app.testing().test(
+                .GET, "/me/withdraw?assignment=\(pair)", headers: .sessionCookie(token)
+            ) { response in
+                #expect(response.body.string.contains("아직 소유권 이전 받을 사람을 정하지 않은 앱이 있습니다"))
+            }
+        }
+    }
+
+    /// 마지막 관리자 검사가 트랜잭션 밖에 있으면 둘이 같은 순간에 나갈 때 둘 다
+    /// 통과한다. 여기서 보는 것은 **한 명은 반드시 남는다** 는 것이다.
+    @Test("관리자 둘이 동시에 나가도 한 명은 남는다")
+    func twoAdminsLeavingAtOnceLeaveOneBehind() async throws {
+        try await withMigratedApp { app in
+            let (first, _) = try await app.makeUser(email: "first@example.com", role: .admin)
+            let (second, _) = try await app.makeUser(email: "second@example.com", role: .admin)
+
+            async let a: Void = {
+                _ = try? await AdminOperations.withdraw(
+                    first, handingOver: [:], on: app.db, logger: app.logger
+                )
+            }()
+            async let b: Void = {
+                _ = try? await AdminOperations.withdraw(
+                    second, handingOver: [:], on: app.db, logger: app.logger
+                )
+            }()
+            _ = await (a, b)
+
+            let remaining = try await User.query(on: app.db)
+                .filter(\.$role == .admin)
+                .filter(\.$deactivatedAt == nil)
+                .count()
+            #expect(remaining >= 1)
+        }
+    }
 }
