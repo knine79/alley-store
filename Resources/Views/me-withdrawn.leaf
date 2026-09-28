@@ -1,0 +1,35 @@
+#extend("layout"):
+#export("content"):
+
+<!-- 나간 뒤 한 번만 보이는 화면. 여기서 새로고침하면 로그인 화면으로 간다.
+     무엇이 누구에게 갔는지 한 번은 보여주고 보낸다 (ADR-0063). -->
+<h1 class="page-title">탈퇴했습니다</h1>
+<p class="page-lead">
+    #(email) 계정으로 더는 로그인할 수 없습니다. 발급하셨던 토큰도 함께 폐기됐습니다.
+</p>
+
+#if(count(handedOver) > 0):
+<section class="section">
+    <h2 class="section-title">이전한 앱</h2>
+    <div class="table-scroll">
+        <table class="table">
+            <thead>
+                <tr><th>앱</th><th>새 소유자</th></tr>
+            </thead>
+            <tbody>
+                #for(row in handedOver):
+                <tr><td>#(row.app)</td><td>#(row.newOwner)</td></tr>
+                #endfor
+            </tbody>
+        </table>
+    </div>
+</section>
+#endif
+
+<p class="page-footnote">
+    다시 쓰시려면 스토어 관리자에게 말씀하세요. 기록은 지우지 않아서 복구하면
+    그대로 돌아옵니다. 다만 이전한 앱은 돌아오지 않습니다.
+</p>
+
+#endexport
+#endextend

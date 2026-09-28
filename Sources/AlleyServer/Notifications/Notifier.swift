@@ -250,6 +250,53 @@ public struct Notifier: Sendable {
         return delivered
     }
 
+    /// 메일로만 보낸다. 받는 사람이 고른 수단을 보지 않는다.
+    ///
+    /// **거의 쓸 일이 없다.** 알림은 그 사람이 고른 수단으로 가는 것이 원칙이고,
+    /// 여기 하나뿐인 예외는 탈퇴 확인이다 (ADR-0063). 나간 사람은 `notify(person:)`
+    /// 이 걸러내고, 기본 수단인 Slack 계정도 퇴사와 함께 사라지는 일이 많다.
+    /// 그래도 "내가 누르지 않았다" 를 알 길은 있어야 한다.
+    ///
+    /// 메일 채널이 없는 스토어에서는 아무 일도 하지 않는다.
+    @discardableResult
+    public func mail(_ message: NotificationMessage, to address: String) async -> Bool {
+        guard let channel = channels[.email] else {
+            logger.debug("메일 채널이 없어 건너뜁니다 [\(address)]")
+            return false
+        }
+        do {
+            try await channel.send(message, to: address)
+            return true
+        } catch {
+            logger.warning("메일을 보내지 못했습니다 [받는 사람: \(address), 이유: \(error)]")
+            return false
+        }
+    }
+
+    /// 고른 수단을 보지 않고 사람에게 닿는 모든 채널로 보낸다.
+    ///
+    /// **거의 쓸 일이 없다.** 알림은 그 사람이 고른 수단으로 가는 것이 원칙이고,
+    /// 여기 하나뿐인 예외는 탈퇴 확인이다 (ADR-0063). 나간 사람은 `notify(person:)`
+    /// 이 걸러내고 (ADR-0061), 그 뒤로는 어느 수단이 살아 있을지 알 수 없다. Slack
+    /// 계정이 퇴사와 함께 사라지기도 하고 메일이 먼저 닫히기도 한다.
+    ///
+    /// **"내가 누르지 않았다" 를 알 길은 있어야 한다.** 그래서 이 한 건만 둘 다로
+    /// 보낸다. 한쪽이 실패해도 다른 쪽이 가면 된 것으로 친다.
+    @discardableResult
+    public func notifyEveryWay(_ message: NotificationMessage, to address: String) async -> Bool {
+        var delivered = false
+        for kind in NotificationChannelKind.personal {
+            guard let channel = channels[kind] else { continue }
+            do {
+                try await channel.send(message, to: address)
+                delivered = true
+            } catch {
+                logger.warning("알림을 보내지 못했습니다 [받는 사람: \(address), 이유: \(error)]")
+            }
+        }
+        return delivered
+    }
+
     /// 이 사람에게 실제로 쓸 채널들.
     ///
     /// 고른 대로 간다. 둘 다 골랐으면 둘 다 간다 - 남이 정해준 것이 아니라 자기가

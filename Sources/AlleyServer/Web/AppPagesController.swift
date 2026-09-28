@@ -690,7 +690,7 @@ struct AppPagesController: RouteCollection, Sendable {
             let view = try await renderDetail(
                 on: request,
                 issuedToken: nil,
-                memberError: "넘길 사람을 찾을 수 없습니다. 다시 고르세요."
+                memberError: "이전할 사람을 찾을 수 없습니다. 다시 고르세요."
             )
             return htmlResponse(view, status: .notFound)
         }
@@ -709,7 +709,7 @@ struct AppPagesController: RouteCollection, Sendable {
             let view = try await renderDetail(
                 on: request,
                 issuedToken: nil,
-                memberError: "올릴 수 있는 사람에게만 넘길 수 있습니다. 먼저 권한을 주세요."
+                memberError: "올릴 수 있는 사람에게만 이전할 수 있습니다. 먼저 권한을 주세요."
             )
             return htmlResponse(view, status: .badRequest)
         }
@@ -719,7 +719,7 @@ struct AppPagesController: RouteCollection, Sendable {
             let view = try await renderDetail(
                 on: request,
                 issuedToken: nil,
-                memberError: "탈퇴 처리된 계정에는 넘길 수 없습니다."
+                memberError: "탈퇴 처리된 계정에는 이전할 수 없습니다."
             )
             return htmlResponse(view, status: .badRequest)
         }
