@@ -103,7 +103,7 @@ public struct CreateUserToken: AsyncMigration {
             .id()
             .field("name", .string, .required)
             .field("token_hash", .string, .required)
-            // 사람이 끊기면 그 토큰도 끊긴다 (ADR-0061). 행까지 지우는 것은 사람을
+            // 사람이 탈퇴 처리되면 그 토큰도 폐기된다 (ADR-0061). 행까지 지우는 것은 사람을
             // 지울 때뿐인데 사람은 지우지 않으므로, 여기서는 참조만 건다.
             .field("user_id", .uuid, .required, .references(User.schema, "id"))
             .field("expires_at", .datetime, .required)

@@ -40,7 +40,7 @@ struct MePagesController: RouteCollection, Sendable {
         guard !name.isEmpty else {
             let view = try await renderTokens(
                 issued: nil,
-                error: "어디에 넣을 토큰인지 적어주세요. 나중에 무엇을 끊을지 고를 때 이 이름만 보입니다.",
+                error: "어디에 넣을 토큰인지 적어주세요. 나중에 무엇을 폐기할지 고를 때 이 이름만 보입니다.",
                 on: request
             )
             return htmlResponse(view, status: .badRequest)
@@ -98,7 +98,7 @@ struct MePagesController: RouteCollection, Sendable {
             throw Abort(.badRequest, reason: "토큰을 알 수 없습니다.")
         }
 
-        // 남의 토큰을 끊지 못하게 사람으로도 거른다. 주소를 손으로 만들면 남의
+        // 남의 토큰을 폐기하지 못하게 사람으로도 거른다. 주소를 손으로 만들면 남의
         // 토큰 id 를 넣을 수 있다.
         guard let token = try await UserToken.query(on: request.db)
             .filter(\.$id == tokenID)
@@ -382,7 +382,7 @@ struct TokenRow: Encodable {
     var isUsable: Bool
     /// 왜 못 쓰나. 쓸 수 있으면 nil.
     ///
-    /// 만료와 폐기를 가려서 적는다. 만료는 스스로 고칠 수 있고 폐기는 끊은 것이라
+    /// 만료와 폐기를 가려서 적는다. 만료는 스스로 고칠 수 있고 폐기는 누가 없앤 것이라
     /// 사람이 할 일이 다르다.
     var blocked: String?
 

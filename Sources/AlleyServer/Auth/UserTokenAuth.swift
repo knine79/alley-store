@@ -17,7 +17,7 @@ import Vapor
 ///
 /// 처음에는 "지우는 것만 막자" 로 두었다가 뒤집었다. `DELETE` 만 걸러내면
 /// `POST /api/v1/apps/:id/deploy-tokens` 가 그대로 열려 있고, 그것으로 만든 배포
-/// 토큰은 **만료도 없고 계정을 끊어도 살아남는다.** 90일 수명과 퇴사 차단을 한
+/// 토큰은 **만료도 없고 계정을 탈퇴 처리해도 살아남는다.** 90일 수명과 퇴사 차단을 한
 /// 번에 넘어간다. 피드 토큰도, 관리자라면 워커 등록과 역할 변경도 같다.
 ///
 /// 막을 것을 세는 방식은 경로가 늘어날 때마다 새는 곳이 생긴다. 열 것을 세면 새
@@ -50,16 +50,16 @@ struct UserTokenAuthenticator: AsyncMiddleware {
         guard token.revokedAt == nil else {
             throw Abort(.unauthorized, reason: "폐기된 토큰입니다. 내 설정에서 새로 발급하세요.")
         }
-        // 만료와 폐기를 가려서 말한다. 만료는 스스로 고칠 수 있고 폐기는 누가 끊은
+        // 만료와 폐기를 가려서 말한다. 만료는 스스로 고칠 수 있고 폐기는 누가 없앤
         // 것이라, 받는 사람이 할 일이 다르다.
         guard token.expiresAt > Date() else {
             throw Abort(.unauthorized, reason: "만료된 토큰입니다. 내 설정에서 새로 발급하세요.")
         }
-        // 끊은 사람의 토큰은 살아 있어도 쓸 수 없다 (ADR-0061). 끊을 때 함께
+        // 탈퇴 처리된 사람의 토큰은 살아 있어도 쓸 수 없다 (ADR-0061). 탈퇴 처리할 때 함께
         // 폐기하지만, 그 사이에 발급된 것이나 놓친 것이 있어도 여기서 막힌다.
         guard token.user.isActive else {
-            request.logger.notice("끊은 계정의 토큰 [이메일: \(token.user.email)]")
-            throw Abort(.unauthorized, reason: "끊은 계정입니다.")
+            request.logger.notice("탈퇴 처리된 계정의 토큰 [이메일: \(token.user.email)]")
+            throw Abort(.unauthorized, reason: "탈퇴 처리된 계정입니다.")
         }
 
         // **무엇을 부를 수 있는지는 인증을 통과한 뒤에 본다.** 순서를 바꾸면 발급된

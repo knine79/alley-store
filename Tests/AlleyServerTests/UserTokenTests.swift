@@ -78,7 +78,7 @@ struct UserTokenTests {
     }
 
     /// 90일을 사는 값이라 나간 사람 손에 남겨둘 수 없다 (ADR-0061).
-    @Test("계정을 끊으면 그 사람의 토큰도 함께 끊긴다")
+    @Test("계정을 탈퇴 처리하면 그 사람의 토큰도 함께 폐기된다")
     func deactivationRevokesTokens() async throws {
         try await withMigratedApp { app in
             let (admin, _) = try await app.makeUser(email: "admin@example.com", role: .admin)
@@ -134,7 +134,7 @@ struct UserTokenTests {
         }
     }
 
-    /// **이것이 허용목록으로 바꾼 이유다.** 배포 토큰은 만료가 없고 계정을 끊어도
+    /// **이것이 허용목록으로 바꾼 이유다.** 배포 토큰은 만료가 없고 계정을 탈퇴 처리해도
     /// 살아남는다. 사람 토큰으로 그것을 만들 수 있으면 90일 수명과 퇴사 차단을 한
     /// 번에 넘어간다.
     @Test("사람 토큰으로는 다른 자격증명을 만들지 못한다")
