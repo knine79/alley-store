@@ -285,9 +285,10 @@ struct AdminPagesController: RouteCollection, Sendable {
                 message: NotificationMessage(
                     title: "'\(handover.app.name)' 의 소유자가 되셨습니다",
                     body: """
-                        \(target.name) 계정을 탈퇴 처리하면서 넘어왔습니다. \
-                        이 앱을 함께 맡던 사람 중 가장 먼저 들어온 분이라 자동으로 정해졌습니다. \
-                        맞지 않으면 앱 화면에서 다른 사람에게 넘길 수 있습니다.
+                        관리자가 \(target.name) 계정을 탈퇴 처리하면서 이 앱의 공동 관리자 중 \
+                        가장 먼저 관리자가 되신 \(handover.newOwner.name) 님에게 소유권이 자동으로 \
+                        이전되었습니다. 이 조치가 적절하지 않다고 판단되면 앱 관리 화면에서 \
+                        다른 공동 관리자에게 소유권을 이전할 수 있습니다.
                         """,
                     link: request.consoleLink("/apps/\(handover.app.id?.uuidString ?? "")")
                 )
@@ -297,7 +298,7 @@ struct AdminPagesController: RouteCollection, Sendable {
         var lines: [String] = []
         if !result.moved.isEmpty {
             lines.append(
-                "넘어간 앱: "
+                "이전된 앱: "
                     + result.moved
                     .map { "\($0.app.name) → \($0.newOwner.name)" }
                     .sorted()
@@ -309,12 +310,12 @@ struct AdminPagesController: RouteCollection, Sendable {
                 """
                 \(NotificationMarkup.strong("소유자를 정해야 하는 앱 \(result.orphaned.count)개")): \
                 \(result.orphaned.map(\.name).sorted().joined(separator: ", ")). \
-                함께 맡던 사람이 없어 넘기지 못했습니다. 관리 > 역할 관리에서 정하세요.
+                공동 관리자가 없어 이전하지 못했습니다. 관리 > 역할 관리에서 정하세요.
                 """
             )
         }
         if lines.isEmpty {
-            lines.append("맡고 있던 앱은 없습니다.")
+            lines.append("소유하던 앱은 없습니다.")
         }
 
         await request.notifier.notifyOperators(
@@ -329,7 +330,7 @@ struct AdminPagesController: RouteCollection, Sendable {
     /// 소유자가 탈퇴 처리된 앱의 소유자를 정한다 (ADR-0061).
     ///
     /// 앱 화면의 소유자 넘기기와 규칙이 다르다. 그쪽은 올릴 수 있는 사람 중에서만
-    /// 고르는데, 여기 오는 앱들은 함께 맡던 사람이 없어서 고를 후보가 없다. 그래서
+    /// 고르는데, 여기 오는 앱들은 공동 관리자가 없어서 고를 후보가 없다. 그래서
     /// 활성 계정이면 누구든 받는다. 대신 관리자만 할 수 있다.
     @Sendable
     func submitOrphanedAppOwner(request: Request) async throws -> Response {
@@ -346,7 +347,7 @@ struct AdminPagesController: RouteCollection, Sendable {
               let newOwner = try await User.find(targetID, on: request.db)
         else {
             let view = try await renderUsers(
-                error: "넘길 사람을 찾을 수 없습니다. 다시 고르세요.",
+                error: "이전할 사람을 찾을 수 없습니다. 다시 고르세요.",
                 viewedBy: admin,
                 on: request
             )
@@ -354,7 +355,7 @@ struct AdminPagesController: RouteCollection, Sendable {
         }
         guard newOwner.isActive else {
             let view = try await renderUsers(
-                error: "탈퇴 처리된 계정에는 넘길 수 없습니다.",
+                error: "탈퇴 처리된 계정에는 이전할 수 없습니다.",
                 viewedBy: admin,
                 on: request
             )
@@ -383,13 +384,13 @@ struct AdminPagesController: RouteCollection, Sendable {
             .delete()
 
         request.logger.notice(
-            "소유자가 탈퇴 처리된 앱을 넘겼습니다 [앱: \(app.bundleID), 새 소유자: \(newOwner.email), 관리자: \(admin.email)]"
+            "소유자가 탈퇴 처리된 앱의 소유권을 이전했습니다 [앱: \(app.bundleID), 새 소유자: \(newOwner.email), 관리자: \(admin.email)]"
         )
         await request.notifier.notify(
             person: newOwner,
             message: NotificationMessage(
                 title: "'\(app.name)' 의 소유자가 되셨습니다",
-                body: "\(admin.name) 이 넘겼습니다. 이 앱의 설정과 업로드를 맡게 됩니다.",
+                body: "\(admin.name) 님이 소유권을 이전했습니다. 이 앱의 설정과 업로드를 맡습니다.",
                 link: request.consoleLink("/apps/\(appID.uuidString)")
             )
         )
@@ -404,7 +405,7 @@ struct AdminPagesController: RouteCollection, Sendable {
         let users = try await User.query(on: request.db).sort(\.$email).all()
         let adminID = try admin.requireID()
 
-        // 소유자가 탈퇴 처리된 앱. 탈퇴 처리할 때 함께 맡던 사람이 없어 넘기지 못한 것들이다
+        // 소유자가 탈퇴 처리된 앱. 탈퇴 처리할 때 공동 관리자가 없어 이전하지 못한 것들이다
         // (ADR-0061). 여기 남아 있는 동안은 아무도 올릴 수 없다.
         let cutOffIDs = try users.filter { !$0.isActive }.map { try $0.requireID() }
         let activeIDs = Set(try users.filter(\.isActive).map { try $0.requireID() })

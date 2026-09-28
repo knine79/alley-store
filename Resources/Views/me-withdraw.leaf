@@ -1,0 +1,184 @@
+#extend("layout"):
+#export("content"):
+
+<h1 class="page-title">탈퇴</h1>
+<p class="page-lead">
+    탈퇴하면 바로 로그아웃되고, 계정을 복구하려면 관리자에게 요청해야 합니다.
+    발급한 토큰도 함께 폐기됩니다.
+</p>
+
+#if(error):
+<p class="notice notice-error" role="alert">#(error)</p>
+#endif
+
+#if(hasApps):
+<!-- 소유한 앱은 모두 소유권을 이전해야 나갈 수 있다 (ADR-0063). 나가는 사람이
+     누가 이어받을지 가장 잘 아는 자리에 있다.
+
+     **소유와 관리를 가려 쓴다.** 소유자는 한 명이고 앱을 지우거나 설정을 바꿀 수
+     있다. 공동 관리자는 올릴 수 있는 사람들이다. 여기서 옮기는 것은 소유권이다.
+
+     **앱 목록과 같은 카드를 쓴다.** 앱 이름과 칸만 세로로 늘어놓으니 두 묶음의
+     경계가 보이지 않았다. 카드는 테두리로 앱 하나를 묶어주고, 아이콘이 있어
+     눈이 이름을 읽기 전에 앱을 찾는다 (`apps.leaf` 와 같은 컴포넌트).
+
+     고르는 칸은 `form` 속성으로 아래 탈퇴 폼에 붙인다. 앱마다 검색 폼이 따로
+     있어야 하는데 폼은 겹칠 수 없어서, 자리는 여기 두고 값만 그쪽으로 보낸다. -->
+<section class="section">
+    <h2 class="section-title">소유자이신 앱</h2>
+    <p class="section-lead">
+        모두 다른 사람에게 소유권을 이전해야 탈퇴할 수 있습니다. 이전한 앱은
+        되돌릴 수 없습니다.
+    </p>
+
+    #if(count(coManaged) > 0):
+    <h3 class="form-group-title">공동 관리자가 있는 앱</h3>
+    <ul class="card-list">
+        #for(app in coManaged):
+        <li>
+            <div class="card card-static">
+                <span class="card-icon" aria-hidden="true">
+                    #if(app.iconURL):
+                    <img src="#(app.iconURL)" alt="">
+                    #else:
+                    <span class="card-icon-letter">#(app.initial)</span>
+                    #endif
+                </span>
+                <div class="card-body">
+                    <span class="card-head">
+                        <span class="card-title">#(app.name)</span>
+                        <code class="card-id">#(app.bundleID)</code>
+                    </span>
+                    <!-- 공동 관리자가 있으면 그 중에서 고른다. 검색은 이 앱과 아무
+                         관계없는 사람까지 닿아서, 아는 사람이 있는데도 이름을 쳐야 한다. -->
+                    <label class="field">
+                        <span class="field-label">소유권 이전 받을 사람 선택</span>
+                        <select class="input select" name="assignment" form="withdraw">
+                            #for(mate in app.mates):
+                            <option value="#(app.id):#(mate.id)"
+                                    #if(app.chosenID == mate.id):selected#endif>#(mate.name) (#(mate.email))</option>
+                            #endfor
+                        </select>
+                    </label>
+                </div>
+            </div>
+        </li>
+        #endfor
+    </ul>
+    #endif
+
+    #if(count(soleOwned) > 0):
+    <h3 class="form-group-title">단독 관리중인 앱</h3>
+    <ul class="card-list">
+        #for(app in soleOwned):
+        <li>
+            <div class="card card-static">
+                <span class="card-icon" aria-hidden="true">
+                    #if(app.iconURL):
+                    <img src="#(app.iconURL)" alt="">
+                    #else:
+                    <span class="card-icon-letter">#(app.initial)</span>
+                    #endif
+                </span>
+                <div class="card-body">
+                    <span class="card-head">
+                        <span class="card-title">#(app.name)</span>
+                        <code class="card-id">#(app.bundleID)</code>
+                    </span>
+
+                    #if(app.chosenName):
+                    <!-- 찾아서 이미 고른 사람. 값은 탈퇴 폼으로 가고, 바꾸려면 다시 찾는다. -->
+                    <p class="field-note">
+                        <strong>#(app.chosenName)</strong> (#(app.chosenEmail)) 님에게 이전합니다.
+                    </p>
+                    <input type="hidden" name="assignment" value="#(app.id):#(app.chosenID)" form="withdraw">
+                    <form class="form-inline" method="get" action="/me/withdraw">
+                        #for(other in app.otherChoices):
+                        <input type="hidden" name="assignment" value="#(other)">
+                        #endfor
+                        <input type="hidden" name="app" value="#(app.id)">
+                        <input type="hidden" name="member" value="#(app.chosenName)">
+                        <button class="button button-small" type="submit">다시 고르기</button>
+                    </form>
+
+                    #else:
+                    <!-- 공동 관리자가 없다. 이름이나 이메일로 찾는다. 스크립트가 없어도
+                         이 폼이 그대로 제출되고 서버가 아래를 같은 모양으로 그린다. -->
+                    <form class="form-inline" method="get" action="/me/withdraw">
+                        <!-- 이미 고른 것들을 함께 실어 보낸다. 안 그러면 다른 앱을 찾는
+                             동안 앞서 고른 것이 사라진다. -->
+                        #for(other in app.otherChoices):
+                        <input type="hidden" name="assignment" value="#(other)">
+                        #endfor
+                        <input type="hidden" name="app" value="#(app.id)">
+                        <label class="field">
+                            <span class="field-label">소유권 이전 받을 사람 찾기</span>
+                            <input class="input" type="search" name="member" value="#(app.query)"
+                                   placeholder="이름이나 이메일" autocomplete="off">
+                        </label>
+                        <button class="button" type="submit">찾기</button>
+                    </form>
+
+                    #if(app.query):
+                    #if(count(app.candidates) > 0):
+                    <ul class="person-list">
+                        #for(candidate in app.candidates):
+                        <li class="person">
+                            <span class="person-name">#(candidate.name)</span>
+                            <span class="person-email">#(candidate.email)</span>
+                            <!-- 고르면 그 값을 실은 채로 이 화면을 다시 그린다. 여기서
+                                 바로 탈퇴시키지 않는 것은 다른 앱이 남아 있을 수 있어서다. -->
+                            <form class="person-action" method="get" action="/me/withdraw">
+                                #for(other in app.otherChoices):
+                                <input type="hidden" name="assignment" value="#(other)">
+                                #endfor
+                                <input type="hidden" name="assignment" value="#(app.id):#(candidate.id)">
+                                <button class="button button-small" type="submit">이 사람에게 이전</button>
+                            </form>
+                        </li>
+                        #endfor
+                    </ul>
+                    #if(app.overflowed):
+                    <p class="field-note">결과가 많아 일부만 보입니다. 더 좁혀서 찾아보세요.</p>
+                    #endif
+                    #else:
+                    <p class="empty">'#(app.query)' 로 찾은 사람이 없습니다. 탈퇴한 계정과 아직 한 번도 로그인한 적이 없는 사람은 나오지 않습니다.</p>
+                    #endif
+                    #endif
+                    #endif
+                </div>
+            </div>
+        </li>
+        #endfor
+    </ul>
+    #endif
+</section>
+#endif
+
+<form id="withdraw" method="post" action="/me/withdraw">
+    <section class="section section-danger">
+        <h2 class="section-title">정말 탈퇴하시겠습니까</h2>
+        #if(unresolved):
+        <p class="danger-note">
+            아직 소유권 이전 받을 사람을 정하지 않은 앱이 있습니다. 모두 정해야
+            탈퇴할 수 있습니다.
+        </p>
+        #else:
+        <p class="danger-note">
+            확인하려면 <strong>#(email)</strong> 을 그대로 적으세요.
+        </p>
+        #endif
+        <label class="field">
+            <span class="field-label">이메일</span>
+            <input class="input" type="email" name="confirm" autocomplete="off"
+                   placeholder="#(email)" required #if(unresolved):disabled#endif>
+        </label>
+        <div class="form-actions">
+            <button class="button button-danger" type="submit" #if(unresolved):disabled#endif>탈퇴하기</button>
+            <a class="button" href="/me/notifications">취소</a>
+        </div>
+    </section>
+</form>
+
+#endexport
+#endextend
