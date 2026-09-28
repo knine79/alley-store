@@ -100,6 +100,35 @@ struct UserDeactivationTests {
         }
     }
 
+    /// 주소에 실려 오는 앱 id 는 대소문자가 어느 쪽이든 올 수 있다. 화면이 만든
+    /// 링크만 보고 맞추면, 손으로 붙여넣은 주소에서 결과가 통째로 사라진다.
+    @Test("주인 후보 검색은 앱 id 의 대소문자를 가리지 않는다")
+    func candidateSearchIgnoresAppIDCase() async throws {
+        try await withMigratedApp { app in
+            let (admin, adminToken) = try await app.makeUser(
+                email: "admin@example.com", role: .admin
+            )
+            let (target, _) = try await app.makeUser(email: "leaver@example.com", role: .developer)
+            _ = try await app.makeUser(email: "heir@example.com", role: .developer)
+            let alone = try await app.seedApp(
+                bundleID: "com.example.alone", name: "혼자 맡던 앱", owner: target
+            )
+            _ = try await AdminOperations.deactivate(
+                target, by: admin, on: app.db, logger: app.logger
+            )
+            let appID = try alone.requireID().uuidString
+
+            for id in [appID, appID.lowercased()] {
+                try await app.testing().test(
+                    .GET, "/admin/users?member=heir&app=\(id)",
+                    headers: .sessionCookie(adminToken)
+                ) { response in
+                    #expect(response.body.string.contains("heir@example.com"))
+                }
+            }
+        }
+    }
+
     @Test("관리자가 주인 없는 앱의 오너를 정한다")
     func adminAssignsTheOwner() async throws {
         try await withMigratedApp { app in

@@ -449,7 +449,11 @@ struct AdminPagesController: RouteCollection, Sendable {
             let found = try await PersonSearch.find(
                 matching: query, excluding: already, on: request.db
             )
-            for index in orphaned.indices where orphaned[index].id == searchedAppID {
+            // **id 를 글자로 견주지 않는다.** `UUID.uuidString` 은 대문자로 나오는데
+            // 주소에 실려 오는 값은 소문자일 수 있다. 그러면 여기서 아무것도 맞지
+            // 않아 검색 결과가 통째로 사라진다. 템플릿이 만든 링크는 대문자라
+            // 브라우저에서는 맞고, 그 밖의 경로에서만 빗나간다.
+            for index in orphaned.indices where UUID(uuidString: orphaned[index].id) == appID {
                 orphaned[index].query = query
                 orphaned[index].candidates = found.candidates
                 orphaned[index].overflowed = found.overflowed
