@@ -48,7 +48,7 @@ enum UserTokenExpiryNotice {
         var notified = 0
         var unreachable = 0
         for token in soon {
-            // 끊은 사람에게는 보내지 않는다. 그 토큰은 이미 쓸 수 없다 (ADR-0061).
+            // 탈퇴 처리된 사람에게는 보내지 않는다. 그 토큰은 이미 쓸 수 없다 (ADR-0061).
             guard token.user.isActive else { continue }
 
             let days = max(1, Int(token.expiresAt.timeIntervalSince(now) / (24 * 3600)))

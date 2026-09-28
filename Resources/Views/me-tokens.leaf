@@ -30,7 +30,7 @@
 #if(count(tokens) == 0):
 <div class="empty">
     <p>쓸 수 있는 토큰이 없습니다.</p>
-    <p class="empty-note">아래에서 만들면 됩니다. 쓰는 곳마다 따로 만들면 하나를 끊어도 나머지는 그대로입니다.</p>
+    <p class="empty-note">아래에서 만들면 됩니다. 쓰는 곳마다 따로 만들면 하나를 폐기해도 나머지는 그대로입니다.</p>
 </div>
 #else:
 <div class="table-scroll">
@@ -53,7 +53,7 @@
             </td>
             <td class="table-tight table-muted"><time datetime="#(token.createdAt.iso)" data-date-only="#(token.createdAt.dateOnly)">#(token.createdAt.display)</time></td>
             <td class="table-tight table-muted"><time datetime="#(token.expiresAt.iso)" data-date-only="#(token.expiresAt.dateOnly)">#(token.expiresAt.display)</time></td>
-            <!-- 안 쓰는 토큰을 가려내는 단서다. 끊어도 되는지 판단할 것이 이것뿐이다. -->
+            <!-- 안 쓰는 토큰을 가려내는 단서다. 폐기해도 되는지 판단할 것이 이것뿐이다. -->
             <td class="table-tight table-muted">
                 #if(token.lastUsedAt):<time datetime="#(token.lastUsedAt.iso)" data-date-only="#(token.lastUsedAt.dateOnly)">#(token.lastUsedAt.display)</time>#else:쓴 적 없음#endif
             </td>
@@ -111,7 +111,7 @@
             <input class="input" type="text" name="name" required
                    placeholder="노트북 Claude Code" autocomplete="off">
             <span class="field-note">
-                어디에 넣을 것인지 적으세요. 나중에 무엇을 끊을지 고를 때 이 이름만 보입니다.
+                어디에 넣을 것인지 적으세요. 나중에 무엇을 폐기할지 고를 때 이 이름만 보입니다.
             </span>
         </label>
         <button class="button button-primary" type="submit">발급</button>
