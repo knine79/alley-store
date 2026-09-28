@@ -254,7 +254,7 @@ docker compose logs server | grep MIGRATE_ON_BOOT
 
 ### 알림 설정
 
-전역 알림(워커가 조용해짐)은 관리자가, 앱별 알림(새 피드백)은 앱 오너가 Slack
+전역 알림(워커가 조용해짐)은 관리자가, 앱별 알림(새 피드백)은 앱 소유자가 Slack
 Incoming Webhook 주소를 넣습니다. 메일은 지원하지 않습니다.
 
 ## 백업

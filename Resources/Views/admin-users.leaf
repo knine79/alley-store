@@ -24,7 +24,7 @@
             <td class="table-fill">
                 <span class="table-strong">#(person.name)</span>
                 #if(person.isSelf):<span class="badge">나</span>#endif
-                #if(person.isActive):#else:<span class="badge badge-failed">끊김</span>#endif
+                #if(person.isActive):#else:<span class="badge badge-failed">탈퇴</span>#endif
                 <span class="table-note">#(person.email)</span>
             </td>
             <td class="table-tight">
@@ -38,21 +38,21 @@
                     <button class="button" type="submit"#if(person.isActive):#else: disabled#endif>변경</button>
                 </form>
             </td>
-            <!-- 끊는 것과 되살리는 것을 한 칸에 둔다. 지금 상태에 따라 하나만 보인다.
-                 자기 계정은 끊을 수 없어서(스스로 로그인을 잃는다) 아예 내지 않는다. -->
+            <!-- 탈퇴 처리와 복구를 한 칸에 둔다. 지금 상태에 따라 하나만 보인다.
+                 자기 계정은 탈퇴 처리할 수 없어서(스스로 로그인을 잃는다) 아예 내지 않는다. -->
             <td class="table-tight">
                 #if(person.isActive):
                 #if(person.isSelf):
                 <span class="table-muted">-</span>
                 #else:
                 <form class="row-form" method="post" action="/admin/users/#(person.id)/deactivate">
-                    <button class="button" type="submit">끊기</button>
+                    <button class="button" type="submit">탈퇴 처리</button>
                 </form>
                 #endif
                 #else:
                 <form class="row-form" method="post" action="/admin/users/#(person.id)/reactivate">
-                    <button class="button" type="submit">되살리기</button>
-                    <span class="table-note"><time datetime="#(person.deactivatedAt.iso)" data-date-only="#(person.deactivatedAt.dateOnly)">#(person.deactivatedAt.display)</time> 에 끊음</span>
+                    <button class="button" type="submit">복구</button>
+                    <span class="table-note"><time datetime="#(person.deactivatedAt.iso)" data-date-only="#(person.deactivatedAt.dateOnly)">#(person.deactivatedAt.display)</time> 에 탈퇴 처리</span>
                 </form>
                 #endif
             </td>
@@ -63,18 +63,18 @@
 </div>
 
 <p class="page-lead">
-    끊은 계정은 로그인도 막히고 이미 열려 있던 세션도 그 자리에서 끊깁니다. 맡고 있던
+    탈퇴 처리된 계정은 로그인도 막히고 이미 열려 있던 세션도 그 자리에서 끊깁니다. 맡고 있던
     앱은 <strong>함께 맡던 사람 중 가장 먼저 들어온 사람</strong>에게 넘어갑니다.
-    넘어간 앱은 되살려도 돌아오지 않습니다.
+    넘어간 앱은 복구해도 돌아오지 않습니다.
 </p>
 
 <!-- 함께 맡던 사람이 없어 넘기지 못한 앱들. 아무나 지목하는 것보다 비워두고
      사람이 정하는 쪽을 골랐다 (ADR-0061). 그 대신 여기 모아 보여준다. -->
 #if(count(orphanedApps) > 0):
 <section class="section" id="orphaned">
-    <h2 class="section-title">주인을 정해야 하는 앱</h2>
+    <h2 class="section-title">소유자를 정해야 하는 앱</h2>
     <p class="section-lead">
-        오너가 끊긴 계정입니다. 함께 맡던 사람이 없어 자동으로 넘기지 못했습니다.
+        소유자가 탈퇴 처리된 계정입니다. 함께 맡던 사람이 없어 자동으로 넘기지 못했습니다.
         정할 때까지 이 앱은 관리자 말고는 아무도 올릴 수 없습니다.
     </p>
 
@@ -82,7 +82,7 @@
     <div class="section-danger">
         <h3 class="section-title">#(app.name)</h3>
         <p class="danger-note">
-            <code>#(app.bundleID)</code> · 두고 간 사람 <strong>#(app.previousOwner)</strong>
+            <code>#(app.bundleID)</code> · 이전 소유자 <strong>#(app.previousOwner)</strong>
         </p>
 
         <!-- 앱마다 검색 자리가 따로 있어야 해서 id 를 앱마다 다르게 준다
@@ -91,14 +91,14 @@
         <form class="form-inline" method="get" action="/admin/users"
               data-candidates-url="/apps/#(app.id)/member-candidates"
               data-grant-url="/admin/apps/#(app.id)/owner"
-              data-grant-label="오너로 정하기"
+              data-grant-label="소유자로 정하기"
               data-results="owner-results-#(app.id)"
               data-server-results="owner-results-server-#(app.id)">
             <!-- 이름을 `member` 로 두는 것은 `member-search.js` 가 그 이름을 찾기
                  때문이다. 화면마다 다른 이름을 쓰면 스크립트도 화면마다 갈린다. -->
             <input type="hidden" name="app" value="#(app.id)">
             <label class="field">
-                <span class="field-label">새 오너 찾기</span>
+                <span class="field-label">새 소유자 찾기</span>
                 <input class="input" type="search" name="member" value="#(app.query)"
                        placeholder="이름이나 이메일" autocomplete="off">
             </label>
@@ -115,7 +115,7 @@
                 <span class="person-email">#(candidate.email)</span>
                 <form class="person-action" method="post" action="/admin/apps/#(app.id)/owner">
                     <input type="hidden" name="userID" value="#(candidate.id)">
-                    <button class="button button-small" type="submit">오너로 정하기</button>
+                    <button class="button button-small" type="submit">소유자로 정하기</button>
                 </form>
             </li>
             #endfor
@@ -124,7 +124,7 @@
         <p class="field-note">결과가 많아 일부만 보입니다. 더 좁혀서 찾아보세요.</p>
         #endif
         #else:
-        <p class="empty">'#(app.query)' 로 찾은 사람이 없습니다. 끊긴 계정과 아직 한 번도 로그인한 적이 없는 사람은 나오지 않습니다.</p>
+        <p class="empty">'#(app.query)' 로 찾은 사람이 없습니다. 탈퇴 처리된 계정과 아직 한 번도 로그인한 적이 없는 사람은 나오지 않습니다.</p>
         #endif
         #endif
         </div>

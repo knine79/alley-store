@@ -12,7 +12,7 @@ import VaporTesting
 /// 한 사람이 다른 팀이 준비 중인 앱을 이름·번들 ID·설명까지 다 본다. 아직 알리지
 /// 않은 것을 목록에서 먼저 보게 되는 자리다.
 ///
-/// 손댈 수 있는 사람에게만 보인다. 오너, 앱 멤버, 관리자다. 업로드 권한과 같은
+/// 손댈 수 있는 사람에게만 보인다. 소유자, 앱 멤버, 관리자다. 업로드 권한과 같은
 /// 기준이라 "보이는데 못 만지는" 상태가 생기지 않는다.
 @Suite("출시 전 앱은 누구에게 보이나")
 struct UnreleasedAppVisibilityTests {
@@ -60,7 +60,7 @@ struct UnreleasedAppVisibilityTests {
                 #expect(response.body.string.contains("아직안알린앱"))
             }
 
-            // 오너는 자기 것을 본다. 못 보면 방금 만든 앱을 찾아갈 길이 없다.
+            // 소유자는 자기 것을 본다. 못 보면 방금 만든 앱을 찾아갈 길이 없다.
             try await app.testing().test(
                 .GET, "/apps", headers: .sessionCookie(seeded.ownerToken)
             ) { response in

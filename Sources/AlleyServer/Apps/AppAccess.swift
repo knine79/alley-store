@@ -9,10 +9,10 @@ import Vapor
 /// 버전을 올리는 것은 다른 질문이라 앱 단위 멤버십으로 한 번 더 좁힌다.
 /// 조직 구성원 전체가 설치하게 될 바이너리이기 때문이다.
 extension App {
-    /// 메타데이터 수정과 멤버 관리. 오너와 관리자만.
+    /// 메타데이터 수정과 멤버 관리. 소유자와 관리자만.
     public func requireManageAccess(for user: User) throws {
         guard try canManage(user) else {
-            throw Abort(.forbidden, reason: "이 앱을 관리할 권한이 없습니다. 앱 오너나 관리자에게 요청하세요.")
+            throw Abort(.forbidden, reason: "이 앱을 관리할 권한이 없습니다. 앱 소유자나 관리자에게 요청하세요.")
         }
     }
 
@@ -21,14 +21,14 @@ extension App {
         return try $owner.id == user.requireID()
     }
 
-    /// 버전 업로드와 출시. 오너, 관리자, 앱 멤버.
+    /// 버전 업로드와 출시. 소유자, 관리자, 앱 멤버.
     ///
     /// 출시를 업로드와 같은 등급으로 두는 이유는, 바이너리를 올릴 수 있는 사람은
     /// 이미 그 앱의 내용을 정하는 사람이기 때문이다. 여기서 나누면 실제로는
-    /// 오너가 매번 출시 버튼만 눌러주는 병목이 된다.
+    /// 소유자가 매번 출시 버튼만 눌러주는 병목이 된다.
     public func requireUploadAccess(for user: User, on database: any Database) async throws {
         guard try await canUpload(user, on: database) else {
-            throw Abort(.forbidden, reason: "이 앱에 버전을 올릴 권한이 없습니다. 앱 오너에게 멤버 추가를 요청하세요.")
+            throw Abort(.forbidden, reason: "이 앱에 버전을 올릴 권한이 없습니다. 앱 소유자에게 멤버 추가를 요청하세요.")
         }
     }
 
@@ -44,7 +44,7 @@ extension App {
 
 /// "이 사람이 이 앱을 손댈 수 있는가" 를 목록에서 한 번에 판정한다.
 ///
-/// `canUpload` 와 같은 기준이다. 오너, 앱 멤버, 관리자. 다른 점은 앱마다 따로 묻지
+/// `canUpload` 와 같은 기준이다. 소유자, 앱 멤버, 관리자. 다른 점은 앱마다 따로 묻지
 /// 않는다는 것뿐이다. 하나씩 물으면 N+1 이 되므로 멤버십을 한 번에 읽어 집합으로
 /// 견준다.
 ///

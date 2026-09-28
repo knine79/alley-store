@@ -101,9 +101,9 @@ struct NotificationRoutingTests {
         }
     }
 
-    /// 끊은 계정은 받는 사람이 아니다 (ADR-0061). 안 그러면 "당신 계정을 끊었습니다"
+    /// 탈퇴 처리된 계정은 받는 사람이 아니다 (ADR-0061). 안 그러면 "당신 계정을 탈퇴 처리했습니다"
     /// 를 당사자가 받는다.
-    @Test("끊은 관리자에게는 보내지 않는다")
+    @Test("탈퇴 처리된 관리자에게는 보내지 않는다")
     func cutOffAdminsAreSkipped() async throws {
         try await withMigratedApp { app in
             let (staying, _) = try await app.makeUser(email: "stay@example.com", role: .admin)

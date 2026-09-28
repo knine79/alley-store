@@ -47,7 +47,7 @@ public final class User: Model, @unchecked Sendable {
     @OptionalField(key: "last_login_at")
     public var lastLoginAt: Date?
 
-    /// 끊은 시각. 나간 사람이다 (ADR-0061).
+    /// 탈퇴 처리한 시각. 나간 사람이다 (ADR-0061).
     ///
     /// **행을 지우지 않는다.** 누가 올렸고 누가 받아갔는지가 이 행을 가리킨다. 지우면
     /// 그 기록이 함께 사라지거나 "알 수 없음" 이 된다. 감사 기록은 사람이 나갔다고
@@ -405,7 +405,7 @@ public struct DefaultFeedbackNotificationsOn: AsyncMigration {
     }
 }
 
-/// 나간 사람을 끊는 자리 (ADR-0061).
+/// 나간 사람을 탈퇴 처리하는 자리 (ADR-0061).
 ///
 /// 지우지 않고 시각만 남긴다. 무엇이 그 행을 가리키는지는 ADR 에 적어뒀다.
 public struct AddUserDeactivatedAt: AsyncMigration {

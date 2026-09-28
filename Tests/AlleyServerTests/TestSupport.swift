@@ -365,7 +365,7 @@ extension Application {
     func seedApp(bundleID: String, name: String, owner: User) async throws -> App {
         let record = App(bundleID: bundleID, name: name, ownerID: try owner.requireID())
         try await record.save(on: db)
-        // 화면이 오너 이메일을 읽으므로 관계를 채워둔다.
+        // 화면이 소유자 이메일을 읽으므로 관계를 채워둔다.
         record.$owner.value = owner
         return record
     }

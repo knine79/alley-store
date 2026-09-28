@@ -6,13 +6,13 @@ import VaporTesting
 
 @testable import AlleyServer
 
-/// 나간 사람을 끊는다 (ADR-0061).
+/// 나간 사람을 탈퇴 처리한다 (ADR-0061).
 ///
-/// 행을 지우지 않고 시각만 남긴다. 확인할 것은 셋이다. 끊긴 사람이 못 들어오는가,
-/// 맡고 있던 앱이 주인 없이 남지 않는가, 스토어가 잠기지 않는가.
-@Suite("계정 끊기")
+/// 행을 지우지 않고 시각만 남긴다. 확인할 것은 셋이다. 탈퇴 처리된 사람이 못 들어오는가,
+/// 맡고 있던 앱이 소유자 없이 남지 않는가, 스토어가 잠기지 않는가.
+@Suite("계정 탈퇴 처리")
 struct UserDeactivationTests {
-    @Test("끊으면 이미 들고 있던 세션도 막힌다")
+    @Test("탈퇴 처리하면 이미 들고 있던 세션도 막힌다")
     func existingSessionStopsWorking() async throws {
         try await withMigratedApp { app in
             let (admin, _) = try await app.makeUser(email: "admin@example.com", role: .admin)
@@ -20,7 +20,7 @@ struct UserDeactivationTests {
                 email: "leaver@example.com", role: .developer
             )
 
-            // 끊기 전에는 들어와진다.
+            // 탈퇴 처리 전에는 들어와진다.
             try await app.testing().test(.GET, "/api/v1/me", headers: .bearer(targetToken)) {
                 #expect($0.status == .ok)
             }
@@ -36,7 +36,7 @@ struct UserDeactivationTests {
         }
     }
 
-    /// 끊는 관리자는 대개 그 앱과 아무 관계가 없다. 함께 맡던 사람에게 간다.
+    /// 탈퇴 처리하는 관리자는 대개 그 앱과 아무 관계가 없다. 함께 맡던 사람에게 간다.
     @Test("맡던 앱은 가장 먼저 들어온 공동 담당자에게 간다")
     func ownedAppsMoveToTheFirstUploader() async throws {
         try await withMigratedApp { app in
@@ -59,7 +59,7 @@ struct UserDeactivationTests {
             #expect(result.orphaned.isEmpty)
             let reloaded = try #require(try await App.find(appID, on: app.db))
             #expect(reloaded.$owner.id == (try first.requireID()))
-            // 오너가 됐으니 멤버 표에서는 빠진다.
+            // 소유자가 됐으니 멤버 표에서는 빠진다.
             #expect(try await reloaded.canUpload(first, on: app.db))
             let rows = try await AppMember.query(on: app.db)
                 .filter(\.$app.$id == appID)
@@ -87,14 +87,14 @@ struct UserDeactivationTests {
 
             #expect(result.moved.isEmpty)
             #expect(result.orphaned.count == 1)
-            // 오너는 그대로다. 관리자가 정할 때까지 비어 있는 자리로 남는다.
+            // 소유자는 그대로다. 관리자가 정할 때까지 비어 있는 자리로 남는다.
             let reloaded = try #require(try await App.find(try alone.requireID(), on: app.db))
             #expect(reloaded.$owner.id == (try target.requireID()))
 
             try await app.testing().test(
                 .GET, "/admin/users", headers: .sessionCookie(adminToken)
             ) { response in
-                #expect(response.body.string.contains("주인을 정해야 하는 앱"))
+                #expect(response.body.string.contains("소유자를 정해야 하는 앱"))
                 #expect(response.body.string.contains("혼자 맡던 앱"))
             }
         }
@@ -102,7 +102,7 @@ struct UserDeactivationTests {
 
     /// 주소에 실려 오는 앱 id 는 대소문자가 어느 쪽이든 올 수 있다. 화면이 만든
     /// 링크만 보고 맞추면, 손으로 붙여넣은 주소에서 결과가 통째로 사라진다.
-    @Test("주인 후보 검색은 앱 id 의 대소문자를 가리지 않는다")
+    @Test("소유자 후보 검색은 앱 id 의 대소문자를 가리지 않는다")
     func candidateSearchIgnoresAppIDCase() async throws {
         try await withMigratedApp { app in
             let (admin, adminToken) = try await app.makeUser(
@@ -129,7 +129,7 @@ struct UserDeactivationTests {
         }
     }
 
-    @Test("관리자가 주인 없는 앱의 오너를 정한다")
+    @Test("관리자가 소유자 없는 앱의 소유자를 정한다")
     func adminAssignsTheOwner() async throws {
         try await withMigratedApp { app in
             let (admin, adminToken) = try await app.makeUser(
@@ -185,7 +185,7 @@ struct UserDeactivationTests {
         }
     }
 
-    @Test("끊은 계정에는 업로드 권한을 줄 수 없다")
+    @Test("탈퇴 처리된 계정에는 업로드 권한을 줄 수 없다")
     func cannotGrantUploadToACutOffAccount() async throws {
         try await withMigratedApp { app in
             let (admin, _) = try await app.makeUser(email: "admin@example.com", role: .admin)
@@ -216,7 +216,7 @@ struct UserDeactivationTests {
     }
 
     /// 화면을 오래 열어두면 그 사이에 다른 관리자가 정했을 수 있다.
-    @Test("이미 주인이 있는 앱은 다시 정하지 못한다")
+    @Test("이미 소유자가 있는 앱은 다시 정하지 못한다")
     func cannotReassignAnAppThatHasAnOwner() async throws {
         try await withMigratedApp { app in
             let (admin, adminToken) = try await app.makeUser(
@@ -225,7 +225,7 @@ struct UserDeactivationTests {
             let (owner, _) = try await app.makeUser(email: "owner@example.com", role: .developer)
             let (other, _) = try await app.makeUser(email: "other@example.com", role: .developer)
             let registered = try await app.seedApp(
-                bundleID: "com.example.taken", name: "주인 있는 앱", owner: owner
+                bundleID: "com.example.taken", name: "소유자 있는 앱", owner: owner
             )
             _ = admin
 
@@ -248,7 +248,7 @@ struct UserDeactivationTests {
         }
     }
 
-    @Test("끊긴 계정은 새 오너 후보에 나오지 않는다")
+    @Test("탈퇴 처리된 계정은 새 소유자 후보에 나오지 않는다")
     func cutOffPeopleAreNotCandidates() async throws {
         try await withMigratedApp { app in
             let (admin, _) = try await app.makeUser(email: "admin@example.com", role: .admin)
@@ -286,7 +286,7 @@ struct UserDeactivationTests {
     }
 
     /// 누르는 사람이 자기 로그인을 잃으면 되돌릴 화면에도 못 들어간다.
-    @Test("자기 계정은 끊을 수 없다")
+    @Test("자기 계정은 탈퇴 처리할 수 없다")
     func cannotDeactivateSelf() async throws {
         try await withMigratedApp { app in
             let (admin, token) = try await app.makeUser(email: "admin@example.com", role: .admin)
@@ -304,7 +304,7 @@ struct UserDeactivationTests {
     }
 
     /// 아무도 들어올 수 없는 스토어를 만들지 않는다.
-    @Test("마지막 관리자는 끊을 수 없다")
+    @Test("마지막 관리자는 탈퇴 처리할 수 없다")
     func cannotDeactivateTheLastAdmin() async throws {
         try await withMigratedApp { app in
             let (first, _) = try await app.makeUser(email: "first@example.com", role: .admin)
@@ -313,14 +313,15 @@ struct UserDeactivationTests {
             )
             let firstID = try first.requireID().uuidString
 
-            // 둘이 있을 때는 한 명을 끊을 수 있다.
+            // 둘이 있을 때는 한 명을 탈퇴 처리할 수 있다.
             try await app.testing().test(
                 .POST, "/admin/users/\(firstID)/deactivate", headers: .form(cookie: secondToken)
             ) { response in
                 #expect(response.status == .seeOther)
             }
 
-            // 남은 한 명은 자기를 끊을 수 없고, 끊긴 관리자는 남은 수에 들지 않는다.
+            // 남은 한 명은 자기를 탈퇴 처리할 수 없고, 탈퇴 처리된 관리자는 남은 수에
+            // 들지 않는다.
             await #expect(throws: (any Error).self) {
                 try await AdminOperations.changeRole(
                     of: second, to: .developer, by: second, on: app.db, logger: app.logger
@@ -329,7 +330,7 @@ struct UserDeactivationTests {
         }
     }
 
-    @Test("되살리면 다시 들어올 수 있지만 앱은 돌아오지 않는다")
+    @Test("복구하면 다시 들어올 수 있지만 앱은 돌아오지 않는다")
     func reactivationDoesNotReturnApps() async throws {
         try await withMigratedApp { app in
             let (admin, _) = try await app.makeUser(email: "admin@example.com", role: .admin)
@@ -355,10 +356,10 @@ struct UserDeactivationTests {
     }
 }
 
-/// 오너를 사람 손으로 넘기는 길 (ADR-0061).
-@Suite("앱 오너 넘기기")
+/// 소유자를 사람 손으로 넘기는 길 (ADR-0061).
+@Suite("앱 소유자 넘기기")
 struct AppOwnerTransferTests {
-    @Test("올릴 수 있는 사람에게 넘기면 옛 오너는 멤버로 남는다")
+    @Test("올릴 수 있는 사람에게 넘기면 옛 소유자는 멤버로 남는다")
     func transferKeepsPreviousOwnerAsMember() async throws {
         try await withMigratedApp { app in
             let (owner, token) = try await app.makeUser(email: "owner@example.com", role: .developer)
@@ -417,8 +418,8 @@ struct AppOwnerTransferTests {
         }
     }
 
-    /// 끊은 계정이 오너가 되면 그 앱은 그 자리에서 주인을 잃는다.
-    @Test("끊은 계정에는 넘길 수 없다")
+    /// 탈퇴 처리된 계정이 소유자가 되면 그 앱은 그 자리에서 소유자를 잃는다.
+    @Test("탈퇴 처리된 계정에는 넘길 수 없다")
     func cannotTransferToADeactivatedAccount() async throws {
         try await withMigratedApp { app in
             let (admin, _) = try await app.makeUser(email: "admin@example.com", role: .admin)

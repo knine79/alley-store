@@ -40,7 +40,7 @@ enum FeedbackPresentation {
                     stars: entry.rating.map { String(repeating: "★", count: $0) },
                     body: entry.body,
                     screenshotURL: screenshotURL,
-                    // 익명은 화면에서만 익명이다. 오너에게도 이름을 보여주지 않는다.
+                    // 익명은 화면에서만 익명이다. 소유자에게도 이름을 보여주지 않는다.
                     authorName: entry.isAnonymous ? nil : entry.user.name,
                     isAnonymous: entry.isAnonymous,
                     isMine: isMine,

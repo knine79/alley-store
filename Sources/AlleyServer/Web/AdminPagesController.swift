@@ -235,7 +235,7 @@ struct AdminPagesController: RouteCollection, Sendable {
         try await changeActivation(deactivating: false, on: request)
     }
 
-    /// 계정을 끊거나 되살린다 (ADR-0061).
+    /// 계정을 탈퇴 처리하거나 복구한다 (ADR-0061).
     private func changeActivation(deactivating: Bool, on request: Request) async throws -> Response {
         let admin = try request.requireAdmin()
         let target = try await request.findUser()
@@ -258,7 +258,7 @@ struct AdminPagesController: RouteCollection, Sendable {
                 )
             }
         } catch let abort as any AbortError where abort.status.code < 500 {
-            // 마지막 관리자나 자기 자신을 끊으려는 경우가 여기로 온다. 목록을 그대로
+            // 마지막 관리자나 자기 자신을 탈퇴 처리하려는 경우가 여기로 온다. 목록을 그대로
             // 두고 왜 안 되는지만 위에 띄운다.
             let view = try await renderUsers(error: abort.reason, viewedBy: admin, on: request)
             return htmlResponse(view, status: abort.status)
@@ -266,12 +266,12 @@ struct AdminPagesController: RouteCollection, Sendable {
         return request.redirect(to: "/admin/users")
     }
 
-    /// 계정을 끊었다고 알린다.
+    /// 계정을 탈퇴 처리했다고 알린다.
     ///
-    /// **오너가 바뀐 것은 화면 어디에도 뜨지 않는다.** 넘겨받은 사람은 자기 목록이
+    /// **소유자가 바뀐 것은 화면 어디에도 뜨지 않는다.** 넘겨받은 사람은 자기 목록이
     /// 길어진 것을 한참 뒤에야 본다. 그래서 당사자에게 따로 보낸다.
     ///
-    /// 관리자에게는 요약이 간다. 주인을 정해야 하는 앱이 남았다면 그것이 이 알림의
+    /// 관리자에게는 요약이 간다. 소유자를 정해야 하는 앱이 남았다면 그것이 이 알림의
     /// 요점이다.
     private func announce(
         deactivated target: User,
@@ -283,9 +283,9 @@ struct AdminPagesController: RouteCollection, Sendable {
             await request.notifier.notify(
                 person: handover.newOwner,
                 message: NotificationMessage(
-                    title: "'\(handover.app.name)' 의 오너가 되셨습니다",
+                    title: "'\(handover.app.name)' 의 소유자가 되셨습니다",
                     body: """
-                        \(target.name) 계정을 끊으면서 넘어왔습니다. \
+                        \(target.name) 계정을 탈퇴 처리하면서 넘어왔습니다. \
                         이 앱을 함께 맡던 사람 중 가장 먼저 들어온 분이라 자동으로 정해졌습니다. \
                         맞지 않으면 앱 화면에서 다른 사람에게 넘길 수 있습니다.
                         """,
@@ -307,7 +307,7 @@ struct AdminPagesController: RouteCollection, Sendable {
         if !result.orphaned.isEmpty {
             lines.append(
                 """
-                **주인을 정해야 하는 앱 \(result.orphaned.count)개**: \
+                **소유자를 정해야 하는 앱 \(result.orphaned.count)개**: \
                 \(result.orphaned.map(\.name).sorted().joined(separator: ", ")). \
                 함께 맡던 사람이 없어 넘기지 못했습니다. 관리 > 역할 관리에서 정하세요.
                 """
@@ -319,16 +319,16 @@ struct AdminPagesController: RouteCollection, Sendable {
 
         await request.notifier.notifyOperators(
             NotificationMessage(
-                title: "\(target.name)(\(target.email)) 계정을 끊었습니다",
+                title: "\(target.name)(\(target.email)) 계정을 탈퇴 처리했습니다",
                 body: lines.joined(separator: "\n"),
                 link: request.consoleLink("/admin/users")
             )
         )
     }
 
-    /// 주인이 끊긴 앱의 오너를 정한다 (ADR-0061).
+    /// 소유자가 탈퇴 처리된 앱의 소유자를 정한다 (ADR-0061).
     ///
-    /// 앱 화면의 오너 넘기기와 규칙이 다르다. 그쪽은 올릴 수 있는 사람 중에서만
+    /// 앱 화면의 소유자 넘기기와 규칙이 다르다. 그쪽은 올릴 수 있는 사람 중에서만
     /// 고르는데, 여기 오는 앱들은 함께 맡던 사람이 없어서 고를 후보가 없다. 그래서
     /// 활성 계정이면 누구든 받는다. 대신 관리자만 할 수 있다.
     @Sendable
@@ -354,20 +354,20 @@ struct AdminPagesController: RouteCollection, Sendable {
         }
         guard newOwner.isActive else {
             let view = try await renderUsers(
-                error: "끊은 계정에는 넘길 수 없습니다.",
+                error: "탈퇴 처리된 계정에는 넘길 수 없습니다.",
                 viewedBy: admin,
                 on: request
             )
             return htmlResponse(view, status: .badRequest)
         }
 
-        // **정말 주인이 없는 앱인지 본다.** 이 화면은 오래 열어두게 되고, 그 사이에
-        // 다른 관리자가 정했거나 옛 오너가 되살아났을 수 있다. 확인하지 않으면 멀쩡한
-        // 오너가 남의 화면에서 밀려난다.
+        // **정말 소유자가 없는 앱인지 본다.** 이 화면은 오래 열어두게 되고, 그 사이에
+        // 다른 관리자가 정했거나 옛 소유자가 복구됐을 수 있다. 확인하지 않으면 멀쩡한
+        // 소유자가 남의 화면에서 밀려난다.
         let previousOwner = try await User.find(app.$owner.id, on: request.db)
         guard previousOwner?.isActive != true else {
             let view = try await renderUsers(
-                error: "이미 주인이 있는 앱입니다. 화면을 새로 고치고 다시 보세요.",
+                error: "이미 소유자가 있는 앱입니다. 화면을 새로 고치고 다시 보세요.",
                 viewedBy: admin,
                 on: request
             )
@@ -376,19 +376,19 @@ struct AdminPagesController: RouteCollection, Sendable {
 
         app.$owner.id = targetID
         try await app.save(on: request.db)
-        // 새 오너는 멤버 표에 두지 않는다. 오너는 언제나 올릴 수 있다.
+        // 새 소유자는 멤버 표에 두지 않는다. 소유자는 언제나 올릴 수 있다.
         try await AppMember.query(on: request.db)
             .filter(\.$app.$id == appID)
             .filter(\.$user.$id == targetID)
             .delete()
 
         request.logger.notice(
-            "주인이 끊긴 앱을 넘겼습니다 [앱: \(app.bundleID), 새 오너: \(newOwner.email), 관리자: \(admin.email)]"
+            "소유자가 탈퇴 처리된 앱을 넘겼습니다 [앱: \(app.bundleID), 새 소유자: \(newOwner.email), 관리자: \(admin.email)]"
         )
         await request.notifier.notify(
             person: newOwner,
             message: NotificationMessage(
-                title: "'\(app.name)' 의 오너가 되셨습니다",
+                title: "'\(app.name)' 의 소유자가 되셨습니다",
                 body: "\(admin.name) 이 넘겼습니다. 이 앱의 설정과 업로드를 맡게 됩니다.",
                 link: request.consoleLink("/apps/\(appID.uuidString)")
             )
@@ -404,7 +404,7 @@ struct AdminPagesController: RouteCollection, Sendable {
         let users = try await User.query(on: request.db).sort(\.$email).all()
         let adminID = try admin.requireID()
 
-        // 주인이 끊긴 앱. 끊을 때 함께 맡던 사람이 없어 넘기지 못한 것들이다
+        // 소유자가 탈퇴 처리된 앱. 탈퇴 처리할 때 함께 맡던 사람이 없어 넘기지 못한 것들이다
         // (ADR-0061). 여기 남아 있는 동안은 아무도 올릴 수 없다.
         let cutOffIDs = try users.filter { !$0.isActive }.map { try $0.requireID() }
         let activeIDs = Set(try users.filter(\.isActive).map { try $0.requireID() })
@@ -416,9 +416,9 @@ struct AdminPagesController: RouteCollection, Sendable {
                 .sort(\.$name)
                 .all()
             for app in candidates {
-                // **올릴 수 있는 사람이 하나도 없는 앱만 남긴다.** "오너가 끊겼다" 로
+                // **올릴 수 있는 사람이 하나도 없는 앱만 남긴다.** "소유자가 탈퇴 처리됐다" 로
                 // 고르면, 누가 멤버를 넣어준 뒤에도 목록에 남아서 "아무도 못 올린다"
-                // 는 설명이 거짓이 된다. 끊을 때 쓰는 규칙과 같은 것을 본다.
+                // 는 설명이 거짓이 된다. 탈퇴 처리할 때 쓰는 규칙과 같은 것을 본다.
                 let hasActiveUploader = try await AppMember.query(on: request.db)
                     .filter(\.$app.$id == app.requireID())
                     .all()
@@ -1015,7 +1015,7 @@ struct UserRow: Encodable {
     var isSelf: Bool
     /// 아직 쓰는 계정인가 (ADR-0061).
     var isActive: Bool
-    /// 언제 끊었나. 쓰는 계정이면 nil.
+    /// 언제 탈퇴 처리했나. 쓰는 계정이면 nil.
     var deactivatedAt: DisplayDate?
 
     init(user: User, isSelf: Bool) {
@@ -1039,17 +1039,17 @@ struct UserListPageContext: Encodable {
     var page: PageContext
     var users: [UserRow]
     var roles: [RoleOption]
-    /// 주인이 끊긴 앱들 (ADR-0061). 없으면 빈 배열이고 그 자리는 그려지지 않는다.
+    /// 소유자가 탈퇴 처리된 앱들 (ADR-0061). 없으면 빈 배열이고 그 자리는 그려지지 않는다.
     var orphanedApps: [OrphanedAppRow]
     var error: String?
 }
 
-/// 주인이 끊긴 앱 한 줄.
+/// 소유자가 탈퇴 처리된 앱 한 줄.
 struct OrphanedAppRow: Encodable {
     var id: String
     var name: String
     var bundleID: String
-    /// 두고 간 사람. 누구 것이었는지 알아야 누구에게 넘길지 정할 수 있다.
+    /// 이전 소유자. 누구 것이었는지 알아야 누구에게 넘길지 정할 수 있다.
     var previousOwner: String
     /// 스크립트 없이 찾았을 때 그 질의와 결과. 평소에는 비어 있다.
     var query: String?

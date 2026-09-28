@@ -621,7 +621,7 @@ struct AppPagesController: RouteCollection, Sendable {
         )
     }
 
-    /// 계정만 넣을 수 있고, 오너는 이미 올릴 수 있으므로 표에 넣지 않는다.
+    /// 계정만 넣을 수 있고, 소유자는 이미 올릴 수 있으므로 표에 넣지 않는다.
     @Sendable
     func addMember(request: Request) async throws -> Response {
         let user = try request.requireUser()
@@ -646,7 +646,7 @@ struct AppPagesController: RouteCollection, Sendable {
             let view = try await renderDetail(
                 on: request,
                 issuedToken: nil,
-                memberError: "끊은 계정에는 권한을 줄 수 없습니다."
+                memberError: "탈퇴 처리된 계정에는 권한을 줄 수 없습니다."
             )
             return htmlResponse(view, status: .badRequest)
         }
@@ -668,13 +668,13 @@ struct AppPagesController: RouteCollection, Sendable {
         return request.redirect(to: "/apps/\(appID.uuidString)#members")
     }
 
-    /// 오너를 넘긴다 (ADR-0061).
+    /// 소유자를 넘긴다 (ADR-0061).
     ///
-    /// **올릴 수 있는 사람 중에서만 고른다.** 아무나 검색해 바로 주인을 바꾸게 하면
-    /// 이 앱과 관계없는 사람이 한 번의 실수로 주인이 된다. 밖의 사람에게 넘길 때는
+    /// **올릴 수 있는 사람 중에서만 고른다.** 아무나 검색해 바로 소유자를 바꾸게 하면
+    /// 이 앱과 관계없는 사람이 한 번의 실수로 소유자가 된다. 밖의 사람에게 넘길 때는
     /// 업로드 권한을 먼저 주면 후보에 들어온다.
     ///
-    /// **지금 오너는 멤버로 남긴다.** 넘겼다고 올리지 못할 이유가 없고, 권한까지
+    /// **지금 소유자는 멤버로 남긴다.** 넘겼다고 올리지 못할 이유가 없고, 권한까지
     /// 잃으면 되돌릴 사람이 그 앱에서 사라진다.
     @Sendable
     func submitOwner(request: Request) async throws -> Response {
@@ -716,12 +716,12 @@ struct AppPagesController: RouteCollection, Sendable {
             return htmlResponse(view, status: .badRequest)
         }
 
-        // 끊은 계정에 넘기면 그 앱은 그 자리에서 주인을 잃는다 (ADR-0061).
+        // 탈퇴 처리된 계정에 넘기면 그 앱은 그 자리에서 소유자를 잃는다 (ADR-0061).
         guard newOwner.isActive else {
             let view = try await renderDetail(
                 on: request,
                 issuedToken: nil,
-                memberError: "끊은 계정에는 넘길 수 없습니다."
+                memberError: "탈퇴 처리된 계정에는 넘길 수 없습니다."
             )
             return htmlResponse(view, status: .badRequest)
         }
@@ -729,7 +729,7 @@ struct AppPagesController: RouteCollection, Sendable {
         app.$owner.id = newOwnerID
         try await app.save(on: request.db)
 
-        // 새 오너의 멤버 행은 지운다. 오너는 언제나 올릴 수 있어서 표에 두지 않는
+        // 새 소유자의 멤버 행은 지운다. 소유자는 언제나 올릴 수 있어서 표에 두지 않는
         // 것이 이 화면의 규칙이다.
         try await AppMember.query(on: request.db)
             .filter(\.$app.$id == appID)
@@ -745,12 +745,12 @@ struct AppPagesController: RouteCollection, Sendable {
         }
 
         request.logger.notice(
-            "오너 변경 [앱: \(app.bundleID), 새 오너: \(newOwner.email), 바꾼 사람: \(user.email)]"
+            "소유자 변경 [앱: \(app.bundleID), 새 소유자: \(newOwner.email), 바꾼 사람: \(user.email)]"
         )
         return request.redirect(to: "/apps/\(appID.uuidString)#members")
     }
 
-    /// 업로드 권한을 거둔다. 오너는 표에 없으므로 여기로 오지 않는다.
+    /// 업로드 권한을 거둔다. 소유자는 표에 없으므로 여기로 오지 않는다.
     @Sendable
     func removeMember(request: Request) async throws -> Response {
         let user = try request.requireUser()
@@ -1019,7 +1019,7 @@ struct AppPagesController: RouteCollection, Sendable {
 
     /// 이 앱에 이미 올릴 수 있는 사람들의 id.
     ///
-    /// **`loadMembers` 를 쓰지 않는다.** 그쪽은 오너를 미리 읽어둔 앱을 전제한다
+    /// **`loadMembers` 를 쓰지 않는다.** 그쪽은 소유자를 미리 읽어둔 앱을 전제한다
     /// (`app.owner`). 화면을 그리는 길은 그렇게 읽지만 다른 길은 아니라서, 거기서
     /// 부르면 관계를 안 읽었다고 죽는다. 여기는 id 만 있으면 된다.
     private func uploaderIDs(of app: App, on database: any Database) async throws -> Set<UUID> {
@@ -1049,7 +1049,7 @@ struct AppPagesController: RouteCollection, Sendable {
 /// 목록과 상세가 함께 쓰는 앱 한 줄.
 ///
 /// `AppDTO` 를 그대로 쓰지 않는 이유는 화면이 필요한 것이 다르기 때문이다. 화면은
-/// 오너의 이메일과 사람이 읽는 날짜가 필요하고, `ownerID` 같은 UUID 는 쓸 데가 없다.
+/// 소유자의 이메일과 사람이 읽는 날짜가 필요하고, `ownerID` 같은 UUID 는 쓸 데가 없다.
 struct AppRow: Encodable {
     var id: String
     var bundleID: String
@@ -1085,7 +1085,7 @@ struct AppRow: Encodable {
         self.summary = app.summary
         self.details = app.details
         self.category = app.category
-        // 목록에서 오너를 함께 읽어두므로 여기서 관계를 만지지 않는다.
+        // 목록에서 소유자를 함께 읽어두므로 여기서 관계를 만지지 않는다.
         self.ownerEmail = app.$owner.value?.email ?? ""
         self.latestReleasedVersion = latestReleased?.shortVersion
         self.ratingAverage = rating?.displayAverage
@@ -1245,7 +1245,7 @@ struct AppDetailContext: Encodable {
     var app: AppRow
     var versions: [VersionRow]
     var members: [AppMemberDTO]
-    /// 오너로 넘길 수 있는 사람들. 오너 자신과 끊긴 계정을 뺀 멤버들이다.
+    /// 소유자로 넘길 수 있는 사람들. 소유자 자신과 탈퇴 처리된 계정을 뺀 멤버들이다.
     ///
     /// 화면에서 거르지 않고 여기서 거른다. 비어 있으면 폼 자체를 내지 않아야 하는데,
     /// 템플릿에서는 거른 뒤의 수를 셀 수 없다.

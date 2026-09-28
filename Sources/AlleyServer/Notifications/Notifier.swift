@@ -179,7 +179,7 @@ public struct Notifier: Sendable {
     private func notifyAdmins(_ message: NotificationMessage) async {
         let admins = (try? await User.query(on: database)
             .filter(\.$role == .admin)
-            // 끊은 계정은 빼고 센다 (ADR-0061). 안 그러면 "당신 계정을 끊었습니다"
+            // 탈퇴 처리된 계정은 빼고 센다 (ADR-0061). 안 그러면 "당신 계정을 탈퇴 처리했습니다"
             // 를 당사자가 받는다.
             .filter(\.$deactivatedAt == nil)
             .all()) ?? []
@@ -188,7 +188,7 @@ public struct Notifier: Sendable {
         }
     }
 
-    /// 이 앱을 올릴 수 있는 사람들. 오너와 멤버다.
+    /// 이 앱을 올릴 수 있는 사람들. 소유자와 멤버다.
     private func uploaders(of appID: UUID) async -> [User] {
         let memberIDs = (try? await AppMember.query(on: database)
             .filter(\.$app.$id == appID)
@@ -199,7 +199,7 @@ public struct Notifier: Sendable {
         guard !ids.isEmpty else { return [] }
         return (try? await User.query(on: database)
             .filter(\.$id ~~ Array(ids))
-            // 끊은 오너와 멤버는 받지 않는다 (ADR-0061).
+            // 탈퇴 처리된 소유자와 멤버는 받지 않는다 (ADR-0061).
             .filter(\.$deactivatedAt == nil)
             .all()) ?? []
     }

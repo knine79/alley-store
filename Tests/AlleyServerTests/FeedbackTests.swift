@@ -178,7 +178,7 @@ struct AnonymousFeedbackTests {
                 #expect(dto.isAnonymous)
             }
 
-            // 오너가 봐도 이름이 없다.
+            // 소유자가 봐도 이름이 없다.
             try await app.testing().test(
                 .GET, "\(APIPath.apiRoot)/apps/\(setup.appID.uuidString)/feedback",
                 headers: .bearer(setup.ownerToken)
@@ -262,7 +262,7 @@ struct RemoveFeedbackTests {
         }
     }
 
-    @Test("앱 오너도 지울 수 있다")
+    @Test("앱 소유자도 지울 수 있다")
     func ownerCanRemove() async throws {
         try await withMigratedApp { app in
             let setup = try await seedReleasedVersion(on: app)
