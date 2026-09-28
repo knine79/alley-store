@@ -27,6 +27,12 @@ public struct UploadCommand: Sendable {
         /// 토큰이 가리키는 앱이 이것인지 확인한다. 파이프라인에 엉뚱한 토큰이
         /// 들어갔을 때 업로드가 끝난 뒤가 아니라 시작하기 전에 걸린다.
         public var expectedBundleID: String?
+        /// 올릴 앱. 비우면 토큰이 가리키는 앱을 서버에 묻는다.
+        ///
+        /// **사람 토큰에는 "그 토큰의 앱" 이 없다** (ADR-0060). 배포 토큰은 앱 하나에
+        /// 묶여 있어서 묻기만 하면 됐지만, 사람은 여러 앱을 갖는다. 부르는 쪽이
+        /// 정했으면 그것을 쓴다.
+        public var app: AppDTO?
 
         public init(
             file: URL,
@@ -37,7 +43,8 @@ public struct UploadCommand: Sendable {
             uploadKind: UploadKind? = nil,
             entitlements: String? = nil,
             releaseAfterUpload: Bool = false,
-            expectedBundleID: String? = nil
+            expectedBundleID: String? = nil,
+            app: AppDTO? = nil
         ) {
             self.file = file
             self.shortVersion = shortVersion
@@ -48,6 +55,7 @@ public struct UploadCommand: Sendable {
             self.entitlements = entitlements
             self.releaseAfterUpload = releaseAfterUpload
             self.expectedBundleID = expectedBundleID
+            self.app = app
         }
     }
 
@@ -95,7 +103,12 @@ public struct UploadCommand: Sendable {
             throw UploadError.cannotReleaseUnsigned
         }
 
-        let app = try await api.currentApp()
+        let app: AppDTO
+        if let given = options.app {
+            app = given
+        } else {
+            app = try await api.currentApp()
+        }
         if let expected = options.expectedBundleID, expected != app.bundleID {
             throw UploadError.bundleIDMismatch(expected: expected, actual: app.bundleID)
         }
