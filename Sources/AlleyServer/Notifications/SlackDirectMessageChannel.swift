@@ -86,9 +86,9 @@ public struct SlackDirectMessageChannel: NotificationChannel, Sendable {
 
     private func post(_ message: NotificationMessage, to userID: String) async throws {
         // Slack 은 mrkdwn 을 쓴다. HTML 도 마크다운도 아니라서 링크 형식이 독특하다.
-        var text = "*\(message.title)*"
+        var text = "*\(NotificationMarkup.plain(message.title))*"
         if let body = message.body, !body.isEmpty {
-            text += "\n\(body)"
+            text += "\n\(NotificationMarkup.mrkdwn(body))"
         }
         if let link = message.link {
             text += "\n<\(link)|웹 콘솔에서 보기>"

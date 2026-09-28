@@ -79,9 +79,9 @@ public struct SlackWebhookChannel: NotificationChannel {
 
     public func send(_ message: NotificationMessage, to endpoint: String) async throws {
         // Slack 은 mrkdwn 을 쓴다. HTML 도 마크다운도 아니라서 링크 형식이 독특하다.
-        var text = "*\(message.title)*"
+        var text = "*\(NotificationMarkup.plain(message.title))*"
         if let body = message.body, !body.isEmpty {
-            text += "\n\(body)"
+            text += "\n\(NotificationMarkup.mrkdwn(body))"
         }
         if let link = message.link {
             text += "\n<\(link)|웹 콘솔에서 보기>"
@@ -179,13 +179,16 @@ public struct Notifier: Sendable {
     private func notifyAdmins(_ message: NotificationMessage) async {
         let admins = (try? await User.query(on: database)
             .filter(\.$role == .admin)
+            // 탈퇴 처리된 계정은 빼고 센다 (ADR-0061). 안 그러면 "당신 계정을 탈퇴 처리했습니다"
+            // 를 당사자가 받는다.
+            .filter(\.$deactivatedAt == nil)
             .all()) ?? []
         for admin in admins {
             await notify(person: admin, message: message)
         }
     }
 
-    /// 이 앱을 올릴 수 있는 사람들. 오너와 멤버다.
+    /// 이 앱을 올릴 수 있는 사람들. 소유자와 멤버다.
     private func uploaders(of appID: UUID) async -> [User] {
         let memberIDs = (try? await AppMember.query(on: database)
             .filter(\.$app.$id == appID)
@@ -196,6 +199,8 @@ public struct Notifier: Sendable {
         guard !ids.isEmpty else { return [] }
         return (try? await User.query(on: database)
             .filter(\.$id ~~ Array(ids))
+            // 탈퇴 처리된 소유자와 멤버는 받지 않는다 (ADR-0061).
+            .filter(\.$deactivatedAt == nil)
             .all()) ?? []
     }
 

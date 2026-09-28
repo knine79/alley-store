@@ -7,7 +7,7 @@ import Vapor
 ///
 /// 앱 등록은 developer 역할이면 누구나 할 수 있지만, 남의 앱에 버전을 올리는 것은
 /// 다르다. 조직 구성원 전체가 설치하게 될 바이너리라서 앱 단위로 다시 좁힌다.
-/// 오너는 이 표에 없어도 항상 올릴 수 있다.
+/// 소유자는 이 표에 없어도 항상 올릴 수 있다.
 public final class AppMember: Model, @unchecked Sendable {
     public static let schema = "app_members"
 

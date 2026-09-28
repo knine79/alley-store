@@ -352,12 +352,17 @@ public struct BundleIDEntry: Codable, Sendable, Equatable {
 /// 앱에 업로드 권한을 가진 사람.
 public struct AppMemberDTO: Codable, Sendable, Equatable {
     public var user: UserDTO
-    /// 앱을 만든 사람인지. 오너는 멤버 목록을 고칠 수 있고 스스로 빠질 수 없다.
+    /// 앱을 만든 사람인지. 소유자는 멤버 목록을 고칠 수 있고 스스로 빠질 수 없다.
     public var isOwner: Bool
+    /// 아직 쓰는 계정인지 (ADR-0061). 탈퇴 처리된 사람도 목록에는 남는다.
+    ///
+    /// 옛 클라이언트가 보내지 않던 값이라 옵셔널이다. 없으면 쓰는 계정으로 본다.
+    public var isActive: Bool?
 
-    public init(user: UserDTO, isOwner: Bool) {
+    public init(user: UserDTO, isOwner: Bool, isActive: Bool? = nil) {
         self.user = user
         self.isOwner = isOwner
+        self.isActive = isActive
     }
 }
 
