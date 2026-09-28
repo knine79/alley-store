@@ -143,6 +143,19 @@ extension SigningJob {
         var failureCode: SigningFailureCode?
     }
 
+    /// 한 버전의 가장 최근 보고.
+    ///
+    /// **화면과 API 가 같은 것을 봐야 한다.** 여기를 안 쓰고 `createdAt` 으로 정렬해
+    /// 최신 행을 집으면, 다시 올려서 새 잡이 생긴 순간 그 행에는 아직 아무 보고도
+    /// 없어서 실패 갈래가 nil 로 사라진다. 화면은 여전히 앞선 실패를 보여주는데
+    /// API 는 "실패한 적 없음" 이라고 답하게 된다.
+    static func latestReport(
+        ofVersion versionID: UUID,
+        on database: any Database
+    ) async throws -> Report? {
+        try await latestReports(ofVersions: [versionID], on: database)[versionID]
+    }
+
     /// 버전마다 가장 최근 잡의 로그와 실패 갈래.
     ///
     /// 버전별로 따로 조회하면 목록 화면에서 N+1 이 된다. 한 번에 읽어 접는다.

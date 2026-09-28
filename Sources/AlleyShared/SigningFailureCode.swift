@@ -116,6 +116,33 @@ public enum SigningFailureGuidance {
     }
 
     /// 무엇을 해야 하는가. 화면에 그대로 붙인다.
+    /// 에이전트가 읽을 안내 (ADR-0060).
+    ///
+    /// **화면용 문구를 그대로 보내면 부족하다.** 그쪽은 눌러서 파일을 붙이는 칸이
+    /// 눈앞에 있다는 전제로 한 문장까지 줄여뒀다. API 에는 그 칸이 없으므로, 무엇을
+    /// 어떻게 하면 되는지를 부르는 쪽 손에 쥐여줘야 한다.
+    ///
+    /// 서버가 알아서 다시 시도하는 갈래는 "기다려라" 라고 분명히 적는다. 그 말이
+    /// 없으면 에이전트가 고칠 것을 찾아 헤맨다.
+    public static func forAgent(_ code: SigningFailureCode) -> String {
+        switch code {
+        case .entitlementsRejected:
+            return """
+                앱에 필요한 entitlements plist 를 함께 올려야 합니다. 빌드 설정의 \
+                CODE_SIGN_ENTITLEMENTS 가 가리키는 파일(Electron 이면 보통 \
+                build/entitlements.mac.plist)을 찾아 같은 버전으로 다시 올리세요. \
+                MCP 로는 upload_version 의 entitlements 인자에 그 경로를 줍니다.
+                """
+        case .transferFailed, .appleServiceUnavailable, .timedOut:
+            return """
+                일시적인 실패라 서버가 스스로 다시 시도합니다. 고칠 것이 없습니다. \
+                signing_status 를 잠시 뒤에 다시 보세요.
+                """
+        default:
+            return whatToDo(code)
+        }
+    }
+
     public static func whatToDo(_ code: SigningFailureCode) -> String {
         switch code {
         case .signingIdentityUnavailable:

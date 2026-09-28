@@ -336,3 +336,99 @@ public struct CreatedWorker: Codable, Sendable {
         self.token = token
     }
 }
+
+
+/// 서명이 지금 어디까지 왔는지 (ADR-0060).
+///
+/// **에이전트가 읽고 스스로 고치라고 내주는 값이다.** 화면은 실패 코드에 맞춰
+/// "entitlements 에 무엇을 넣어라" 까지 적어주는데(ADR-0023), 그것을 읽고 파일을
+/// 고치고 다시 올리는 일만 사람이 하고 있었다.
+///
+/// 로그는 싣지 않는다. 수백 줄이 오는 일이 흔하고, 무엇을 할지 정하는 데 필요한
+/// 것은 코드와 안내문이다. 전문은 화면에서 본다.
+public struct SigningStatusDTO: Codable, Sendable {
+    public var versionID: UUID
+    public var state: VersionState
+    /// 서명 잡의 상태. 잡이 아직 없으면 nil.
+    public var jobState: SigningJobState?
+    /// 지금 어느 단계인가. 돌고 있을 때만.
+    public var phase: String?
+    /// 몇 번째 시도인가.
+    public var attempt: Int?
+    /// 실패의 갈래 (ADR-0023). 에이전트는 이 값으로 갈라야 한다.
+    public var failureCode: SigningFailureCode?
+    /// 사람이 읽을 실패 이유 한 줄.
+    public var failureReason: String?
+    /// 무엇을 하면 되는지. 실패 코드가 있을 때만.
+    public var whatToDo: String?
+
+    public init(
+        versionID: UUID,
+        state: VersionState,
+        jobState: SigningJobState? = nil,
+        phase: String? = nil,
+        attempt: Int? = nil,
+        failureCode: SigningFailureCode? = nil,
+        failureReason: String? = nil,
+        whatToDo: String? = nil
+    ) {
+        self.versionID = versionID
+        self.state = state
+        self.jobState = jobState
+        self.phase = phase
+        self.attempt = attempt
+        self.failureCode = failureCode
+        self.failureReason = failureReason
+        self.whatToDo = whatToDo
+    }
+}
+
+/// Sparkle 이 지금 이 앱에서 도는지 (ADR-0057, ADR-0060).
+public enum SparkleReadiness: String, Codable, Sendable {
+    /// 쓸 수 있다. 공개키를 앱에 넣으면 된다.
+    case ready
+    /// 쓸 수 있는 워커 중 아무도 키를 갖고 있지 않다. 워커에 키를 넣어야 한다.
+    case noKey = "no_key"
+    /// 워커마다 키가 다르다. 어느 워커가 집었느냐에 따라 갈린다.
+    case conflictingKeys = "conflicting_keys"
+    /// 키는 있는데 최근 출시본에 서명이 빠져 있다. 다음 버전부터 붙는다.
+    case lastReleaseUnsigned = "last_release_unsigned"
+}
+
+/// 이 앱에서 Sparkle 을 쓸 수 있는 상태인가 (ADR-0057, ADR-0060).
+public struct SparkleFeedDTO: Codable, Sendable {
+    /// 앱의 `Info.plist` 에 넣을 `SUPublicEDKey`. 말할 수 없으면 nil.
+    public var publicKey: String?
+    /// 지금 피드 주소를 새로 내줄 만한가.
+    public var canIssue: Bool
+    /// 무엇이 걸려 있는지.
+    ///
+    /// **부르는 쪽은 이 값으로 갈라야 한다.** 아래 `note` 는 사람에게 보여줄 문장이고
+    /// 화면이 언제든 고쳐 쓴다. 그 글자를 맞춰보는 코드는 문구가 바뀌는 날 조용히
+    /// 틀린다.
+    public var readiness: SparkleReadiness
+    /// 사람에게 보여줄 한 줄. 문제가 없으면 nil.
+    ///
+    /// **막힌 것과 알리는 것이 섞여 있다.** `lastReleaseUnsigned` 는 지금 고칠 것이
+    /// 없는데도 한 줄이 온다. 막혔는지는 `canIssue` 로 본다.
+    public var note: String?
+    /// 이미 발급해둔 피드 토큰의 수.
+    ///
+    /// **주소는 돌려줄 수 없다.** 서버는 토큰의 해시만 갖고 있어서 발급 시점이
+    /// 지나면 그 값을 다시 만들 수 없다.
+    public var issuedFeedCount: Int
+
+    public init(
+        publicKey: String? = nil,
+        canIssue: Bool,
+        readiness: SparkleReadiness,
+        note: String? = nil,
+        issuedFeedCount: Int
+    ) {
+        self.publicKey = publicKey
+        self.canIssue = canIssue
+        self.readiness = readiness
+        self.note = note
+        self.issuedFeedCount = issuedFeedCount
+    }
+}
