@@ -307,7 +307,7 @@ struct AdminPagesController: RouteCollection, Sendable {
         if !result.orphaned.isEmpty {
             lines.append(
                 """
-                **소유자를 정해야 하는 앱 \(result.orphaned.count)개**: \
+                \(NotificationMarkup.strong("소유자를 정해야 하는 앱 \(result.orphaned.count)개")): \
                 \(result.orphaned.map(\.name).sorted().joined(separator: ", ")). \
                 함께 맡던 사람이 없어 넘기지 못했습니다. 관리 > 역할 관리에서 정하세요.
                 """

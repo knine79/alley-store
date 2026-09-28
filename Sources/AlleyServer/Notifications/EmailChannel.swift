@@ -54,10 +54,10 @@ public struct EmailChannel: NotificationChannel, Sendable {
     /// HTML 로 보내면 받는 쪽마다 다르게 그려지고, 우리가 넣는 것은 제목 한 줄과
     /// 본문 몇 줄과 링크 하나뿐이라 꾸밀 것이 없다. 평문은 어디서나 같게 보인다.
     private func body(of message: NotificationMessage) -> String {
-        var lines = [message.title]
+        var lines = [NotificationMarkup.plain(message.title)]
         if let body = message.body, !body.isEmpty {
             lines.append("")
-            lines.append(body)
+            lines.append(NotificationMarkup.plain(body))
         }
         if let link = message.link {
             lines.append("")
