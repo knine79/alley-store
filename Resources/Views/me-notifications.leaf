@@ -55,6 +55,41 @@
                     <span class="choice-note">내가 올릴 수 있는 앱에 옵니다.</span>
                 </span>
             </label>
+
+            <!-- **끌 수 없는 것도 같은 목록에 세운다.** 체크박스 둘만 있으면 그것이
+                 받는 알림의 전부로 읽힌다. 빼두면 사람은 안 오는 줄 알고, 따로 묶어
+                 두면 설정과 안내가 두 군데로 갈린다. 여기 켠 채로 잠가둔다
+                 (ADR-0063). 왜 잠겼는지는 각 줄이 말한다. -->
+            <label class="choice choice-off">
+                <input type="checkbox" checked disabled>
+                <span>
+                    <span class="choice-name">앱 소유권을 넘겨받았을 때</span>
+                    <span class="choice-note">
+                        항상 받습니다. 그 앱의 소유자가 되기 때문입니다.
+                    </span>
+                </span>
+            </label>
+
+            <label class="choice choice-off">
+                <input type="checkbox" checked disabled>
+                <span>
+                    <span class="choice-name">내 토큰이 곧 만료될 때</span>
+                    <span class="choice-note">
+                        항상 받습니다. 이레 전에 알립니다. 모르고 지나가면 CI 가 멈춥니다.
+                    </span>
+                </span>
+            </label>
+
+            <label class="choice choice-off">
+                <input type="checkbox" checked disabled>
+                <span>
+                    <span class="choice-name">내가 탈퇴했을 때</span>
+                    <span class="choice-note">
+                        항상 받습니다. 내가 누르지 않았다면 계정을 잃은 것입니다.
+                        Slack 과 메일 양쪽으로 갑니다.
+                    </span>
+                </span>
+            </label>
         </fieldset>
 
         <div class="form-actions">
@@ -62,6 +97,13 @@
         </div>
     </form>
 </section>
+
+<!-- 탈퇴는 탭으로 세우지 않는다. 자주 오는 자리가 아니고, 알림 설정 옆에
+     나란히 두면 눌러볼 것처럼 보인다. 설정 맨 아래에 두는 것이 이 자리의
+     관례다 (ADR-0063). -->
+<p class="page-footnote">
+    스토어를 더 쓰지 않으시면 <a href="/me/withdraw">탈퇴</a>할 수 있습니다.
+</p>
 
 #endexport
 #endextend

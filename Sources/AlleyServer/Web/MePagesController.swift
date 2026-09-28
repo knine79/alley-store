@@ -21,6 +21,252 @@ struct MePagesController: RouteCollection, Sendable {
         pages.get("tokens", use: tokenList)
         pages.post("tokens", use: issueToken)
         pages.post("tokens", ":tokenID", "revoke", use: revokeToken)
+        pages.get("withdraw", use: withdrawForm)
+        pages.post("withdraw", use: submitWithdraw)
+    }
+
+    // MARK: - 직접 탈퇴 (ADR-0063)
+
+    /// 확인용으로 다시 적게 하는 값. 자기 이메일이다.
+    struct WithdrawFormValues: Content {
+        var confirm: String?
+        /// `앱id:사람id` 쌍. 앱마다 하나씩 온다.
+        var assignment: [String]?
+    }
+
+    @Sendable
+    func withdrawForm(request: Request) async throws -> View {
+        try await renderWithdraw(error: nil, on: request)
+    }
+
+    /// 나간다. 소유한 앱의 소유권을 모두 이전한 뒤에만 된다.
+    ///
+    /// **리다이렉트하지 않는다.** 성공하면 세션이 그 자리에서 죽어서 어디로 보내도
+    /// 로그인 화면이 된다. 무엇이 누구에게 갔는지 한 번은 보여주고 보낸다.
+    @Sendable
+    func submitWithdraw(request: Request) async throws -> Response {
+        let user = try request.requireUser()
+        let values = try request.content.decode(WithdrawFormValues.self)
+
+        let typed = (values.confirm ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard typed.lowercased() == user.email.lowercased() else {
+            let view = try await renderWithdraw(
+                error: "이메일이 맞지 않습니다. \(user.email) 을 그대로 적어주세요.",
+                on: request
+            )
+            return htmlResponse(view, status: .badRequest)
+        }
+
+        var assignments: [UUID: UUID] = [:]
+        for pair in values.assignment ?? [] {
+            let parts = pair.split(separator: ":", maxSplits: 1)
+            guard parts.count == 2,
+                  let appID = UUID(uuidString: String(parts[0])),
+                  let ownerID = UUID(uuidString: String(parts[1]))
+            else { continue }
+            assignments[appID] = ownerID
+        }
+
+        let result: AdminOperations.Withdrawal
+        do {
+            result = try await AdminOperations.withdraw(
+                user, handingOver: assignments, on: request.db, logger: request.logger
+            )
+        } catch let abort as Abort {
+            let view = try await renderWithdraw(error: abort.reason, on: request)
+            return htmlResponse(view, status: abort.status)
+        }
+
+        await announce(withdrawn: user, result: result, on: request)
+
+        // 쿠키를 지워 이 브라우저에 남은 것도 함께 끝낸다. 서버는 요청마다 계정을
+        // 다시 읽으므로 이것이 없어도 막히지만, 남겨두면 다음 요청에서 오류 화면을
+        // 보게 된다.
+        let view = try await request.view.render(
+            "me-withdrawn",
+            WithdrawnContext(
+                page: try await request.pageContext(title: "탈퇴했습니다"),
+                email: user.email,
+                handedOver: result.handedOver.map {
+                    HandoverRow(app: $0.app.name, newOwner: $0.newOwner.name)
+                }
+            )
+        ).get()
+        let response = htmlResponse(view, status: .ok)
+        response.cookies[sessionCookieName] = .expired
+        return response
+    }
+
+    /// 나갔다고 알린다.
+    ///
+    /// **관리자가 처리한 것과 갈라서 적는다** (ADR-0063). 관리자 알림에서 갈리는 것은
+    /// 손댈 일이 있느냐다. 직접 탈퇴는 앱을 다 넘겨야 되므로 소유자 없는 앱이 남지
+    /// 않는다. 넘겨받은 사람에게는 규칙이 고른 것이 아니라 사람이 고른 것이라고
+    /// 적는다. 그래야 "내가 맞나" 를 다시 따질 이유가 없어진다.
+    private func announce(
+        withdrawn user: User,
+        result: AdminOperations.Withdrawal,
+        on request: Request
+    ) async {
+        for handover in result.handedOver {
+            await request.notifier.notify(
+                person: handover.newOwner,
+                message: NotificationMessage(
+                    title: "'\(handover.app.name)' 의 소유자가 되셨습니다",
+                    body: """
+                        \(user.name) 님이 탈퇴하면서 이 앱의 소유권을 \
+                        \(handover.newOwner.name) 님에게 이전하셨습니다. 이 조치가 적절하지 \
+                        않다고 판단되면 앱 관리 화면에서 다른 공동 관리자에게 소유권을 \
+                        이전할 수 있습니다.
+                        """,
+                    link: request.consoleLink("/apps/\(handover.app.id?.uuidString ?? "")")
+                )
+            )
+        }
+
+        let moved = result.handedOver.isEmpty
+            ? "소유하던 앱은 없었습니다."
+            : "이전한 앱: " + result.handedOver
+                .map { "\($0.app.name) → \($0.newOwner.name)" }
+                .sorted()
+                .joined(separator: ", ")
+        await request.notifier.notifyOperators(
+            NotificationMessage(
+                title: "\(user.name)(\(user.email)) 님이 탈퇴했습니다",
+                body: moved,
+                link: request.consoleLink("/admin/users")
+            )
+        )
+
+        // **나간 본인에게도 보낸다.** 내가 누르지 않았는데 이것이 오면 세션을
+        // 잃은 것이고, 그것을 알 수 있는 경로가 이것뿐이다. `notify(person:)` 은
+        // 탈퇴한 계정을 거르므로 (ADR-0061) 여기서 직접 보낸다. 고른 수단만 보지
+        // 않고 Slack DM 과 메일 둘 다로 보낸다. 퇴사하면 어느 쪽이 먼저 닫힐지
+        // 알 수 없다.
+        await request.notifier.notifyEveryWay(
+            NotificationMessage(
+                title: "탈퇴가 끝났습니다",
+                body: """
+                    \(user.email) 계정으로 탈퇴하셨습니다. 이제 로그인할 수 없습니다.
+                    \(moved)
+
+                    누르신 적이 없다면 스토어 관리자에게 바로 알리세요.
+                    """
+            ),
+            to: user.email
+        )
+    }
+
+    /// 주소에 실려 온 `assignment` 들을 읽는다. `앱id:사람id` 꼴이다.
+    ///
+    /// **고른 것을 주소에 싣고 다닌다.** 앱마다 검색이 따로 있어서, 한 앱을 찾는
+    /// 동안 화면이 다시 그려진다. 고른 값을 들고 다니지 않으면 앞서 정한 것이
+    /// 그때마다 사라진다.
+    static func parseAssignments(_ pairs: [String]) -> [UUID: UUID] {
+        var parsed: [UUID: UUID] = [:]
+        for pair in pairs {
+            let parts = pair.split(separator: ":", maxSplits: 1)
+            guard parts.count == 2,
+                  let appID = UUID(uuidString: String(parts[0])),
+                  let ownerID = UUID(uuidString: String(parts[1]))
+            else { continue }
+            parsed[appID] = ownerID
+        }
+        return parsed
+    }
+
+    private func renderWithdraw(error: String?, on request: Request) async throws -> View {
+        let user = try request.requireUser()
+        let userID = try user.requireID()
+
+        let owned = try await App.query(on: request.db)
+            .filter(\.$owner.$id == userID)
+            .sort(\.$name)
+            .all()
+
+        let query = (request.query[String.self, at: "member"] ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let searchedAppID = request.query[String.self, at: "app"].flatMap(UUID.init(uuidString:))
+        let chosen = Self.parseAssignments(
+            (try? request.query.get([String].self, at: "assignment")) ?? []
+        )
+
+        var rows: [WithdrawAppRow] = []
+        var unresolved = false
+        for app in owned {
+            let appID = try app.requireID()
+            // 공동 관리자가 있으면 그 중에서 고르게 한다. 검색은 이 앱과 아무
+            // 관계없는 사람까지 닿아서, 아는 사람이 있는데도 이름을 쳐야 한다.
+            let mates = try await AppMember.query(on: request.db)
+                .filter(\.$app.$id == appID)
+                .sort(\.$createdAt, .ascending)
+                .with(\.$user)
+                .all()
+                .map(\.user)
+                .filter(\.isActive)
+
+            var row = WithdrawAppRow(
+                id: appID.uuidString,
+                name: app.name,
+                bundleID: app.bundleID,
+                iconURL: app.iconURL,
+                initial: app.name.first.map(String.init) ?? "?",
+                mates: try mates.map {
+                    MemberCandidateRow(
+                        id: try $0.requireID().uuidString,
+                        email: $0.email,
+                        name: $0.name
+                    )
+                },
+                // 다른 앱에서 고른 것들. 검색 폼이 그대로 실어 보낸다.
+                otherChoices: chosen
+                    .filter { $0.key != appID }
+                    .map { "\($0.key.uuidString):\($0.value.uuidString)" }
+                    .sorted()
+            )
+
+            // **고른 사람이 받을 수 있는 사람인지 여기서도 본다.** 고른 값은
+            // 주소에 실려 오므로 손으로 만들 수 있다. 확인하지 않으면 탈퇴한
+            // 계정이나 자기 자신을 넣어도 화면은 "정해졌다" 로 그리고 버튼까지
+            // 풀린다. 눌러야 비로소 서버가 거절해서, 사람은 다 해놓고 마지막에
+            // 막힌다. 보내는 쪽에서 거절할 것은 그리는 쪽에서도 거절한다.
+            if let pickedID = chosen[appID],
+               pickedID != userID,
+               let picked = try await User.find(pickedID, on: request.db),
+               picked.isActive {
+                row.chosenID = pickedID.uuidString
+                row.chosenName = picked.name
+                row.chosenEmail = picked.email
+            } else if mates.isEmpty {
+                unresolved = true
+            }
+
+            if !query.isEmpty, searchedAppID == appID {
+                let found = try await PersonSearch.find(
+                    matching: query, excluding: [userID], on: request.db
+                )
+                row.query = query
+                row.candidates = found.candidates
+                row.overflowed = found.overflowed
+            }
+            rows.append(row)
+        }
+
+        // **두 묶음으로 나눠 세운다.** 공동 관리자가 있는 앱은 그 중에서 고르면 되고,
+        // 단독으로 관리하던 앱은 찾아야 한다. 손이 다른 일이라 섞어두면 화면이
+        // 앱마다 다른 모양이 되는 것처럼 읽힌다.
+        return try await request.view.render(
+            "me-withdraw",
+            WithdrawContext(
+                page: try await request.pageContext(title: "탈퇴"),
+                email: user.email,
+                coManaged: rows.filter { !$0.mates.isEmpty },
+                soleOwned: rows.filter { $0.mates.isEmpty },
+                hasApps: !rows.isEmpty,
+                unresolved: unresolved,
+                error: error
+            )
+        ).get()
     }
 
     // MARK: - 내 토큰 (ADR-0060)
@@ -360,6 +606,58 @@ struct NotificationPreferenceValues: Codable {
 extension NotificationPreferenceValues: Content {}
 
 /// 내 토큰 화면이 쓰는 값 (ADR-0060).
+/// 탈퇴 화면.
+struct WithdrawContext: Encodable {
+    var page: PageContext
+    /// 확인하려고 그대로 적게 할 값.
+    var email: String
+    /// 공동 관리자가 있는 앱. 그 중에서 고른다.
+    var coManaged: [WithdrawAppRow]
+    /// 단독으로 관리하던 앱. 이전받을 사람을 찾아야 한다.
+    var soleOwned: [WithdrawAppRow]
+    /// 소유한 앱이 하나라도 있나. 없으면 그 구역을 그리지 않는다.
+    var hasApps: Bool
+    /// 아직 소유권 이전받을 사람을 정하지 않은 앱이 있나. 있으면 탈퇴 버튼을 잠근다.
+    var unresolved: Bool
+    var error: String?
+}
+
+/// 소유권을 이전할 앱 한 줄.
+struct WithdrawAppRow: Encodable {
+    var id: String
+    var name: String
+    var bundleID: String
+    /// 번들에서 뽑아둔 아이콘. 앱 목록(`AppRow`)과 같은 것을 쓴다. 같은 앱을 두
+    /// 화면에서 보는데 한쪽만 얼굴이 있으면 같은 것으로 안 읽힌다.
+    var iconURL: String?
+    /// 아이콘이 없을 때 그릴 이름 첫 글자.
+    var initial: String
+    /// 공동 관리자들. 있으면 여기서 고르고, 없으면 검색한다.
+    var mates: [MemberCandidateRow]
+    /// 다른 앱에서 이미 고른 `앱id:사람id` 들. 검색 폼이 그대로 실어 보낸다.
+    var otherChoices: [String]
+    /// 이 앱에서 고른 사람. 검색으로 고른 뒤에만 찬다.
+    var chosenID: String?
+    var chosenName: String?
+    var chosenEmail: String?
+    /// 검색어. 이 앱에서 찾는 중일 때만 있다.
+    var query: String?
+    var candidates: [MemberCandidateRow] = []
+    var overflowed = false
+}
+
+/// 나간 뒤 한 번 보여주는 화면.
+struct WithdrawnContext: Encodable {
+    var page: PageContext
+    var email: String
+    var handedOver: [HandoverRow]
+}
+
+struct HandoverRow: Encodable {
+    var app: String
+    var newOwner: String
+}
+
 struct MyTokensContext: Encodable {
     var page: PageContext
     /// 지금 쓸 수 있는 것.
