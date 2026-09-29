@@ -301,9 +301,18 @@ final class StoreModel {
         await applySelfUpdateIfIdle()
     }
 
+    /// 지금 도는 번들을 제자리에서 갈아끼울 수 있나.
+    ///
+    /// 앱이 도는 동안 자리가 바뀌지 않으므로 한 번만 본다. 번들 밖(`swift run`)이면
+    /// 어차피 교체하지 않으니 막을 것도 없다 (`SelfUpdate.canReplace`).
+    let canReplaceSelf: Bool = SelfUpdate.currentBundle().map { SelfUpdate.canReplace($0) } ?? true
+
     /// 다른 일이 없을 때만 자기를 갈아끼운다.
+    ///
+    /// 못 바꾸는 자리면 시도하지 않는다. 시도하면 앱이 종료됐다가 옛 번들로 다시 뜨고,
+    /// 주기마다 그것을 되풀이한다. 그 자리에서는 배너가 옮기라고 안내한다.
     private func applySelfUpdateIfIdle() async {
-        guard progress.isEmpty, let update = selfUpdate else { return }
+        guard canReplaceSelf, progress.isEmpty, let update = selfUpdate else { return }
         await updateSelf(update)
     }
 
@@ -314,6 +323,11 @@ final class StoreModel {
     func updateSelf(_ app: AppDTO) async {
         guard let client, let version = app.latestReleasedVersion else { return }
         guard progress[app.id] == nil else { return }
+        // 받기 전에 멈춘다. 다 받고 나서 못 놓는다고 하면 받은 것이 헛일이 된다.
+        guard canReplaceSelf else {
+            errorMessage = SelfUpdate.SelfUpdateError.moveToApplicationsHint
+            return
+        }
 
         errorMessage = nil
         progress[app.id] = .downloading(0)

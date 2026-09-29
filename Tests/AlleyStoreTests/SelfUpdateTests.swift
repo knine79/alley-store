@@ -75,3 +75,68 @@ struct UpdateDetectionTests {
         #expect(SelfUpdate.currentBundle() == nil)
     }
 }
+
+@Suite("갈아끼울 수 있는 자리인가")
+struct SelfUpdateLocationTests {
+    private func withBundle(_ body: (URL, URL) throws -> Void) throws {
+        let parent = FileManager.default.temporaryDirectory
+            .appendingPathComponent("alley-replace-\(UUID().uuidString)", isDirectory: true)
+        let bundle = parent.appendingPathComponent("Alley Store.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        defer {
+            // 권한을 되돌려야 지울 수 있다.
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: parent.path)
+            try? FileManager.default.removeItem(at: parent)
+        }
+        try body(parent, bundle)
+    }
+
+    @Test("쓸 수 있는 폴더의 번들은 갈아끼운다")
+    func writableLocationIsReplaceable() throws {
+        try withBundle { _, bundle in
+            #expect(SelfUpdate.canReplace(bundle))
+        }
+    }
+
+    /// 번들을 지우고 새로 놓는 자리가 부모 폴더다. 번들만 쓸 수 있어서는 안 된다.
+    /// Translocation 과 dmg 는 읽기 전용이라 이 갈래로 떨어진다.
+    @Test("부모 폴더에 쓸 수 없으면 갈아끼우지 않는다")
+    func readOnlyParentIsNotReplaceable() throws {
+        try withBundle { parent, bundle in
+            try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: parent.path)
+            #expect(!SelfUpdate.canReplace(bundle))
+        }
+    }
+
+    /// 실제 읽기 전용 볼륨이다. 권한 비트가 아니라 마운트가 막는 경우를 본다.
+    @Test("읽기 전용 디스크 이미지 안이면 갈아끼우지 않는다")
+    func readOnlyVolumeIsNotReplaceable() async throws {
+        try withBundle { parent, bundle in
+            let image = parent.appendingPathComponent("ro.dmg")
+            let mount = parent.appendingPathComponent("mnt", isDirectory: true)
+            let create = Process()
+            create.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+            create.arguments = ["create", "-quiet", "-srcfolder", bundle.path, "-format", "UDRO", image.path]
+            try create.run()
+            create.waitUntilExit()
+            try #require(create.terminationStatus == 0)
+
+            let attach = Process()
+            attach.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+            attach.arguments = ["attach", "-quiet", "-nobrowse", "-readonly", "-mountpoint", mount.path, image.path]
+            try attach.run()
+            attach.waitUntilExit()
+            try #require(attach.terminationStatus == 0)
+            defer {
+                let detach = Process()
+                detach.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+                detach.arguments = ["detach", "-quiet", "-force", mount.path]
+                try? detach.run()
+                detach.waitUntilExit()
+            }
+
+            let inside = mount.appendingPathComponent("Alley Store.app")
+            #expect(!SelfUpdate.canReplace(inside))
+        }
+    }
+}

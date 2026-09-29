@@ -332,7 +332,12 @@ struct SelfUpdateBanner: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(app.name) 새 버전이 있습니다")
                     .font(.callout.weight(.medium))
-                if let version = app.latestReleasedVersion {
+                if !model.canReplaceSelf {
+                    // 누를 버튼을 주지 않는다. 눌러도 할 수 있는 일이 없다.
+                    Text(SelfUpdate.SelfUpdateError.moveToApplicationsHint)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if let version = app.latestReleasedVersion {
                     Text("업데이트하면 앱이 다시 시작합니다 · \(version.shortVersion)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -340,7 +345,9 @@ struct SelfUpdateBanner: View {
             }
             Spacer()
 
-            if let progress = model.progress[app.id] {
+            if !model.canReplaceSelf {
+                EmptyView()
+            } else if let progress = model.progress[app.id] {
                 switch progress {
                 case .downloading(let fraction):
                     ProgressView(value: fraction).frame(width: 80).controlSize(.small)
