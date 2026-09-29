@@ -109,6 +109,12 @@ enum InstallState: Equatable {
     /// 버튼이 앱을 여는가, 받는가.
     var opensInstalledApp: Bool { self == .upToDate }
 
+    /// 받으면 깔린 것보다 낮은 빌드로 내려가는가. 그때는 누르기 전에 묻는다.
+    ///
+    /// 비교할 수 없는 경우(`unknown`)는 묻지 않는다. 내려가는지 알 수 없는데
+    /// "이전 버전으로 바뀝니다" 라고 하면 거짓말이 된다.
+    var downgradesOnInstall: Bool { self == .ahead }
+
     var summary: String {
         switch self {
         case .notInstalled: return "설치되지 않음"
