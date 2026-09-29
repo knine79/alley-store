@@ -684,10 +684,19 @@ struct TokenRow: Encodable {
     /// 만료와 폐기를 가려서 적는다. 만료는 스스로 고칠 수 있고 폐기는 누가 없앤 것이라
     /// 사람이 할 일이 다르다.
     var blocked: String?
+    /// 어떻게 발급됐는지. 갱신하는 법이 다르다 (`UserTokenExpiryNotice.whatToDo`).
+    ///
+    /// CLI 가 붙인 이름은 기기 이름이라, 이것이 없으면 목록에서 어느 것이 터미널에
+    /// 들어 있는 토큰인지 알 수 없다.
+    var origin: String
 
     init(token: UserToken) throws {
         self.id = try token.requireID().uuidString
         self.name = token.name
+        switch token.origin {
+        case .cli: self.origin = "CLI 로그인"
+        case .console: self.origin = "직접 발급"
+        }
         self.createdAt = DateStyle.minute.display(from: token.createdAt ?? Date())
         self.expiresAt = DateStyle.minute.display(from: token.expiresAt)
         self.lastUsedAt = token.lastUsedAt.map { DateStyle.minute.display(from: $0) }

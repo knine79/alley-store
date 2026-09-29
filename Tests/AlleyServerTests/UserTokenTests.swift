@@ -386,4 +386,21 @@ struct UserTokenTests {
             #expect(token.origin == .cli)
         }
     }
+
+    @Test("내 토큰 목록에 발급 방법이 보인다")
+    func tokenListShowsOrigin() async throws {
+        try await withMigratedApp { app in
+            let (user, session) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            _ = try await issue(for: user, on: app, name: "직접", origin: .console)
+            _ = try await issue(for: user, on: app, name: "노트북", origin: .cli)
+
+            // CLI 가 붙인 이름은 기기 이름이라, 이것이 없으면 어느 것이 터미널에 들어 있는
+            // 토큰인지 알 수 없다.
+            try await app.testing().test(.GET, "/me/tokens", headers: .sessionCookie(session)) { response in
+                let html = response.body.string
+                #expect(html.contains("CLI 로그인"))
+                #expect(html.contains("직접 발급"))
+            }
+        }
+    }
 }

@@ -8,6 +8,7 @@
 <p class="page-lead">
     코딩 에이전트가 나 대신 스토어를 다룰 때 쓰는 값입니다. 내가 화면에서 할 수 있는
     것은 이 토큰으로도 됩니다. 90일이면 만료되고, 만료 일주일 전에 알려드립니다.
+    <code>alley auth login</code> 으로 로그인하면 여기서 발급하지 않아도 이 목록에 생깁니다.
 </p>
 
 #if(error):
@@ -38,6 +39,7 @@
     <thead>
         <tr>
             <th class="table-fill">이름</th>
+            <th class="table-tight">발급 방법</th>
             <th class="table-tight">발급</th>
             <th class="table-tight">만료</th>
             <th class="table-tight">마지막 사용</th>
@@ -51,6 +53,7 @@
                 #(token.name)
                 #if(token.blocked):<span class="badge badge-failed">#(token.blocked)</span>#endif
             </td>
+            <td class="table-tight table-muted">#(token.origin)</td>
             <td class="table-tight table-muted"><time datetime="#(token.createdAt.iso)" data-date-only="#(token.createdAt.dateOnly)">#(token.createdAt.display)</time></td>
             <td class="table-tight table-muted"><time datetime="#(token.expiresAt.iso)" data-date-only="#(token.expiresAt.dateOnly)">#(token.expiresAt.display)</time></td>
             <!-- 안 쓰는 토큰을 가려내는 단서다. 폐기해도 되는지 판단할 것이 이것뿐이다. -->
