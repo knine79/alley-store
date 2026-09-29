@@ -167,13 +167,43 @@ struct InstallStateTests {
         #expect(!InstallState.updateAvailable.opensInstalledApp)
     }
 
-    /// 깔린 것이 더 새로우면 다시 설치가 곧 내려가기다. 그때만 묻는다.
-    @Test("깔린 것이 더 새로울 때만 내려간다고 묻는다")
-    func onlyAheadAsksBeforeDowngrading() {
-        #expect(InstallState.ahead.downgradesOnInstall)
-        for state in [InstallState.notInstalled, .notReleased, .upToDate, .updateAvailable, .unknown] {
-            #expect(!state.downgradesOnInstall)
+    /// 깔린 것을 덮어쓰는 상태에서만 묻고, 무엇을 잃는지에 따라 말이 다르다.
+    @Test("깔린 것을 덮어쓸 때만 묻는다")
+    func asksOnlyWhenOverwritingInstalledApp() {
+        #expect(InstallState.ahead.reinstallWarning == .downgrade)
+        #expect(InstallState.unknown.reinstallWarning == .possibleDowngrade)
+        #expect(InstallState.upToDate.reinstallWarning == .overwrite)
+        for state in [InstallState.notInstalled, .notReleased, .updateAvailable] {
+            #expect(state.reinstallWarning == nil)
         }
+    }
+
+    /// 견줄 수 없을 때 "내려간다" 고 단정하면 틀릴 수 있다.
+    @Test("비교할 수 없으면 내려갈 수 있다고만 말한다")
+    func possibleDowngradeDoesNotClaimDowngrade() {
+        let warning = ReinstallWarning.possibleDowngrade
+        #expect(warning.title.contains("수 있습니다"))
+        let message = warning.message(installed: "2.0", released: "1.0.2 (빌드 3)")
+        #expect(message.contains("2.0"))
+        #expect(message.contains("1.0.2 (빌드 3)"))
+        #expect(message.contains("수 있습니다"))
+    }
+
+    @Test("내려갈 때는 무엇이 무엇으로 바뀌는지 적는다")
+    func downgradeNamesBothVersions() {
+        let message = ReinstallWarning.downgrade.message(
+            installed: "9.9.9 (빌드 99)", released: "1.0.2 (빌드 3)"
+        )
+        #expect(message.contains("9.9.9 (빌드 99)"))
+        #expect(message.contains("1.0.2 (빌드 3)"))
+    }
+
+    @Test("같은 빌드를 다시 받을 때는 덮어쓴다는 것만 알린다")
+    func overwriteIsShort() {
+        let message = ReinstallWarning.overwrite.message(
+            installed: "1.0.2 (빌드 3)", released: "1.0.2 (빌드 3)"
+        )
+        #expect(message == "이 맥에 있는 1.0.2 (빌드 3) 을(를) 덮어씁니다.")
     }
 }
 
