@@ -56,7 +56,14 @@ enum UserTokenExpiryNotice {
                 person: token.user,
                 message: NotificationMessage(
                     title: "토큰 '\(token.name)' 이 \(days)일 뒤 만료됩니다",
-                    body: "내 설정 > 내 토큰에서 새로 발급하고 쓰던 곳의 값을 바꾸세요.",
+                    // 토큰은 두 길로 생긴다. `alley auth login` 으로 받은 것은 다시
+                    // 로그인하면 끝이고, 화면에서 발급한 것은 쓰던 곳의 값을 바꿔야 한다.
+                    // 이름으로는 둘을 가를 수 없어서 둘 다 적는다.
+                    body: """
+                        alley 명령으로 로그인했다면 `alley auth login` 을 다시 실행하세요. \
+                        직접 발급한 토큰이라면 내 설정 > 내 토큰에서 새로 발급하고 쓰던 곳의 \
+                        값을 바꾸세요.
+                        """,
                     link: baseURL + "/me/tokens"
                 )
             )
