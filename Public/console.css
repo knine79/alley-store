@@ -267,6 +267,17 @@ code {
     box-shadow: 0 0 0 1px var(--border);
 }
 
+/* 사진이 없는 사람. 앱 목록의 `.card-icon-letter` 와 같은 결로 둔다. */
+.chrome-avatar-letter {
+    display: inline-grid;
+    place-items: center;
+    background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+    color: var(--accent);
+    font-size: var(--font-xs);
+    font-weight: 600;
+    line-height: 1;
+}
+
 .chrome-nav form {
     margin: 0;
 }

@@ -163,8 +163,8 @@ struct ConsoleViewTests {
                 let html = response.body.string
                 #expect(html.contains("개발자"))
                 #expect(html.contains("로그아웃"))
-                // 사진이 없으면 빈 자리를 그리지 않는다.
-                #expect(!html.contains("chrome-avatar"))
+                // 사진이 없으면 이름 첫 글자를 세운다.
+                #expect(html.contains(#"chrome-avatar-letter" aria-hidden="true">개</span>"#))
             }
         }
     }
