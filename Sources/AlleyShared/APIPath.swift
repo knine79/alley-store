@@ -26,6 +26,11 @@ public enum APIPath {
     public static let appClient = "app"
     /// 스토어 앱이 일회용 코드를 세션 토큰으로 교환하는 경로.
     public static let tokenExchange = "\(apiRoot)/auth/token"
+
+    /// CLI 를 연결하는 화면. 브라우저가 연다 (ADR-0064).
+    public static let cliAuthorize = "/auth/cli"
+    /// CLI 가 일회용 코드를 사람 토큰으로 바꾸는 자리 (ADR-0064).
+    public static let cliTokenExchange = "\(apiRoot)/auth/cli/token"
     public static let currentUser = "\(apiRoot)/me"
 
     // MARK: - 앱 / 버전

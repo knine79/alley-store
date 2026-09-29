@@ -780,16 +780,23 @@ entitlements 는 "이 앱이 무엇을 해도 되는지" 를 적어 서명에 �
 서명을 기다리고, 실패하면 화면의 안내를 읽어 손으로 고칩니다. 그 자리를 에이전트가
 대신 밟게 할 수 있습니다 ([ADR-0060](adr/0060-mcp-connects-as-a-person.md)).
 
-**사람 토큰으로 붙습니다.** 웹 콘솔의 **내 설정 > 내 토큰**에서 발급하세요. 배포
-토큰(`alleyd_`)으로는 업로드밖에 되지 않습니다. 90일이면 만료되고, 만료 이레 전에
-알려드립니다.
+`alley` 명령이 MCP 서버를 겸합니다. 따로 받을 것이 없습니다.
 
-`alley` 명령이 MCP 서버를 겸합니다. 따로 받을 것이 없습니다. Claude Code 라면
-이렇게 붙입니다.
+**먼저 이 기기를 연결합니다.** 브라우저가 열리고 버튼 하나를 누르면 끝입니다
+([ADR-0064](adr/0064-the-cli-gets-its-token-from-the-browser.md)). 토큰을 복사해
+붙여넣지 않습니다.
 
 ```bash
-claude mcp add alley --env ALLEY_SERVER_URL=https://store.example.com \
-  --env ALLEY_TOKEN=alleyu_... -- alley mcp
+alley auth login --server https://store.example.com
+```
+
+받아둔 것은 `~/.config/alley/credentials` 에 0600 으로 들어갑니다. 90일이면
+만료되고, 만료 이레 전에 알려드립니다. `alley auth status` 로 언제까지인지 봅니다.
+
+그다음 Claude Code 에 붙입니다. 붙여둔 스토어가 하나면 줄 것이 없습니다.
+
+```bash
+claude mcp add alley -- alley mcp
 ```
 
 설정 파일을 직접 쓰는 도구라면 같은 것을 이렇게 적습니다.
@@ -799,15 +806,21 @@ claude mcp add alley --env ALLEY_SERVER_URL=https://store.example.com \
   "mcpServers": {
     "alley": {
       "command": "alley",
-      "args": ["mcp"],
-      "env": {
-        "ALLEY_SERVER_URL": "https://store.example.com",
-        "ALLEY_TOKEN": "alleyu_..."
-      }
+      "args": ["mcp"]
     }
   }
 }
 ```
+
+스토어를 여러 곳에 붙였다면 어느 쪽인지 알려줘야 합니다.
+
+```bash
+claude mcp add alley --env ALLEY_SERVER_URL=https://store.example.com -- alley mcp
+```
+
+**CI 는 이 길을 쓰지 않습니다.** 사람이 앉아 있지 않아 브라우저를 열 수 없습니다.
+거기서는 앱 상세 화면에서 발급한 배포 토큰(`alleyd_`)을 `ALLEY_TOKEN` 으로 줍니다.
+환경변수가 있으면 붙여둔 것보다 먼저입니다. 배포 토큰으로는 업로드밖에 되지 않습니다.
 
 붙으면 에이전트가 이런 것들을 할 수 있습니다. 앱 목록과 버전 목록을 보고, 빌드를
 올리고, **서명이 왜 실패했고 무엇을 고치면 되는지 읽고**, 출시하고, Sparkle 에
