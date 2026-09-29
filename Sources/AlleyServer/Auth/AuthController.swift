@@ -130,7 +130,9 @@ public struct AuthController: RouteCollection, Sendable {
         case .web:
             // 웹은 세션 토큰을 HttpOnly 쿠키로 받는다. 자바스크립트가 읽지 못하게 한다.
             let token = try await signSession(request: request, userID: userID)
-            let response = request.redirect(to: "/")
+            // 첫 화면은 로그인과 상관없이 소개를 보여준다. 로그인은 앱을 배포하러 온
+            // 것이라 앱 목록으로 곧장 보낸다.
+            let response = request.redirect(to: "/apps")
             let isSecure = config.publicBaseURL.hasPrefix("https://")
             response.cookies[sessionCookieName] = sessionCookie(
                 token: token,

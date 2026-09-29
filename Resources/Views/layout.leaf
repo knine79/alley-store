@@ -25,6 +25,9 @@
 
             #if(page.user):
             <nav class="chrome-nav">
+                <!-- 로고가 소개 화면으로 가므로(로그인해 있어도 소개를 보여준다) 콘솔로
+                     돌아올 길을 따로 둔다. -->
+                <a class="chrome-link" href="/apps">내 앱</a>
                 #if(page.isAdmin):
                 <a class="chrome-link" href="/admin/settings">관리</a>
                 #endif
@@ -35,6 +38,10 @@
                 <form method="post" action="/logout">
                     <button class="button button-quiet" type="submit">로그아웃</button>
                 </form>
+            </nav>
+            #else:
+            <nav class="chrome-nav">
+                <a class="button button-quiet" href="#(page.loginPath)">로그인</a>
             </nav>
             #endif
         </div>

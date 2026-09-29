@@ -36,71 +36,44 @@ struct ConsoleViewTests {
         }
     }
 
-    @Test("로그인하면 첫 화면이 앱 목록으로 보낸다")
-    func signedInHomeGoesToApps() async throws {
+    @Test("로그인해 있어도 첫 화면은 소개를 보여준다")
+    func signedInStillSeesIntro() async throws {
         try await withMigratedApp { app in
             let (_, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
 
-            // 콘솔에 들어와서 하려는 일은 대개 앱을 보거나 올리는 것이다.
-            // 중간에 한 장을 더 두면 매번 한 번씩 더 눌러야 한다.
+            // 로그인한 사람도 동료에게 건넬 소개 주소가 필요하다.
             try await app.testing().test(
                 .GET, "/", headers: .sessionCookie(token)
             ) { response in
-                #expect(response.status == .seeOther)
-                #expect(response.headers.first(name: .location) == "/apps")
+                #expect(response.status == .ok)
+                let html = response.body.string
+                #expect(html.contains("개발자를 위한 기능"))
+                // 로그인한 사람에게 로그인 버튼을 보이면 OAuth 를 다시 탄다.
+                #expect(html.contains("내 앱으로 가기"))
+                #expect(!html.contains("앱을 배포하려면 지금 로그인하세요"))
+                #expect(!html.contains(#"href="\#(APIPath.googleAuthorize)""#))
             }
         }
     }
 
-    @Test("첫 화면은 앱 받기 세그먼트로 열리고, 올리기로 가는 링크가 있다")
-    func homeOpensOnGetSegment() async throws {
+    @Test("첫 화면은 스토어 소개와 개발자 기능, 가이드 링크를 한 장에 둔다")
+    func homeShowsIntroAndFeatures() async throws {
         try await withMigratedApp { app in
             try await app.testing().test(.GET, "/") { response in
                 let html = response.body.string
-                #expect(html.contains(#"aria-current="page">앱 받기"#))
-                #expect(html.contains(#"href="/?do=upload""#))
+                #expect(html.contains("골목 상가"))
+                #expect(html.contains("피드백 알림"))
+                #expect(html.contains(#"href="/developers""#))
+                #expect(html.contains("앱을 배포하려면 지금 로그인하세요"))
                 // 출시된 스토어 앱이 없으면 누를 버튼을 그리지 않는다.
-                #expect(html.contains("아직 받을 수 있는 스토어 앱이 없습니다"))
+                #expect(html.contains("아직 다운로드할 수 있는 스토어 앱이 없습니다"))
                 #expect(!html.contains(#"href="/get""#))
             }
         }
     }
 
-    @Test("앱 올리기 세그먼트는 이 스토어 주소를 넣은 명령을 준다")
-    func uploadSegmentUsesThisStore() async throws {
-        try await withMigratedApp { app in
-            try await app.testing().test(.GET, "/?do=upload") { response in
-                #expect(response.status == .ok)
-                let html = response.body.string
-                #expect(html.contains(#"aria-current="page">앱 올리기"#))
-                #expect(html.contains("alley auth login --server https://store.example.com"))
-                #expect(html.contains("claude mcp add alley -- alley mcp"))
-                // 올라온 alley 가 없으면 404 가 나는 명령을 보여주지 않는다.
-                #expect(!html.contains("curl"))
-                #expect(html.contains("아직 받을 수 있는 alley 가 없습니다"))
-            }
-        }
-    }
-
-    @Test("alley 가 올라와 있으면 받는 명령이 보인다")
-    func uploadSegmentShowsCLIDownload() async throws {
-        try await withMigratedApp { app in
-            let release = CLIRelease(
-                version: "0.10.0", storageKey: "cli/test", fileSize: 1, sha256: "00", uploadedByID: nil
-            )
-            release.isCurrent = true
-            try await release.save(on: app.db)
-
-            try await app.testing().test(.GET, "/?do=upload") { response in
-                let html = response.body.string
-                #expect(html.contains("curl -fL -o ~/.local/bin/alley https://store.example.com/get/cli"))
-                #expect(html.contains("0.10.0"))
-            }
-        }
-    }
-
-    @Test("출시된 스토어 앱이 있으면 받기 버튼이 보인다")
-    func getSegmentLinksReleasedStoreApp() async throws {
+    @Test("출시된 스토어 앱이 있으면 다운로드 버튼이 보인다")
+    func homeLinksReleasedStoreApp() async throws {
         try await withMigratedApp { app in
             let (admin, _) = try await app.makeUser(email: "admin@example.com", role: .admin)
             _ = try await StoreAppPublicPageTests.makeSignedStoreApp(on: app, owner: admin)
@@ -111,39 +84,67 @@ struct ConsoleViewTests {
         }
     }
 
+    @Test("머리 오른쪽에 로그인 버튼이 있다")
+    func chromeShowsLoginWhenSignedOut() async throws {
+        try await withMigratedApp { app in
+            // 첫 화면만이 아니다. 가이드를 읽다가 로그인하려는 사람도 있다.
+            try await app.testing().test(.GET, "/developers") { response in
+                let html = response.body.string
+                #expect(html.contains(#"<a class="button button-quiet" href="\#(APIPath.googleAuthorize)">로그인</a>"#))
+            }
+        }
+    }
+
+    @Test("개발자 가이드는 로그인 없이 열리고 이 스토어 주소를 넣은 명령을 준다")
+    func developersGuideUsesThisStore() async throws {
+        try await withMigratedApp { app in
+            try await app.testing().test(.GET, "/developers") { response in
+                #expect(response.status == .ok)
+                let html = response.body.string
+                #expect(html.contains("alley auth login --server https://store.example.com"))
+                #expect(html.contains("claude mcp add alley -- alley mcp"))
+                #expect(html.contains("export ALLEY_SERVER_URL=https://store.example.com"))
+                // CLI 가 올라와 있지 않으면 404 가 나는 설치 명령을 보여주지 않는다.
+                #expect(!html.contains("curl"))
+                #expect(html.contains("아직 다운로드할 수 있는 CLI가 없습니다"))
+            }
+        }
+    }
+
+    @Test("CLI 가 올라와 있으면 설치 명령이 보인다")
+    func developersGuideShowsCLIInstall() async throws {
+        try await withMigratedApp { app in
+            let release = CLIRelease(
+                version: "0.10.0", storageKey: "cli/test", fileSize: 1, sha256: "00", uploadedByID: nil
+            )
+            release.isCurrent = true
+            try await release.save(on: app.db)
+
+            try await app.testing().test(.GET, "/developers") { response in
+                let html = response.body.string
+                #expect(html.contains("curl -fL -o ~/.local/bin/alley https://store.example.com/get/cli"))
+                #expect(html.contains("0.10.0"))
+            }
+        }
+    }
+
     @Test("서버 주소 끝의 / 가 명령에 겹쳐 찍히지 않는다")
     func serverURLTrailingSlashIsTrimmed() async throws {
         try await withMigratedApp(overrides: [
             "PUBLIC_BASE_URL": "https://store.example.com/",
         ]) { app in
-            try await app.testing().test(.GET, "/?do=upload") { response in
-                let html = response.body.string
-                #expect(html.contains("alley auth login --server https://store.example.com</pre>"))
+            try await app.testing().test(.GET, "/developers") { response in
+                #expect(response.body.string.contains("alley auth login --server https://store.example.com</pre>"))
             }
         }
     }
 
-    @Test("세그먼트를 골라 들어오면 로그인해 있어도 앱 목록으로 보내지 않는다")
-    func signedInKeepsChosenSegment() async throws {
+    @Test("앱 등록 화면에서 개발자 가이드로 갈 수 있다")
+    func appNewLinksGuide() async throws {
         try await withMigratedApp { app in
             let (_, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
-
-            // "MCP 붙이는 법 여기" 하고 받은 링크다. 튕기면 링크가 쓸모없다.
-            try await app.testing().test(
-                .GET, "/?do=upload", headers: .sessionCookie(token)
-            ) { response in
-                #expect(response.status == .ok)
-                let html = response.body.string
-                #expect(html.contains("alley auth login"))
-                // 이미 로그인한 사람에게 로그인 버튼을 보이면 OAuth 를 다시 탄다.
-                #expect(html.contains(#"href="/apps""#))
-                #expect(!html.contains(#"href="\#(APIPath.googleAuthorize)""#))
-            }
-            // 모르는 값은 고르지 않은 것과 같다.
-            try await app.testing().test(
-                .GET, "/?do=nope", headers: .sessionCookie(token)
-            ) { response in
-                #expect(response.status == .seeOther)
+            try await app.testing().test(.GET, "/apps/new", headers: .sessionCookie(token)) { response in
+                #expect(response.body.string.contains(#"href="/developers""#))
             }
         }
     }

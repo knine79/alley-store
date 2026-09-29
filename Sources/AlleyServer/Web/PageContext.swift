@@ -31,6 +31,11 @@ struct PageContext: Encodable {
     ///
     /// 이 값이 참일 때만 `no-resubmit.js` 를 붙여 주소를 목록 주소로 바꾼다.
     var isFormResult: Bool
+    /// 머리 오른쪽 로그인 버튼이 갈 곳. 로그인하지 않은 사람에게만 그린다.
+    ///
+    /// 첫 화면만이 아니라 어느 화면에나 둔다. `/get` 이나 개발자 가이드를 읽다가
+    /// 로그인하려는 사람이 첫 화면 맨 아래까지 찾아가게 할 이유가 없다.
+    var loginPath: String
 }
 
 /// 화면에 바르는 브랜딩.
@@ -100,7 +105,8 @@ extension Request {
             adminTabs: adminTab.map(AdminTab.links(current:)) ?? [],
             myTabs: myTab.map(MyTab.links(current:)) ?? [],
             assetVersion: application.assetVersion.value,
-            isFormResult: method == .POST
+            isFormResult: method == .POST,
+            loginPath: APIPath.googleAuthorize
         )
     }
 }

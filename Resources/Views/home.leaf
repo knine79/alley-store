@@ -1,0 +1,104 @@
+#extend("layout"):
+#export("content"):
+<!-- 보는 사람은 둘이다. 스토어 앱을 받으러 온 사람이 훨씬 많아서 그쪽을 위에 두고,
+     개발자 기능은 아래에 소개만 한다. 절차는 개발자 가이드로 뺀다. -->
+<section class="hero">
+    #if(page.store.logoURL):
+    <img class="hero-logo" src="#(page.store.logoURL)" alt="">
+    #endif
+    <h1 class="hero-title">#(page.store.name)</h1>
+    <p class="hero-lead">
+        조직 구성원을 위한 macOS 앱 스토어입니다. 사내에서 만든 앱을 찾아 설치하고,
+        새 버전이 나오면 업데이트합니다.
+    </p>
+
+    <!-- 받을 앱이 없을 때 버튼을 그리면 누른 사람이 빈 화면을 만난다. `/get` 이
+         내주는 조건과 같은 값으로 가른다. -->
+    #if(hasStoreApp):
+    <a class="button button-primary button-large" href="#(storeAppPath)">스토어 앱 다운로드</a>
+    <p class="hero-note">스토어 앱을 열고 조직 계정으로 로그인하면 됩니다.</p>
+    #else:
+    <p class="hero-note">
+        아직 다운로드할 수 있는 스토어 앱이 없습니다. 관리자가 스토어 앱을 출시하면
+        여기에 나타납니다.
+    </p>
+    #endif
+</section>
+
+<!-- 스토어 이름은 조직이 바꾼다. 이름의 유래는 그 아래에서 도는 Alley 의 것이라
+     "이 스토어는 Alley 로 운영됩니다" 로 연결한다. -->
+<section class="intro">
+    <h2 class="intro-title">골목 가게 같은 앱 스토어</h2>
+    <p>
+        이 스토어는 <strong>Alley</strong>로 운영됩니다. Alley는 골목 상가라는 뜻입니다.
+        대로변의 App Store가 아니라 아는 사람만 찾아오는 골목 가게처럼, 조직 안에서만
+        열려 있는 배포 창구입니다.
+    </p>
+    <p>
+        스토어에 올라온 앱은 모두 Developer ID로 서명하고 Apple 공증을 거칩니다.
+        처음 열 때 "확인되지 않은 개발자" 경고가 뜨지 않습니다.
+    </p>
+</section>
+
+<section class="intro">
+    <h2 class="intro-title">개발자를 위한 기능</h2>
+    <p>만든 앱을 조직에 배포하는 데 필요한 것을 스토어가 맡습니다.</p>
+
+    <!-- 다섯 개를 넘기지 않는다. 늘어놓을수록 하나하나가 덜 읽힌다. -->
+    <ul class="feature-list">
+        <li>
+            <h3>서명·공증 자동화</h3>
+            <p>미서명 빌드를 업로드하면 Developer ID 서명과 공증은 스토어가 처리합니다. 인증서를 직접 다루지 않아도 됩니다.</p>
+        </li>
+        <li>
+            <h3>배포와 업데이트</h3>
+            <p>출시한 버전은 스토어 앱에서 바로 설치·업데이트됩니다. 자체 업데이트를 쓰는 앱에는 Sparkle appcast도 제공합니다.</p>
+        </li>
+        <li>
+            <h3>피드백 알림</h3>
+            <p>사용자가 별점이나 피드백을 남기면 바로 알려드립니다. 앱마다 관리자 각자에게 보낼지(Slack DM 또는 메일), 팀 Slack 채널로 보낼지 고릅니다.</p>
+        </li>
+        <li>
+            <h3>CLI</h3>
+            <p><code>alley upload</code> 한 줄로 CI에서 배포합니다. 배포 토큰은 앱 하나에만 통해서 새어나가도 다른 앱은 안전합니다.</p>
+        </li>
+        <li>
+            <h3>MCP</h3>
+            <p>Claude Code 같은 코딩 에이전트가 빌드를 업로드하고, 서명이 실패하면 원인을 읽고, 출시까지 합니다.</p>
+        </li>
+    </ul>
+
+    <p><a href="#(developersPath)">개발자 가이드 보기 →</a></p>
+</section>
+
+<section class="hero hero-cta">
+    #if(isSignedIn):
+    <p class="hero-lead">앱 목록에서 새 앱을 등록하거나 버전을 올릴 수 있습니다.</p>
+    <a class="button button-primary button-large" href="/apps">내 앱으로 가기</a>
+    #else:
+    <!-- 웹에서 로그인하면 개발자가 된다 (ADR-0056). 스토어 앱만 쓸 사람은 여기서
+         로그인할 필요가 없다는 것을 문구가 말한다. -->
+    <p class="hero-lead">앱을 배포하려면 지금 로그인하세요.</p>
+    <a class="button button-primary button-large" href="#(authorizationPath)">
+        #if(isGoogle):Google 계정으로 로그인#else:조직 계정으로 로그인#endif
+    </a>
+
+    #if(count(allowedEmailDomains) > 0):
+    <p class="hero-note">
+        다음 도메인의 계정만 로그인할 수 있습니다.
+        <span class="domain-list">
+            #for(domain in allowedEmailDomains):
+            <code>#(domain)</code>
+            #endfor
+        </span>
+    </p>
+    #else:
+    <p class="hero-note warning">
+        로그인 도메인 제한이 설정되지 않아 누구나 로그인할 수 있습니다.
+        관리자가 설정에서 허용 도메인을 지정해야 합니다.
+    </p>
+    #endif
+    #endif
+</section>
+#endexport
+#endextend
