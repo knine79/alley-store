@@ -25,17 +25,33 @@ public struct WebController: RouteCollection, Sendable {
     ///
     /// 로그인해 있으면 앱 목록으로 보낸다. 콘솔에 들어와서 하려는 일은 대개 앱을
     /// 보거나 올리는 것이라, 중간에 한 장을 더 두면 매번 한 번씩 더 눌러야 한다.
+    ///
+    /// **세그먼트를 골라 들어온 사람은 보내지 않는다.** `/?do=upload` 는 "MCP
+    /// 붙이는 법 여기" 하고 건네는 링크다. 받은 사람이 이미 로그인해 있다고 앱
+    /// 목록으로 튕기면 그 링크는 쓸모가 없다.
     @Sendable
     func home(request: Request) async throws -> Response {
-        if request.auth.has(User.self) {
+        let segment = HomeSegment(query: try? request.query.get(String.self, at: "do"))
+        if request.auth.has(User.self), segment == nil {
             return request.redirect(to: "/apps")
         }
 
         let settings = try await request.storeSettings()
+        let isUpload = segment == .upload
         let view = try await request.view.render(
             "login",
             LoginContext(
-                page: try await request.pageContext(title: "로그인"),
+                page: try await request.pageContext(title: isUpload ? "앱 올리기" : "로그인"),
+                isUpload: isUpload,
+                isSignedIn: request.auth.has(User.self),
+                getPath: "/",
+                uploadPath: "/?do=\(HomeSegment.upload.rawValue)",
+                hasStoreApp: try await StoreAppGetController.releasedStoreApp(on: request) != nil,
+                cliVersion: try await CLIRelease.current(on: request.db)?.version,
+                cliPath: "/\(StoreAppGetController.path)/cli",
+                // 끝의 `/` 를 뗀다. 안 떼면 복사할 명령에 `//get/cli` 가 찍히고,
+                // 그걸 본 사람은 동작하더라도 오타부터 의심한다.
+                serverURL: request.application.alleyConfig.publicBaseURL.trimmingSuffix("/"),
                 allowedEmailDomains: settings.allowedEmailDomains,
                 authorizationPath: APIPath.googleAuthorize,
                 // 공급자가 Google 이 아닐 수 있다 (ADR-0047). 버튼에 "Google" 이
@@ -114,8 +130,46 @@ public struct WebController: RouteCollection, Sendable {
 
 // MARK: - 화면별 데이터
 
+/// 첫 화면의 두 세그먼트.
+///
+/// 주소로 갈린다. 스크립트 없이 되고, 무엇보다 **링크를 건넬 수 있다.** 라디오와
+/// CSS 로 바꾸면 주소가 그대로라 "올리는 법은 여기" 라고 보낼 수가 없다.
+///
+/// 값은 영어로 둔다. 한글 키는 복사하는 순간 `%ED%95%98…` 가 되어 사람이 읽을 수
+/// 없는 링크가 된다.
+enum HomeSegment: String {
+    /// 앱을 받는 사람. 아무것도 고르지 않고 들어오면 여기다. 첫 화면을 여는 사람은
+    /// 대부분 받는 사람이다.
+    case get
+    /// 앱을 올리는 사람. CLI 받기부터 MCP 붙이기까지.
+    case upload
+
+    /// 모르는 값은 고르지 않은 것으로 본다. 오타 난 링크가 400 이 되면 받은 사람은
+    /// 첫 화면조차 못 본다.
+    init?(query: String?) {
+        guard let query, let segment = HomeSegment(rawValue: query) else { return nil }
+        self = segment
+    }
+}
+
 struct LoginContext: Encodable {
     var page: PageContext
+    /// 앱 올리기 세그먼트인가. 아니면 앱 받기다.
+    var isUpload: Bool
+    /// 로그인해 있는가. 세그먼트를 골라 들어온 사람은 로그인해 있어도 이 화면을
+    /// 본다. 그 사람에게 로그인 버튼을 보이면 OAuth 를 처음부터 다시 탄다.
+    var isSignedIn: Bool
+    var getPath: String
+    var uploadPath: String
+    /// 지금 받을 수 있는 스토어 앱이 있는가. `/get` 이 버튼을 그리는 조건과 같다.
+    var hasStoreApp: Bool
+    /// 지금 내주는 `alley` 의 버전 (ADR-0065). 올린 적이 없으면 nil 이고, 그때는
+    /// 받는 명령을 보여주지 않는다. 404 가 나는 명령을 복사하게 두지 않는다.
+    var cliVersion: String?
+    var cliPath: String
+    /// `alley auth login --server` 에 넣을 이 스토어의 주소. 사람이 자기 스토어
+    /// 주소를 찾아 바꿔 넣지 않고 그대로 복사하게 한다.
+    var serverURL: String
     var allowedEmailDomains: [String]
     var authorizationPath: String
     /// 로그인 버튼에 공급자 이름을 적을지.

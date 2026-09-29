@@ -780,7 +780,10 @@ entitlements 는 "이 앱이 무엇을 해도 되는지" 를 적어 서명에 �
 서명을 기다리고, 실패하면 화면의 안내를 읽어 손으로 고칩니다. 그 자리를 에이전트가
 대신 밟게 할 수 있습니다 ([ADR-0060](adr/0060-mcp-connects-as-a-person.md)).
 
-`alley` 명령이 MCP 서버를 겸합니다. 따로 받을 것이 없습니다.
+`alley` 명령이 MCP 서버를 겸합니다. 따로 받을 것이 없습니다. `alley` 는 스토어 첫
+화면의 **앱 올리기**(`/?do=upload`)에서 받습니다. 거기 적힌 명령에는 그 스토어
+주소가 이미 들어 있어서 그대로 복사하면 됩니다
+([ADR-0065](adr/0065-the-store-hands-out-the-cli.md)).
 
 **먼저 이 기기를 연결합니다.** 브라우저가 열리고 버튼 하나를 누르면 끝입니다
 ([ADR-0064](adr/0064-the-cli-gets-its-token-from-the-browser.md)). 토큰을 복사해

@@ -9,17 +9,101 @@
         조직 구성원에게 배포되는 macOS 앱을 등록하고 내려받는 곳입니다.
     </p>
 
-    <a class="button button-primary button-large" href="#(authorizationPath)">
-        #if(isGoogle):Google 계정으로 로그인#else:조직 계정으로 로그인#endif
-    </a>
+    <!-- 첫 화면을 여는 사람은 둘로 갈린다. 앱을 받는 사람과 올리는 사람이다.
+         하려는 일이 전혀 달라서 한 장에 섞으면 둘 다 자기 것을 찾아 읽어야 한다.
+         링크로 가르는 이유는 `HomeSegment` 에 있다. -->
+    <nav class="tabs home-tabs" aria-label="하려는 일">
+        #if(isUpload):
+        <a class="tab" href="#(getPath)">앱 받기</a>
+        <span class="tab tab-current" aria-current="page">앱 올리기</span>
+        #else:
+        <span class="tab tab-current" aria-current="page">앱 받기</span>
+        <a class="tab" href="#(uploadPath)">앱 올리기</a>
+        #endif
+    </nav>
+</section>
 
-    <!-- 앱을 받으러 왔는데 로그인 화면에 떨어진 사람에게 남기는 길 (ADR-0049).
-         로그인해서 콘솔에 들어가봐야 거기는 앱을 올리는 사람이 보는 화면이다. -->
-    <p class="hero-note">
-        앱을 받으러 오셨다면 <a href="/#(storeAppPath)">여기</a> 입니다. 로그인하지
-        않아도 됩니다.
+#if(isUpload):
+<!-- 개발자가 에이전트에 스토어를 붙이기까지. 순서대로 따라 하면 되게 번호를 단다.
+     명령에 이 스토어 주소를 미리 넣어둔다. 자기 스토어 주소를 찾아 바꿔 넣게 하면
+     `store.example.com` 을 그대로 붙여넣는 사람이 반드시 나온다. -->
+<section class="guide">
+    <ol class="guide-steps">
+        <li>
+            <h2>alley 받기</h2>
+            #if(cliVersion):
+            <p>터미널에서 받습니다. 서명·공증된 바이너리라 경고 없이 열립니다. (#(cliVersion))</p>
+            <pre class="guide-code">mkdir -p ~/.local/bin
+curl -fL -o ~/.local/bin/alley #(serverURL)#(cliPath)
+chmod +x ~/.local/bin/alley</pre>
+            <p class="guide-note"><code>~/.local/bin</code> 이 <code>PATH</code> 에 없으면 원하는 곳에 두셔도 됩니다.</p>
+            #else:
+            <!-- 올라온 적이 없으면 명령을 보여주지 않는다. 404 가 나는 명령을 복사한
+                 사람은 자기가 뭘 잘못 쳤는지부터 의심한다. -->
+            <p class="hero-note warning">
+                아직 받을 수 있는 alley 가 없습니다. 관리자에게 문의하세요.
+            </p>
+            #endif
+        </li>
+        <li>
+            <h2>이 기기 연결하기</h2>
+            <p>브라우저가 열리면 <strong>연결</strong>을 누릅니다. 토큰을 복사해 붙여넣지 않습니다.</p>
+            <pre class="guide-code">alley auth login --server #(serverURL)</pre>
+        </li>
+        <li>
+            <h2>코딩 에이전트에 붙이기</h2>
+            <p>Claude Code 라면 한 줄입니다. <code>alley</code> 가 MCP 서버를 겸해서 따로 받을 것이 없습니다.</p>
+            <pre class="guide-code">claude mcp add alley -- alley mcp</pre>
+            <p class="guide-note">에이전트가 빌드를 올리고, 서명이 왜 실패했는지 읽고, 출시까지 합니다.</p>
+        </li>
+        <li>
+            <h2>첫 앱 등록하기</h2>
+            <!-- 앱 등록은 콘솔에서만 한다. 번들 ID 와 담당자를 사람이 정하는 자리다. -->
+            <p>앱은 콘솔에서 등록합니다. 등록한 뒤로는 에이전트나 <code>alley upload</code> 로 올립니다.</p>
+            #if(isSignedIn):
+            <a class="button button-primary" href="/apps">내 앱으로 가기</a>
+            #else:
+            <a class="button button-primary" href="#(authorizationPath)">
+                #if(isGoogle):Google 계정으로 로그인#else:조직 계정으로 로그인#endif
+            </a>
+            #endif
+        </li>
+    </ol>
+</section>
+#else:
+<section class="hero">
+    <!-- 받을 앱이 없을 때 버튼을 그리면 누른 사람이 빈 화면을 만난다. `/get` 이
+         내주는 조건과 같은 값으로 가른다. -->
+    #if(hasStoreApp):
+    <p>
+        스토어 앱을 설치하면 조직에 배포된 앱을 받고 업데이트할 수 있습니다.
+        로그인하지 않아도 받을 수 있습니다.
     </p>
+    <a class="button button-primary button-large" href="/#(storeAppPath)">
+        스토어 앱 받기
+    </a>
+    #else:
+    <p class="hero-note">
+        아직 받을 수 있는 스토어 앱이 없습니다. 관리자가 스토어 앱을 출시하면
+        여기에 나타납니다.
+    </p>
+    #endif
 
+    <!-- 로그인 버튼은 두 세그먼트 모두에 둔다. 관리자는 어느 쪽으로 들어와도 콘솔로
+         가야 한다. -->
+    <p class="hero-note">
+        #if(isSignedIn):
+        앱을 올리거나 관리하신다면 <a href="/apps">내 앱</a>으로 가세요.
+        #else:
+        앱을 올리거나 관리하신다면
+        <a href="#(authorizationPath)">#if(isGoogle):Google 계정으로 로그인#else:조직 계정으로 로그인#endif</a>
+        하세요.
+        #endif
+    </p>
+</section>
+#endif
+
+<section class="hero">
     #if(count(allowedEmailDomains) > 0):
     <p class="hero-note">
         다음 도메인의 계정만 로그인할 수 있습니다.
