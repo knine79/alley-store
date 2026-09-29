@@ -16,7 +16,8 @@ func routes(_ app: Application) throws {
         return try await req.storeSettings().toMeta(
             callbackURLScheme: config.store.callbackURLScheme,
             assets: try await BrandingAssetService.all(on: req.db),
-            publicBaseURL: config.publicBaseURL
+            publicBaseURL: config.publicBaseURL,
+            signsInWithGoogle: config.oauth.isGoogle
         )
     }
 

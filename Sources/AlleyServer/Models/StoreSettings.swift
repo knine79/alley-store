@@ -122,7 +122,8 @@ extension StoreSettings {
     public func toMeta(
         callbackURLScheme: String,
         assets: [BrandingAssetKind: BrandingAsset] = [:],
-        publicBaseURL: String = ""
+        publicBaseURL: String = "",
+        signsInWithGoogle: Bool = false
     ) -> StoreMeta {
         // 설정값의 끝 슬래시는 사람마다 적는 방식이 다르다. 둘을 그냥 이으면
         // `//branding/…` 이 되고, 그것도 대개는 열리지만 리다이렉트를 한 번 더 탄다.
@@ -141,7 +142,8 @@ extension StoreSettings {
             accentColor: accentColor,
             allowedEmailDomains: allowedEmailDomains,
             callbackURLScheme: callbackURLScheme,
-            allowsAnonymousFeedback: allowsAnonymousFeedback
+            allowsAnonymousFeedback: allowsAnonymousFeedback,
+            signsInWithGoogle: signsInWithGoogle
         )
     }
 

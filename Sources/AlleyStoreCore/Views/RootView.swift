@@ -106,7 +106,8 @@ struct SignInView: View {
             Text("조직 구성원에게 배포되는 앱을 받는 곳입니다.")
                 .foregroundStyle(.secondary)
 
-            Button("Google 계정으로 로그인") {
+            // 웹 로그인 화면과 같은 규칙이다. IdP 를 모르면 "조직 계정" 이라 적는다.
+            Button(meta.signsInWithGoogle == true ? "Google 계정으로 로그인" : "조직 계정으로 로그인") {
                 Task { await model.signIn() }
             }
             .buttonStyle(.borderedProminent)
