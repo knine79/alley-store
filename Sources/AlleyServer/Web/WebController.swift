@@ -36,10 +36,12 @@ public struct WebController: RouteCollection, Sendable {
     @Sendable
     func home(request: Request) async throws -> View {
         let settings = try await request.storeSettings()
+        var page = try await request.pageContext()
+        page.loginPath = APIPath.googleAuthorize
         return try await request.view.render(
             "home",
             HomeContext(
-                page: try await request.pageContext(),
+                page: page,
                 isSignedIn: request.auth.has(User.self),
                 hasStoreApp: try await StoreAppGetController.releasedStoreApp(on: request) != nil,
                 storeAppPath: "/\(StoreAppGetController.path)",
@@ -65,10 +67,12 @@ public struct WebController: RouteCollection, Sendable {
     /// 주소를 그대로 붙여넣는 사람이 나온다.
     @Sendable
     func developers(request: Request) async throws -> View {
-        try await request.view.render(
+        var page = try await request.pageContext(title: "개발자 가이드")
+        page.loginPath = APIPath.googleAuthorize
+        return try await request.view.render(
             "developers",
             DevelopersContext(
-                page: try await request.pageContext(title: "개발자 가이드"),
+                page: page,
                 isSignedIn: request.auth.has(User.self),
                 cliVersion: try await CLIRelease.current(on: request.db)?.version,
                 cliPath: "/\(StoreAppGetController.path)/cli",

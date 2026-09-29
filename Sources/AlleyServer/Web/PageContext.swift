@@ -31,11 +31,13 @@ struct PageContext: Encodable {
     ///
     /// 이 값이 참일 때만 `no-resubmit.js` 를 붙여 주소를 목록 주소로 바꾼다.
     var isFormResult: Bool
-    /// 머리 오른쪽 로그인 버튼이 갈 곳. 로그인하지 않은 사람에게만 그린다.
+    /// 머리 오른쪽 로그인 버튼이 갈 곳. nil 이면 버튼을 그리지 않는다.
     ///
-    /// 첫 화면만이 아니라 어느 화면에나 둔다. `/get` 이나 개발자 가이드를 읽다가
-    /// 로그인하려는 사람이 첫 화면 맨 아래까지 찾아가게 할 이유가 없다.
-    var loginPath: String
+    /// **소개 화면과 개발자 가이드에만 둔다.** 웹으로 로그인하면 개발자가 된다
+    /// (ADR-0056). `/get` 처럼 스토어 앱을 받으러 온 사람이 보는 화면에 두면, 받기만
+    /// 할 사람이 눌러서 개발자가 되는 길이 넓어진다. 두 화면은 앱을 배포하려는 사람이
+    /// 읽는 자리라 거기서는 맞다.
+    var loginPath: String?
     /// 머리의 사진 자리에 대신 세울 글자. 로그인하지 않았으면 nil.
     ///
     /// 사진은 공급자가 줄 때만 있다. 사진이 없는 계정이 많은 IdP 도 있어서, 앱 목록이
@@ -122,7 +124,7 @@ extension Request {
             myTabs: myTab.map(MyTab.links(current:)) ?? [],
             assetVersion: application.assetVersion.value,
             isFormResult: method == .POST,
-            loginPath: APIPath.googleAuthorize,
+            loginPath: nil,
             userInitial: user.map { ($0.name.first ?? $0.email.first).map(String.init) ?? "?" },
             appsLabel: PageContext.appsLabel(for: user?.role)
         )

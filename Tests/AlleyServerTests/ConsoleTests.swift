@@ -87,10 +87,17 @@ struct ConsoleViewTests {
     @Test("머리 오른쪽에 로그인 버튼이 있다")
     func chromeShowsLoginWhenSignedOut() async throws {
         try await withMigratedApp { app in
-            // 첫 화면만이 아니다. 가이드를 읽다가 로그인하려는 사람도 있다.
-            try await app.testing().test(.GET, "/developers") { response in
-                let html = response.body.string
-                #expect(html.contains(#"<a class="button button-quiet" href="\#(APIPath.googleAuthorize)">로그인</a>"#))
+            let button = #"<a class="button button-quiet" href="\#(APIPath.googleAuthorize)">로그인</a>"#
+            // 소개와 가이드는 앱을 배포하려는 사람이 읽는 자리다.
+            for path in ["/", "/developers"] {
+                try await app.testing().test(.GET, path) { response in
+                    #expect(response.body.string.contains(button))
+                }
+            }
+            // 스토어 앱을 받으러 온 사람에게는 두지 않는다. 웹으로 로그인하면 개발자가
+            // 된다 (ADR-0056).
+            try await app.testing().test(.GET, "/get") { response in
+                #expect(!response.body.string.contains(button))
             }
         }
     }

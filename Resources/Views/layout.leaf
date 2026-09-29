@@ -51,7 +51,7 @@
                     <button class="button button-quiet" type="submit">로그아웃</button>
                 </form>
             </nav>
-            #else:
+            #elseif(page.loginPath):
             <nav class="chrome-nav">
                 <a class="button button-quiet" href="#(page.loginPath)">로그인</a>
             </nav>
