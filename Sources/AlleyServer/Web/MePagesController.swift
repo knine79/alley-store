@@ -323,7 +323,8 @@ struct MePagesController: RouteCollection, Sendable {
             name: name,
             tokenHash: UserToken.hash(token: value),
             userID: try user.requireID(),
-            expiresAt: Date().addingTimeInterval(UserToken.lifetime)
+            expiresAt: Date().addingTimeInterval(UserToken.lifetime),
+            origin: .console
         )
         try await token.save(on: request.db)
         request.logger.notice("사람 토큰 발급 [사람: \(user.email), 이름: \(name)]")

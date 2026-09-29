@@ -97,7 +97,8 @@ struct CLIAuthController: RouteCollection, Sendable {
             name: name,
             tokenHash: UserToken.hash(token: value),
             userID: try user.requireID(),
-            expiresAt: now.addingTimeInterval(UserToken.lifetime)
+            expiresAt: now.addingTimeInterval(UserToken.lifetime),
+            origin: .cli
         )
         try await model.save(on: request.db)
 

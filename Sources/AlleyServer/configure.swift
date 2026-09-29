@@ -181,6 +181,9 @@ private func configureMigrations(_ app: Application) {
 
     // 사람이 쥐는 토큰 (ADR-0060).
     app.migrations.add(CreateUserToken())
+
+    // 사람 토큰이 어디서 발급됐는지 (ADR-0064).
+    app.migrations.add(AddUserTokenOrigin())
 }
 
 /// 미들웨어 스택.

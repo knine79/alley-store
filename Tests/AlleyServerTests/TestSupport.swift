@@ -323,14 +323,16 @@ extension Application {
     func makeUserToken(
         for user: User,
         name: String = "에이전트",
-        expiresAt: Date = Date().addingTimeInterval(UserToken.lifetime)
+        expiresAt: Date = Date().addingTimeInterval(UserToken.lifetime),
+        origin: UserTokenOrigin = .console
     ) async throws -> String {
         let value = UserToken.generateToken()
         try await UserToken(
             name: name,
             tokenHash: UserToken.hash(token: value),
             userID: try user.requireID(),
-            expiresAt: expiresAt
+            expiresAt: expiresAt,
+            origin: origin
         ).save(on: db)
         return value
     }

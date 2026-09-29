@@ -17,14 +17,16 @@ struct UserTokenTests {
         for user: User,
         on app: Application,
         name: String = "노트북",
-        expiresAt: Date = Date().addingTimeInterval(UserToken.lifetime)
+        expiresAt: Date = Date().addingTimeInterval(UserToken.lifetime),
+        origin: UserTokenOrigin = .console
     ) async throws -> String {
         let value = UserToken.generateToken()
         let token = UserToken(
             name: name,
             tokenHash: UserToken.hash(token: value),
             userID: try user.requireID(),
-            expiresAt: expiresAt
+            expiresAt: expiresAt,
+            origin: origin
         )
         try await token.save(on: app.db)
         return value
@@ -338,6 +340,50 @@ struct UserTokenTests {
             #expect(try await reload(soon).expiryNoticedAt == firstNotice)
             // 두 번째로 쓸고 지나가도 또 보내지 않는다.
             #expect(dm.endpoints == ["dev@example.com"])
+        }
+    }
+
+    @Test("만료 안내는 토큰이 생긴 길에 따라 할 일을 다르게 말한다")
+    func noticeDependsOnOrigin() async throws {
+        try await withMigratedApp { app in
+            let (user, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let soon = Date().addingTimeInterval(3 * 24 * 3600)
+            _ = try await issue(for: user, on: app, name: "화면", expiresAt: soon, origin: .console)
+            _ = try await issue(for: user, on: app, name: "노트북 CLI", expiresAt: soon, origin: .cli)
+
+            let dm = RecordingChannel(kind: .slackDirectMessage)
+            await UserTokenExpiryNotice.run(
+                on: app,
+                notifier: Notifier(database: app.db, channels: [dm], logger: app.logger)
+            )
+
+            let byTitle = Dictionary(uniqueKeysWithValues: dm.messages.map { ($0.title, $0.body) })
+            let cli = try #require(byTitle.first { $0.key.contains("노트북 CLI") }?.value)
+            let console = try #require(byTitle.first { $0.key.contains("화면") }?.value)
+            // CLI 로 받은 사람에게 화면에서 새로 발급하라고 하지 않는다.
+            #expect(cli.contains("alley auth login"))
+            #expect(!cli.contains("내 토큰"))
+            #expect(console.contains("내 토큰"))
+        }
+    }
+
+    @Test("alley auth login 으로 받은 토큰은 CLI 에서 온 것으로 적힌다")
+    func cliExchangeRecordsOrigin() async throws {
+        try await withMigratedApp { app in
+            let (user, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let (plaintext, code) = AuthCode.issue(userID: try user.requireID())
+            try await code.save(on: app.db)
+
+            try await app.testing().test(
+                .POST, APIPath.cliTokenExchange,
+                beforeRequest: {
+                    try $0.content.encode(CLITokenRequest(code: plaintext, device: "노트북"))
+                }
+            ) { response in
+                #expect(response.status == .ok)
+            }
+            let token = try #require(try await UserToken.query(on: app.db).first())
+            #expect(token.origin == .cli)
         }
     }
 }
