@@ -123,7 +123,7 @@ struct AppPagesController: RouteCollection, Sendable {
         return try await request.view.render(
             "apps",
             AppListContext(
-                page: try await request.pageContext(title: "앱"),
+                page: try await request.pageContext(title: PageContext.appsLabel(for: user.role)),
                 apps: rows,
                 canRegister: user.role.canPublish,
                 pendingApps: mine,

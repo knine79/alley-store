@@ -74,7 +74,7 @@
 <section class="hero hero-cta">
     #if(isSignedIn):
     <p class="hero-lead">앱 목록에서 새 앱을 등록하거나 버전을 올릴 수 있습니다.</p>
-    <a class="button button-primary button-large" href="/apps">내 앱으로 가기</a>
+    <a class="button button-primary button-large" href="/apps">#(page.appsLabel)으로 가기</a>
     #else:
     <!-- 웹에서 로그인하면 개발자가 된다 (ADR-0056). 스토어 앱만 쓸 사람은 여기서
          로그인할 필요가 없다는 것을 문구가 말한다. -->

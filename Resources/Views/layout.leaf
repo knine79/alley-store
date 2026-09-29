@@ -27,7 +27,7 @@
             <nav class="chrome-nav">
                 <!-- 로고가 소개 화면으로 가므로(로그인해 있어도 소개를 보여준다) 콘솔로
                      돌아올 길을 따로 둔다. -->
-                <a class="chrome-link" href="/apps">내 앱</a>
+                <a class="chrome-link" href="/apps">#(page.appsLabel)</a>
                 #if(page.isAdmin):
                 <a class="chrome-link" href="/admin/settings">관리</a>
                 #endif

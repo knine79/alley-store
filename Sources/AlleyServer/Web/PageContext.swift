@@ -41,6 +41,17 @@ struct PageContext: Encodable {
     /// 사진은 공급자가 줄 때만 있다. 사진이 없는 계정이 많은 IdP 도 있어서, 앱 목록이
     /// 아이콘 없는 앱에 하듯 이름의 첫 글자를 세운다 (`AppRow.initial`).
     var userInitial: String?
+    /// 앱 목록의 이름. 머리 링크, 목록 제목, 경로 표시가 모두 이 값을 쓴다.
+    ///
+    /// 관리자에게는 "내 앱" 이 아니다. 목록에 남의 앱까지 전부 보인다 (ADR-0051).
+    var appsLabel: String
+}
+
+extension PageContext {
+    /// 앱 목록을 무엇이라 부를지. 제목을 정하는 쪽(`AppPagesController`)도 쓴다.
+    static func appsLabel(for role: UserRole?) -> String {
+        role?.canAdminister == true ? "모든 앱" : "내 앱"
+    }
 }
 
 /// 화면에 바르는 브랜딩.
@@ -112,7 +123,8 @@ extension Request {
             assetVersion: application.assetVersion.value,
             isFormResult: method == .POST,
             loginPath: APIPath.googleAuthorize,
-            userInitial: user.map { ($0.name.first ?? $0.email.first).map(String.init) ?? "?" }
+            userInitial: user.map { ($0.name.first ?? $0.email.first).map(String.init) ?? "?" },
+            appsLabel: PageContext.appsLabel(for: user?.role)
         )
     }
 }

@@ -169,6 +169,27 @@ struct ConsoleViewTests {
         }
     }
 
+    @Test("앱 목록의 이름은 개발자에게 내 앱, 관리자에게 모든 앱이다")
+    func appsLabelFollowsRole() async throws {
+        try await withMigratedApp { app in
+            let (_, dev) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let (_, admin) = try await app.makeUser(email: "admin@example.com", role: .admin)
+
+            // 머리 링크와 제목이 같은 이름을 쓴다. 관리자 목록에는 남의 앱도 있다 (ADR-0051).
+            try await app.testing().test(.GET, "/apps", headers: .sessionCookie(dev)) { response in
+                let html = response.body.string
+                #expect(html.contains(#"<h1 class="page-title">내 앱</h1>"#))
+                #expect(html.contains(#"<a class="chrome-link" href="/apps">내 앱</a>"#))
+            }
+            try await app.testing().test(.GET, "/apps", headers: .sessionCookie(admin)) { response in
+                let html = response.body.string
+                #expect(html.contains(#"<h1 class="page-title">모든 앱</h1>"#))
+                #expect(html.contains(#"<a class="chrome-link" href="/apps">모든 앱</a>"#))
+                #expect(!html.contains("내 앱"))
+            }
+        }
+    }
+
     @Test("공급자가 준 사진이 있으면 이름 옆에 보인다")
     func chromeShowsAvatar() async throws {
         try await withMigratedApp { app in
