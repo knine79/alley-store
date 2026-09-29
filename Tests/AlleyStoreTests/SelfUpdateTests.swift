@@ -75,3 +75,82 @@ struct UpdateDetectionTests {
         #expect(SelfUpdate.currentBundle() == nil)
     }
 }
+
+@Suite("갈아끼울 수 있는 자리인가")
+struct SelfUpdateLocationTests {
+    private func withBundle(_ body: (URL, URL) throws -> Void) throws {
+        let parent = FileManager.default.temporaryDirectory
+            .appendingPathComponent("alley-replace-\(UUID().uuidString)", isDirectory: true)
+        let bundle = parent.appendingPathComponent("Alley Store.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        defer {
+            // 권한을 되돌려야 지울 수 있다.
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: parent.path)
+            try? FileManager.default.removeItem(at: parent)
+        }
+        try body(parent, bundle)
+    }
+
+    @Test("쓸 수 있는 폴더의 번들은 갈아끼운다")
+    func writableLocationIsReplaceable() throws {
+        try withBundle { _, bundle in
+            #expect(SelfUpdate.blocker(for: bundle) == nil)
+        }
+    }
+
+    /// 번들을 지우고 새로 놓는 자리가 부모 폴더다. 번들만 쓸 수 있어서는 안 된다.
+    /// MDM 이나 pkg 로 깔려 root 가 가진 경우가 이렇다. 이미 응용 프로그램 폴더에
+    /// 있으니 거기로 옮기라고만 하면 막다른 말이 되고, 공유 폴더에서 연 경우처럼
+    /// 옮기면 풀리는 때도 있어서 두 길을 함께 적는다.
+    @Test("쓸 권한이 없으면 권한이 없다고 하고 할 수 있는 두 가지를 적는다")
+    func noPermissionNamesBothWaysOut() throws {
+        try withBundle { parent, bundle in
+            try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: parent.path)
+            #expect(SelfUpdate.blocker(for: bundle) == .noPermission)
+            let message = SelfUpdate.Blocker.noPermission.message
+            #expect(message.contains("권한"))
+            #expect(message.contains("~/Applications"))
+            #expect(message.contains("관리자"))
+        }
+    }
+
+    /// 실제 읽기 전용 볼륨이다. 권한 비트가 아니라 마운트가 막는 경우를 본다.
+    /// Translocation 도 읽기 전용 마운트라 같은 갈래로 떨어진다.
+    @Test("읽기 전용 디스크 이미지 안이면 옮기라고 한다")
+    func readOnlyVolumeAsksToMove() async throws {
+        try withBundle { parent, bundle in
+            // `-srcfolder` 는 폴더의 내용물을 볼륨 맨 위에 놓는다. 번들이 볼륨 안에
+            // 번들로 놓이려면 그것을 담은 폴더를 넘겨야 한다.
+            let stage = parent.appendingPathComponent("stage", isDirectory: true)
+            try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: bundle, to: stage.appendingPathComponent(bundle.lastPathComponent))
+            let image = parent.appendingPathComponent("ro.dmg")
+            let mount = parent.appendingPathComponent("mnt", isDirectory: true)
+            let create = Process()
+            create.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+            create.arguments = ["create", "-quiet", "-srcfolder", stage.path, "-format", "UDRO", image.path]
+            try create.run()
+            create.waitUntilExit()
+            try #require(create.terminationStatus == 0)
+
+            let attach = Process()
+            attach.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+            attach.arguments = ["attach", "-quiet", "-nobrowse", "-readonly", "-mountpoint", mount.path, image.path]
+            try attach.run()
+            attach.waitUntilExit()
+            try #require(attach.terminationStatus == 0)
+            defer {
+                let detach = Process()
+                detach.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+                detach.arguments = ["detach", "-quiet", "-force", mount.path]
+                try? detach.run()
+                detach.waitUntilExit()
+            }
+
+            let inside = mount.appendingPathComponent("Alley Store.app")
+            // 없는 경로를 보면 "쓸 수 없다" 로 떨어져 무엇을 봐도 통과한다.
+            try #require(FileManager.default.fileExists(atPath: inside.path))
+            #expect(SelfUpdate.blocker(for: inside) == .readOnlyLocation)
+        }
+    }
+}
