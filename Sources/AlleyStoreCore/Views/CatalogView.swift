@@ -132,6 +132,7 @@ struct AppRow: View {
 struct InstallButton: View {
     @Environment(StoreModel.self) private var model
     let app: AppDTO
+    @State private var confirmingDowngrade = false
 
     var body: some View {
         if let progress = model.progress[app.id] {
@@ -149,12 +150,24 @@ struct InstallButton: View {
             Button(state.actionTitle) {
                 if state.opensInstalledApp {
                     model.open(app)
+                } else if state.downgradesOnInstall {
+                    confirmingDowngrade = true
                 } else {
                     Task { await model.install(app) }
                 }
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
+            // 되돌리기 어려운 일이라 한 번 묻는다. 개발자가 직접 넣은 빌드일 때가
+            // 많고, 덮어쓰면 그 빌드는 스토어 어디에도 없다.
+            .alert("이전 버전으로 바뀝니다", isPresented: $confirmingDowngrade) {
+                Button("다시 설치", role: .destructive) {
+                    Task { await model.install(app) }
+                }
+                Button("취소", role: .cancel) {}
+            } message: {
+                Text(downgradeMessage)
+            }
             .contextMenu {
                 // 최신인데 앱이 깨졌을 때 고칠 길이다. 버튼이 "열기" 가 되면서
                 // 다시 받는 길이 눈앞에서 사라져서 여기 남긴다.
@@ -165,6 +178,22 @@ struct InstallButton: View {
                 }
             }
         }
+    }
+
+    /// 무엇이 무엇으로 바뀌는지 숫자로 보여준다. "이전 버전" 만으로는 얼마나
+    /// 내려가는지 모른다.
+    private var downgradeMessage: String {
+        let installed = model.installed[app.bundleID].map(Self.label) ?? "설치된 버전"
+        let released = app.latestReleasedVersion.map {
+            "\($0.shortVersion) (빌드 \($0.buildNumber))"
+        } ?? "스토어의 출시본"
+        return "이 맥에 있는 \(installed) 이(가) 스토어의 최신 출시본보다 새롭습니다. "
+            + "다시 설치하면 \(released) 로 덮어씁니다."
+    }
+
+    private static func label(_ app: InstalledApp) -> String {
+        let version = app.shortVersion ?? "알 수 없는 버전"
+        return app.buildNumber.map { "\(version) (빌드 \($0))" } ?? version
     }
 }
 

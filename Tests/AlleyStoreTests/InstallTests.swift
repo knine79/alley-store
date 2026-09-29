@@ -166,6 +166,15 @@ struct InstallStateTests {
         #expect(!InstallState.notInstalled.opensInstalledApp)
         #expect(!InstallState.updateAvailable.opensInstalledApp)
     }
+
+    /// 깔린 것이 더 새로우면 다시 설치가 곧 내려가기다. 그때만 묻는다.
+    @Test("깔린 것이 더 새로울 때만 내려간다고 묻는다")
+    func onlyAheadAsksBeforeDowngrading() {
+        #expect(InstallState.ahead.downgradesOnInstall)
+        for state in [InstallState.notInstalled, .notReleased, .upToDate, .updateAvailable, .unknown] {
+            #expect(!state.downgradesOnInstall)
+        }
+    }
 }
 
 @Suite("설치 전 검증")
