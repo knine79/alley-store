@@ -40,9 +40,10 @@ enum SelfUpdate {
     enum Blocker: Equatable {
         /// 읽기 전용 볼륨에서 떴다. App Translocation 과 dmg 가 그렇다. 옮기면 풀린다.
         case readOnlyLocation
-        /// 자리는 맞는데 쓸 권한이 없다. MDM 이나 pkg 로 깔려 root 가 가진 번들이
-        /// 그렇다. 이 사람에게 "옮기라" 고 하면 이미 응용 프로그램 폴더에 있는 앱을
-        /// 두고 따를 수 없는 말을 하게 된다.
+        /// 쓸 권한이 없다. MDM 이나 pkg 로 깔려 root 가 가진 번들이 대표적이고, 그
+        /// 사람에게 "응용 프로그램 폴더로 옮기라" 고 하면 이미 거기 있는 앱을 두고 따를
+        /// 수 없는 말이 된다. 다른 계정이 만든 공유 폴더에서 연 경우처럼 옮기면 풀리는
+        /// 때도 섞여 있어서, 할 수 있는 두 가지를 함께 적는다.
         case noPermission
 
         /// 배너와 오류가 같은 말을 하게 한 자리에 둔다.
@@ -51,7 +52,7 @@ enum SelfUpdate {
             case .readOnlyLocation:
                 return "이 자리에서는 스스로 업데이트할 수 없습니다. 응용 프로그램 폴더로 옮긴 뒤 다시 열어주세요."
             case .noPermission:
-                return "이 앱을 바꿀 권한이 없어 스스로 업데이트할 수 없습니다. 관리자에게 알려주세요."
+                return "이 앱을 바꿀 권한이 없어 스스로 업데이트할 수 없습니다. 내 응용 프로그램 폴더(~/Applications)로 옮기거나 관리자에게 알려주세요."
             }
         }
     }

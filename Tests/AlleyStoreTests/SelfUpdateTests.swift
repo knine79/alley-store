@@ -100,13 +100,17 @@ struct SelfUpdateLocationTests {
 
     /// 번들을 지우고 새로 놓는 자리가 부모 폴더다. 번들만 쓸 수 있어서는 안 된다.
     /// MDM 이나 pkg 로 깔려 root 가 가진 경우가 이렇다. 이미 응용 프로그램 폴더에
-    /// 있으므로 "옮기라" 고 하면 안 된다.
-    @Test("쓸 권한이 없으면 옮기라고 하지 않고 권한이 없다고 한다")
-    func noPermissionIsNotAskedToMove() throws {
+    /// 있으니 거기로 옮기라고만 하면 막다른 말이 되고, 공유 폴더에서 연 경우처럼
+    /// 옮기면 풀리는 때도 있어서 두 길을 함께 적는다.
+    @Test("쓸 권한이 없으면 권한이 없다고 하고 할 수 있는 두 가지를 적는다")
+    func noPermissionNamesBothWaysOut() throws {
         try withBundle { parent, bundle in
             try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: parent.path)
             #expect(SelfUpdate.blocker(for: bundle) == .noPermission)
-            #expect(!SelfUpdate.Blocker.noPermission.message.contains("옮긴"))
+            let message = SelfUpdate.Blocker.noPermission.message
+            #expect(message.contains("권한"))
+            #expect(message.contains("~/Applications"))
+            #expect(message.contains("관리자"))
         }
     }
 
