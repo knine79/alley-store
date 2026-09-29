@@ -1,6 +1,6 @@
 #extend("layout"):
 #export("content"):
-<nav class="breadcrumb"><a href="/apps">앱</a> · <a href="/apps/#(appID)">#(appName)</a></nav>
+<nav class="breadcrumb"><a href="/apps">#(page.appsLabel)</a> · <a href="/apps/#(appID)">#(appName)</a></nav>
 <h1 class="page-title">새 버전</h1>
 
 <noscript>

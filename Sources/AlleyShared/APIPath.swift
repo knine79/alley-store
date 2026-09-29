@@ -24,8 +24,16 @@ public enum APIPath {
     /// 스토어 앱과 서버가 같은 문자열을 봐야 하므로 여기서만 정의한다.
     public static let clientQueryItem = "client"
     public static let appClient = "app"
+    /// 로그인한 뒤 돌아갈 경로. 이 스토어 안의 상대 경로만 받는다
+    /// (`OAuthStateToken.safeReturnPath`).
+    public static let returnQueryItem = "next"
     /// 스토어 앱이 일회용 코드를 세션 토큰으로 교환하는 경로.
     public static let tokenExchange = "\(apiRoot)/auth/token"
+
+    /// CLI 를 연결하는 화면. 브라우저가 연다 (ADR-0064).
+    public static let cliAuthorize = "/auth/cli"
+    /// CLI 가 일회용 코드를 사람 토큰으로 바꾸는 자리 (ADR-0064).
+    public static let cliTokenExchange = "\(apiRoot)/auth/cli/token"
     public static let currentUser = "\(apiRoot)/me"
 
     // MARK: - 앱 / 버전
@@ -151,6 +159,8 @@ public enum APIPath {
     public static let operatorRoot = "\(apiRoot)/ops"
     /// 워커 릴리스를 올리는 자리.
     public static let operatorWorkerReleases = "\(operatorRoot)/worker-releases"
+    /// 운영 CI 가 서명한 `alley` 바이너리를 올리는 자리 (ADR-0065).
+    public static let operatorCLIReleases = "\(operatorRoot)/cli-releases"
     /// 스토어 앱에 지금 무엇이 올라가 있는지. CI 가 "이미 했나" 를 여기서 본다.
     public static let operatorStoreApp = "\(operatorRoot)/store-app"
     /// 운영 CI 가 스토어 앱의 베이스 번들을 올리는 자리 (ADR-0046).

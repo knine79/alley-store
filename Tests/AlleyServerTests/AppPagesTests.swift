@@ -49,9 +49,10 @@ struct AppListPageTests {
     @Test("로그인하지 않으면 로그인으로 보낸다")
     func requiresSignIn() async throws {
         try await withMigratedApp { app in
+            // 로그인을 마치면 이 화면으로 돌아온다.
             try await app.testing().test(.GET, "/apps") { response in
                 #expect(response.status == .seeOther)
-                #expect(response.headers.first(name: .location) == "/")
+                #expect(response.headers.first(name: .location) == "\(APIPath.googleAuthorize)?next=/apps")
             }
         }
     }

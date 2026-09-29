@@ -57,16 +57,32 @@ public final class UserToken: Model, @unchecked Sendable {
     @OptionalField(key: "expiry_noticed_at")
     public var expiryNoticedAt: Date?
 
+    /// 어디서 발급됐는지.
+    ///
+    /// 만료가 다가올 때 할 일이 갈린다. `alley auth login` 으로 받은 것은 다시
+    /// 로그인하면 끝이고, 화면에서 발급한 것은 쓰던 곳의 값을 손으로 바꿔야 한다.
+    /// 이름으로 가르면 안 된다. 기기 이름이 들어가는데 사람이 화면에서 같은 이름을
+    /// 붙일 수 있다.
+    @Field(key: "origin")
+    public var origin: UserTokenOrigin
+
     @Timestamp(key: "created_at", on: .create)
     public var createdAt: Date?
 
     public init() {}
 
-    public init(name: String, tokenHash: String, userID: UUID, expiresAt: Date) {
+    public init(
+        name: String,
+        tokenHash: String,
+        userID: UUID,
+        expiresAt: Date,
+        origin: UserTokenOrigin
+    ) {
         self.name = name
         self.tokenHash = tokenHash
         self.$user.id = userID
         self.expiresAt = expiresAt
+        self.origin = origin
     }
 
     /// 지금 쓸 수 있는 토큰인가.
@@ -95,6 +111,15 @@ public final class UserToken: Model, @unchecked Sendable {
     }
 }
 
+/// 사람 토큰이 생기는 길.
+public enum UserTokenOrigin: String, Codable, Sendable {
+    /// 웹 콘솔의 내 설정 > 내 토큰에서 발급했다. 원문을 사람이 복사해 어딘가에 넣었다.
+    case console
+    /// `alley auth login` 이 브라우저를 거쳐 받아갔다 (ADR-0064). 원문은 CLI 의
+    /// 자격증명 파일에만 있다.
+    case cli
+}
+
 public struct CreateUserToken: AsyncMigration {
     public init() {}
 
@@ -117,5 +142,29 @@ public struct CreateUserToken: AsyncMigration {
 
     public func revert(on database: any Database) async throws {
         try await database.schema(UserToken.schema).delete()
+    }
+}
+
+/// 토큰이 어디서 발급됐는지 적는 칸.
+///
+/// 이미 있는 토큰은 전부 화면에서 발급한 것으로 둔다. 이 칸보다 CLI 로그인이 먼저
+/// 나갔을 수 있지만, 그렇게 받은 토큰도 화면 안내를 따르면 새로 발급할 수는 있다.
+/// 거꾸로 화면 토큰에 "다시 로그인하라" 고 하면 할 수 있는 것이 없다.
+public struct AddUserTokenOrigin: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        try await database.schema(UserToken.schema)
+            .field(
+                "origin", .string, .required,
+                .sql(.default(UserTokenOrigin.console.rawValue))
+            )
+            .update()
+    }
+
+    public func revert(on database: any Database) async throws {
+        try await database.schema(UserToken.schema)
+            .deleteField("origin")
+            .update()
     }
 }

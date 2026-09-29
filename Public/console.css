@@ -241,13 +241,41 @@ code {
 }
 
 .chrome-user {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
     color: var(--text-muted);
     font-size: var(--font-md);
-    /* 이름이 길어도 껍데기가 무너지지 않게 한다. */
+}
+
+/* 이름이 길어도 껍데기가 무너지지 않게 한다. 말줄임은 이름에만 건다. 링크 전체에
+   걸면 사진까지 잘려 나간다. */
+.chrome-user-name {
     max-width: 14em;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.chrome-avatar {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    object-fit: cover;
+    /* 흰 배경 사진이 흰 머리에 녹아 윤곽이 사라지지 않게 한다. */
+    box-shadow: 0 0 0 1px var(--border);
+}
+
+/* 사진이 없는 사람. 앱 목록의 `.card-icon-letter` 와 같은 결로 둔다. */
+.chrome-avatar-letter {
+    display: inline-grid;
+    place-items: center;
+    background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+    color: var(--accent);
+    font-size: var(--font-xs);
+    font-weight: 600;
+    line-height: 1;
 }
 
 .chrome-nav form {
@@ -451,6 +479,112 @@ a.tab:hover {
     border-radius: var(--radius);
     padding: var(--space-3) var(--space-4);
     text-align: left;
+}
+
+/* ── 첫 화면 ──────────────────────────────────────────────── */
+
+/* 첫 화면은 여러 덩어리가 위아래로 선다. 모두 `.hero` 의 큰 위아래 여백을 가지면
+ * 사이가 두 배로 벌어져 한 화면으로 읽히지 않는다. 첫 덩어리만 위 여백을 갖는다. */
+.hero + .intro,
+.intro + .intro,
+.intro + .hero {
+    margin-top: 0;
+}
+
+/* 소개 글. `.hero` 보다 넓게 두고 왼쪽에 붙인다. 여러 문단을 가운데 정렬하면 줄의
+ * 시작점이 매번 달라져 읽기 어렵다. */
+.intro {
+    max-width: 40rem;
+    margin: 0 auto var(--space-7);
+}
+
+.intro-title {
+    margin: 0 0 var(--space-3);
+    font-size: var(--font-lg);
+}
+
+.intro p {
+    margin: 0 0 var(--space-3);
+}
+
+.feature-list {
+    display: grid;
+    /* 좁으면 한 줄에 하나, 넓으면 둘. 셋이면 칸마다 설명이 네다섯 줄로 꺾인다. */
+    grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+    gap: var(--space-4);
+    margin: var(--space-4) 0 var(--space-5);
+    padding: 0;
+    list-style: none;
+}
+
+.feature-list li {
+    padding: var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.feature-list h3 {
+    margin: 0 0 var(--space-2);
+    font-size: var(--font-md);
+}
+
+.feature-list p {
+    margin: 0;
+    font-size: var(--font-md);
+    color: var(--text-muted);
+}
+
+.hero-cta {
+    margin-top: 0;
+}
+
+/* 개발자 가이드. 명령이 길어서 `.hero` 폭(30rem)에 담으면 한 줄이 두세 줄로 꺾이고,
+ * 꺾인 명령은 어디까지가 한 줄인지 알 수 없다. */
+.guide {
+    max-width: 44rem;
+}
+
+.guide-section {
+    margin: var(--space-7) 0 var(--space-3);
+    font-size: var(--font-lg);
+}
+
+.guide p {
+    margin: 0 0 var(--space-3);
+}
+
+.guide-steps {
+    margin: 0;
+    padding-left: var(--space-5);
+}
+
+.guide-steps > li + li {
+    margin-top: var(--space-5);
+}
+
+.guide-steps h3 {
+    margin: 0 0 var(--space-2);
+    font-size: var(--font-md);
+}
+
+/* 복사해서 터미널에 붙일 명령. 줄바꿈이 명령의 일부라 꺾지 않고 자기 안에서 스크롤한다. */
+.guide-code {
+    margin: 0 0 var(--space-3);
+    padding: var(--space-3);
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-small);
+    background: var(--bg);
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    font-size: var(--font-sm);
+    line-height: 1.6;
+    white-space: pre;
+}
+
+.guide-note {
+    font-size: var(--font-md);
+    color: var(--text-muted);
 }
 
 .status-code {

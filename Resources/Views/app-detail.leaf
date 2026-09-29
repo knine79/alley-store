@@ -3,7 +3,7 @@
 <!-- 토큰 발급은 리다이렉트하지 않는다. 새로고침이 폼을 다시 보내지 않게 이 주소로
      바꿔둔다 (`no-resubmit.js`). -->
 <div hidden data-resubmit-guard="/apps/#(app.id)"></div>
-<nav class="breadcrumb"><a href="/apps">앱</a></nav>
+<nav class="breadcrumb"><a href="/apps">#(page.appsLabel)</a></nav>
 
 <!-- 목록에서 아이콘으로 찾아 들어왔는데 상세에 아이콘이 없으면 같은 앱인지
      한 번 더 확인하게 된다. 아이콘은 여기서 올리지 않는다. 번들을 올릴 때

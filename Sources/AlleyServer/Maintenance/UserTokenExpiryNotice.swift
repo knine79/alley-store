@@ -56,7 +56,7 @@ enum UserTokenExpiryNotice {
                 person: token.user,
                 message: NotificationMessage(
                     title: "토큰 '\(token.name)' 이 \(days)일 뒤 만료됩니다",
-                    body: "내 설정 > 내 토큰에서 새로 발급하고 쓰던 곳의 값을 바꾸세요.",
+                    body: Self.whatToDo(for: token.origin),
                     link: baseURL + "/me/tokens"
                 )
             )
@@ -87,6 +87,21 @@ enum UserTokenExpiryNotice {
             logger.notice(
                 "만료가 가까운데 닿을 길이 없는 토큰 \(unreachable)개입니다. 알림 수단을 확인하세요."
             )
+        }
+    }
+}
+
+extension UserTokenExpiryNotice {
+    /// 만료 전에 할 일. 토큰이 생긴 길에 따라 갈린다.
+    ///
+    /// CLI 로 받은 것에 "화면에서 새로 발급하라" 고 하면, 그 사람은 발급한 원문을 들고
+    /// 자격증명 파일을 손으로 고치러 간다. 다시 로그인하면 끝나는 일이다.
+    static func whatToDo(for origin: UserTokenOrigin) -> String {
+        switch origin {
+        case .cli:
+            return "터미널에서 `alley auth login` 을 다시 실행하면 새 토큰으로 바뀝니다."
+        case .console:
+            return "내 설정 > 내 토큰에서 새로 발급하고 쓰던 곳의 값을 바꾸세요."
         }
     }
 }

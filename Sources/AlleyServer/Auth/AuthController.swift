@@ -36,7 +36,15 @@ public struct AuthController: RouteCollection, Sendable {
             request.query[String.self, at: APIPath.clientQueryItem] == APIPath.appClient
             ? .app : .web
 
-        let state = try await request.jwt.sign(OAuthStateToken(target: target))
+        // 로그인이 필요한 화면에서 튕겨 온 사람은 그 화면으로 돌려보낸다. `alley auth
+        // login` 이 여는 `/auth/cli?port=…` 가 그렇다. 여기서 잃으면 CLI 는 끝까지
+        // 기다리다 끝난다.
+        let returnPath = target == .web
+            ? OAuthStateToken.safeReturnPath(request.query[String.self, at: APIPath.returnQueryItem])
+            : nil
+        let state = try await request.jwt.sign(
+            OAuthStateToken(target: target, returnPath: returnPath)
+        )
         let metadata = try await request.application.oidcDirectory.metadata(
             using: request.client, logger: request.logger
         )
@@ -130,7 +138,12 @@ public struct AuthController: RouteCollection, Sendable {
         case .web:
             // 웹은 세션 토큰을 HttpOnly 쿠키로 받는다. 자바스크립트가 읽지 못하게 한다.
             let token = try await signSession(request: request, userID: userID)
-            let response = request.redirect(to: "/")
+            // 튕겨 온 화면이 있으면 그리로, 없으면 앱 목록으로 간다. 첫 화면은 로그인과
+            // 상관없이 소개를 보여주고, 로그인은 앱을 배포하러 온 것이다. 서명된 state
+            // 에서 꺼낸 값이지만 한 번 더 거른다. 검사 규칙이 바뀌어도 이미 발급된
+            // state 가 옛 규칙으로 통과하지 않게 한다.
+            let destination = OAuthStateToken.safeReturnPath(state.returnPath) ?? "/apps"
+            let response = request.redirect(to: destination)
             let isSecure = config.publicBaseURL.hasPrefix("https://")
             response.cookies[sessionCookieName] = sessionCookie(
                 token: token,
