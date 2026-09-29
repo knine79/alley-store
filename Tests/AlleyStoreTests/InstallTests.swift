@@ -205,6 +205,19 @@ struct InstallStateTests {
         )
         #expect(message == "이 맥에 있는 1.0.2 (빌드 3) 을(를) 덮어씁니다.")
     }
+
+    /// 내려간 것을 "업데이트" 라고 적으면 거짓말이 된다. 받기 전 상태로 고른다.
+    @Test("갈아끼운 뒤의 안내는 올렸는지 내렸는지를 따른다")
+    func replacedMessageFollowsWhatHappened() {
+        #expect(InstallState.updateAvailable.replacedMessage(appName: "메모장", version: "1.2")
+            == "메모장 을(를) 1.2 로 업데이트했습니다.")
+        #expect(InstallState.ahead.replacedMessage(appName: "메모장", version: "1.2")
+            == "메모장 을(를) 1.2 로 되돌렸습니다.")
+        for state in [InstallState.upToDate, .unknown] {
+            #expect(state.replacedMessage(appName: "메모장", version: "1.2")
+                == "메모장 을(를) 1.2 로 다시 설치했습니다.")
+        }
+    }
 }
 
 @Suite("설치 전 검증")
