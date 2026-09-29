@@ -30,6 +30,9 @@ struct StoreAppGetController: RouteCollection, Sendable {
 
         open.get(use: page)
         open.get("download", use: download)
+        // `alley` 바이너리 (ADR-0065). 같은 자리에 두는 이유도 같다. CLI 가 없는
+        // 사람에게 CLI 로 로그인하라고 할 수 없다.
+        open.get("cli", use: downloadCLI)
     }
 
     // MARK: - 화면
@@ -97,6 +100,35 @@ struct StoreAppGetController: RouteCollection, Sendable {
             [\(found.app.bundleID) \(found.version.shortVersion) (\(found.version.buildNumber)), \
             받는 사람: \(user?.email ?? "로그인하지 않음")]
             """
+        )
+        return request.redirect(to: presigned.url)
+    }
+
+    // MARK: - CLI
+
+    /// 운영 CI 가 올려둔 `alley` 바이너리를 내준다 (ADR-0065).
+    ///
+    /// 스토어 앱과 달리 받아간 이력을 남기지 않는다. 앱은 누가 무엇을 받았는지가
+    /// 감사 기록이지만, CLI 는 그 자체로 이 스토어의 무엇도 열지 못한다. 서명된
+    /// 바이너리 하나일 뿐이고, 붙으려면 `alley auth login` 을 따로 해야 한다.
+    @Sendable
+    func downloadCLI(request: Request) async throws -> Response {
+        guard let release = try await CLIRelease.current(on: request.db) else {
+            throw Abort(
+                .notFound,
+                reason: "아직 받을 수 있는 alley 명령이 없습니다. 관리자에게 문의하세요."
+            )
+        }
+
+        let presigned = try await request.artifactStorage.downloadURL(
+            key: release.storageKey,
+            // 받은 그대로 PATH 에 둘 수 있게 이름을 준다. 확장자를 붙이면 지우고
+            // 실행 권한을 다시 줘야 한다.
+            filename: "alley"
+        )
+        let who = request.auth.get(User.self)?.email ?? "로그인하지 않음"
+        request.logger.notice(
+            "공개 페이지에서 alley 를 내려받습니다 [버전: \(release.version), 받는 사람: \(who)]"
         )
         return request.redirect(to: presigned.url)
     }

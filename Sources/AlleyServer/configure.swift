@@ -138,6 +138,7 @@ private func configureMigrations(_ app: Application) {
     app.migrations.add(AddAppBundleIDPending())
     app.migrations.add(AddWorkerVersion())
     app.migrations.add(CreateWorkerRelease())
+    app.migrations.add(CreateCLIRelease())
     app.migrations.add(CreateOperatorToken())
 
     // 관리자가 올리는 브랜딩 이미지 (ADR-0045).
