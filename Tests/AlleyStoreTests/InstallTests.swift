@@ -147,6 +147,25 @@ struct InstallStateTests {
         #expect(InstallState.compare(installed: installed(build: nil), releasedBuild: 3) == .unknown)
         #expect(InstallState.compare(installed: installed(build: 1), releasedBuild: nil) == .unknown)
     }
+
+    /// 최신인 앱의 줄에서 하려는 일은 받기가 아니라 열기다.
+    @Test("최신이면 버튼이 앱을 연다")
+    func upToDateOpens() {
+        #expect(InstallState.upToDate.actionTitle == "열기")
+        #expect(InstallState.upToDate.opensInstalledApp)
+    }
+
+    /// 더 새로운 것이 깔려 있을 때 누르면 출시본으로 내려간다. 여는 버튼처럼 보이면
+    /// 그 일이 숨는다.
+    @Test("더 최신이 깔려 있거나 비교할 수 없으면 다시 설치로 남긴다")
+    func aheadAndUnknownStillReinstall() {
+        for state in [InstallState.ahead, .unknown] {
+            #expect(state.actionTitle == "다시 설치")
+            #expect(!state.opensInstalledApp)
+        }
+        #expect(!InstallState.notInstalled.opensInstalledApp)
+        #expect(!InstallState.updateAvailable.opensInstalledApp)
+    }
 }
 
 @Suite("설치 전 검증")

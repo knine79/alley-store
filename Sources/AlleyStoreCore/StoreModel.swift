@@ -1,4 +1,5 @@
 import AlleyShared
+import AppKit
 import Foundation
 import Observation
 
@@ -360,6 +361,26 @@ final class StoreModel {
     }
 
     // MARK: - 설치
+
+    /// 깔려 있는 앱을 연다.
+    ///
+    /// 번들 ID 로 찾지 않고 스캔한 자리를 연다. 같은 앱이 두 곳에 있으면 번들 ID
+    /// 로는 Launch Services 가 고른 쪽이 뜨는데, 이 화면이 "설치된 위치" 로 보여주는
+    /// 것은 스캔한 쪽이다. 보여준 것과 다른 것을 열면 안 된다.
+    func open(_ app: AppDTO) {
+        guard let location = installed[app.bundleID]?.location else { return }
+        statusMessage = nil
+        errorMessage = nil
+        NSWorkspace.shared.openApplication(
+            at: location,
+            configuration: NSWorkspace.OpenConfiguration()
+        ) { [weak self] _, error in
+            guard let error else { return }
+            Task { @MainActor in
+                self?.errorMessage = "\(app.name) 을(를) 열지 못했습니다.\n\(error.localizedDescription)"
+            }
+        }
+    }
 
     /// 최신 출시본을 받아 설치한다.
     func install(_ app: AppDTO) async {
