@@ -97,9 +97,17 @@ enum InstallState: Equatable {
         // 버튼 자체가 안 그려지는 상태다. `InstallButton` 이 출시본이 없으면
         // 아무것도 내놓지 않는다. 여기서는 자리만 채운다.
         case .notReleased: return "설치"
-        case .upToDate, .ahead, .unknown: return "다시 설치"
+        // 최신이면 받을 것이 없다. 이 줄에 와서 하려는 일은 대개 앱을 여는 것이다.
+        // 다시 설치는 깨진 설치를 고칠 때만 쓰므로 버튼의 보조 메뉴로 내린다.
+        case .upToDate: return "열기"
+        // 더 새로운 것이 깔려 있으면 누르는 순간 출시본으로 내려간다. "열기" 로
+        // 적으면 그 일이 숨는다.
+        case .ahead, .unknown: return "다시 설치"
         }
     }
+
+    /// 버튼이 앱을 여는가, 받는가.
+    var opensInstalledApp: Bool { self == .upToDate }
 
     var summary: String {
         switch self {

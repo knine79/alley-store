@@ -145,11 +145,25 @@ struct InstallButton: View {
                     .controlSize(.small)
             }
         } else if app.latestReleasedVersion != nil {
-            Button(model.state(of: app).actionTitle) {
-                Task { await model.install(app) }
+            let state = model.state(of: app)
+            Button(state.actionTitle) {
+                if state.opensInstalledApp {
+                    model.open(app)
+                } else {
+                    Task { await model.install(app) }
+                }
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
+            .contextMenu {
+                // 최신인데 앱이 깨졌을 때 고칠 길이다. 버튼이 "열기" 가 되면서
+                // 다시 받는 길이 눈앞에서 사라져서 여기 남긴다.
+                if state.opensInstalledApp {
+                    Button("다시 설치") {
+                        Task { await model.install(app) }
+                    }
+                }
+            }
         }
     }
 }
