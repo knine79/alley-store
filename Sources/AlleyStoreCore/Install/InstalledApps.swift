@@ -143,6 +143,22 @@ enum InstallState: Equatable {
     /// 버튼이 앱을 여는가, 받는가.
     var opensInstalledApp: Bool { self == .upToDate }
 
+    /// 깔린 것을 갈아끼운 뒤 알리는 말. `self` 는 받기 **전** 상태다.
+    ///
+    /// 전부 "업데이트했습니다" 라고 하면 내려간 경우에도 올라간 것처럼 읽힌다.
+    /// 올라갔는지 모르는 경우(`unknown`)와 같은 빌드를 다시 받은 경우는 한 일
+    /// 그대로 "다시 설치" 라고 적는다.
+    func replacedMessage(appName: String, version: String) -> String {
+        switch self {
+        case .updateAvailable:
+            return "\(appName) 을(를) \(version) 로 업데이트했습니다."
+        case .ahead:
+            return "\(appName) 을(를) \(version) 로 되돌렸습니다."
+        case .upToDate, .unknown, .notInstalled, .notReleased:
+            return "\(appName) 을(를) \(version) 로 다시 설치했습니다."
+        }
+    }
+
     /// 받기 전에 물어야 하는 것. 이미 깔린 것을 덮어쓰는 상태에서만 있다.
     ///
     /// 깔린 것은 덮어쓰면 되돌릴 수 없다. 스토어에 없는 빌드(개발자가 직접 넣은

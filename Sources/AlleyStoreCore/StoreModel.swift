@@ -386,6 +386,8 @@ final class StoreModel {
     func install(_ app: AppDTO) async {
         guard let client, let version = app.latestReleasedVersion else { return }
         guard progress[app.id] == nil else { return }
+        // 끝난 뒤에는 새것이 깔려 있어서 무엇을 했는지(올렸나, 내렸나) 알 수 없다.
+        let before = state(of: app)
 
         statusMessage = nil
         errorMessage = nil
@@ -413,7 +415,7 @@ final class StoreModel {
             progress[app.id] = .installing
             installed = InstalledApps.scan()
             statusMessage = result.replacedExisting
-                ? "\(app.name) 을(를) \(version.shortVersion) 로 업데이트했습니다."
+                ? before.replacedMessage(appName: app.name, version: version.shortVersion)
                 : "\(app.name) 을(를) \(result.location.path) 에 설치했습니다."
         } catch StoreClient.ClientError.unauthorized {
             signOut()
