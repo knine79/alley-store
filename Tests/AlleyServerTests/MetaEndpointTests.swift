@@ -155,6 +155,26 @@ struct StoreMetaConversionTests {
         #expect(!json.contains("com.example"))
         #expect(!json.contains("enforce"))
     }
+
+    /// 로그인 버튼 문구가 이 값을 본다. Keycloak 같은 IdP 에 붙은 서버가 "Google
+    /// 계정으로 로그인" 을 띄우면 사용자는 엉뚱한 계정을 찾는다.
+    @Test("로그인이 Google 로 가는지 메타에 싣는다")
+    func metaTellsWhetherSignInIsGoogle() {
+        let settings = StoreSettings(storeName: "Example Store")
+        #expect(settings.toMeta(callbackURLScheme: "x").signsInWithGoogle == false)
+        #expect(settings.toMeta(callbackURLScheme: "x", signsInWithGoogle: true).signsInWithGoogle == true)
+    }
+
+    /// 새 앱이 이 값을 모르는 예전 서버에 붙어도 메타를 읽을 수 있어야 한다.
+    @Test("로그인 방식이 없는 예전 메타도 읽는다")
+    func olderMetaWithoutSignInProviderStillDecodes() throws {
+        let json = """
+        {"storeName":"Example Store","allowedEmailDomains":[],"authorizationPath":"/auth/google",
+         "callbackURLScheme":"x","apiVersion":1,"allowsAnonymousFeedback":true}
+        """
+        let meta = try JSONDecoder().decode(StoreMeta.self, from: Data(json.utf8))
+        #expect(meta.signsInWithGoogle == nil)
+    }
 }
 
 @Suite("부트스트랩 엔드포인트")
