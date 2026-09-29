@@ -30,6 +30,17 @@ public struct OperatorController: RouteCollection, Sendable {
         )
         ops.get("worker-releases", use: listWorkerReleases)
 
+        // `alley` 바이너리 (ADR-0065). 워커와 같은 이유로 여기 있다. 제품 레포가
+        // 서명할 수 없어서 운영 CI 가 자기 손으로 빌드하고 서명한 것을 올린다.
+        // universal 이라 2MB 남짓이고, 워커 번들과 같은 상한이면 넉넉하다.
+        ops.on(
+            .POST,
+            "cli-releases",
+            body: .collect(maxSize: "64mb"),
+            use: uploadCLIRelease
+        )
+        ops.get("cli-releases", use: listCLIReleases)
+
         // 스토어 앱. 베이스 번들을 올리고, 그것으로 새 버전을 빌드시킨다.
         //
         // 관리 화면이 하는 일과 같은 것을 CI 가 하는 자리다. 이것이 없으면 제품
@@ -173,6 +184,47 @@ public struct OperatorController: RouteCollection, Sendable {
         return response
     }
 
+    /// CLI 릴리스를 올린다 (ADR-0065).
+    ///
+    /// 워커와 같은 자리, 같은 이유다. 제품 레포가 서명할 수 없어서 운영 CI 가
+    /// 자기 손으로 빌드하고 서명한 것을 여기로 보낸다 (ADR-0043).
+    @Sendable
+    func uploadCLIRelease(request: Request) async throws -> Response {
+        let token = try request.requireOperator()
+        let form = try request.content.decode(UploadCLIReleaseRequest.self)
+
+        guard let file = form.binary, file.data.readableBytes > 0 else {
+            throw Abort(.badRequest, reason: "alley 바이너리가 없습니다.")
+        }
+
+        let release = try await CLIReleaseService.accept(
+            version: form.version,
+            data: Data(buffer: file.data),
+            makeCurrent: form.makeCurrent ?? true,
+            by: token.createdBy,
+            storage: request.application.artifactStorage,
+            on: request.db,
+            logger: request.logger
+        )
+
+        request.logger.notice(
+            "운영 토큰으로 CLI 릴리스를 올렸습니다 [버전: \(release.version), 토큰: \(token.name)]"
+        )
+        let response = Response(status: .created)
+        try response.content.encode(try release.toDTO())
+        return response
+    }
+
+    /// 올려둔 CLI 릴리스 목록. CI 가 "이미 올렸나" 를 확인한다.
+    @Sendable
+    func listCLIReleases(request: Request) async throws -> [CLIReleaseSummaryDTO] {
+        _ = try request.requireOperator()
+        return try await CLIRelease.query(on: request.db)
+            .sort(\.$createdAt, .descending)
+            .all()
+            .map { try $0.toDTO() }
+    }
+
     /// 올려둔 릴리스 목록. CI 가 "이미 올렸나" 를 확인한다.
     ///
     /// 같은 버전을 두 번 올리면 409 가 나는데, 재실행되는 파이프라인에서는 그것이
@@ -199,12 +251,34 @@ struct UploadWorkerReleaseRequest: Content {
     var makeCurrent: Bool?
 }
 
+/// 운영 파이프라인이 올리는 CLI 릴리스 (ADR-0065).
+struct UploadCLIReleaseRequest: Content {
+    var version: String
+    /// 서명·공증된 universal 바이너리. 번들이 아니라 맨 실행 파일이다.
+    var binary: File?
+    /// 올리자마자 내줄지. 기본은 내준다.
+    var makeCurrent: Bool?
+}
+
 /// 운영 파이프라인이 올리는 스토어 앱 베이스 번들.
 struct UploadStoreAppBaseBundleRequest: Content {
     /// 이 번들이 담고 있는 제품 버전. `CFBundleShortVersionString` 이 된다.
     var version: String
     /// 브랜딩 없는 미서명 번들 zip.
     var bundle: File?
+}
+
+extension CLIRelease {
+    func toDTO() throws -> CLIReleaseSummaryDTO {
+        CLIReleaseSummaryDTO(
+            id: try requireID(),
+            version: version,
+            fileSize: fileSize,
+            sha256: sha256,
+            isCurrent: isCurrent,
+            createdAt: createdAt ?? Date()
+        )
+    }
 }
 
 extension WorkerRelease {
@@ -221,3 +295,4 @@ extension WorkerRelease {
 }
 
 extension WorkerReleaseSummaryDTO: Content {}
+extension CLIReleaseSummaryDTO: Content {}

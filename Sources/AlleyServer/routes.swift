@@ -22,6 +22,7 @@ func routes(_ app: Application) throws {
     }
 
     try app.register(collection: AuthController())
+    try app.register(collection: CLIAuthController())
     try app.register(collection: AppController())
     try app.register(collection: VersionController())
     try app.register(collection: AdminController())

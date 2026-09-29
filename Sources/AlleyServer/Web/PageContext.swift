@@ -31,6 +31,29 @@ struct PageContext: Encodable {
     ///
     /// 이 값이 참일 때만 `no-resubmit.js` 를 붙여 주소를 목록 주소로 바꾼다.
     var isFormResult: Bool
+    /// 머리 오른쪽 로그인 버튼이 갈 곳. nil 이면 버튼을 그리지 않는다.
+    ///
+    /// **소개 화면과 개발자 가이드에만 둔다.** 웹으로 로그인하면 개발자가 된다
+    /// (ADR-0056). `/get` 처럼 스토어 앱을 받으러 온 사람이 보는 화면에 두면, 받기만
+    /// 할 사람이 눌러서 개발자가 되는 길이 넓어진다. 두 화면은 앱을 배포하려는 사람이
+    /// 읽는 자리라 거기서는 맞다.
+    var loginPath: String?
+    /// 머리의 사진 자리에 대신 세울 글자. 로그인하지 않았으면 nil.
+    ///
+    /// 사진은 공급자가 줄 때만 있다. 사진이 없는 계정이 많은 IdP 도 있어서, 앱 목록이
+    /// 아이콘 없는 앱에 하듯 이름의 첫 글자를 세운다 (`AppRow.initial`).
+    var userInitial: String?
+    /// 앱 목록의 이름. 머리 링크, 목록 제목, 경로 표시가 모두 이 값을 쓴다.
+    ///
+    /// 관리자에게는 "내 앱" 이 아니다. 목록에 남의 앱까지 전부 보인다 (ADR-0051).
+    var appsLabel: String
+}
+
+extension PageContext {
+    /// 앱 목록을 무엇이라 부를지. 제목을 정하는 쪽(`AppPagesController`)도 쓴다.
+    static func appsLabel(for role: UserRole?) -> String {
+        role?.canAdminister == true ? "모든 앱" : "내 앱"
+    }
 }
 
 /// 화면에 바르는 브랜딩.
@@ -100,7 +123,10 @@ extension Request {
             adminTabs: adminTab.map(AdminTab.links(current:)) ?? [],
             myTabs: myTab.map(MyTab.links(current:)) ?? [],
             assetVersion: application.assetVersion.value,
-            isFormResult: method == .POST
+            isFormResult: method == .POST,
+            loginPath: nil,
+            userInitial: user.map { ($0.name.first ?? $0.email.first).map(String.init) ?? "?" },
+            appsLabel: PageContext.appsLabel(for: user?.role)
         )
     }
 }
