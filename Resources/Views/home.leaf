@@ -28,10 +28,10 @@
 <!-- 스토어 이름은 조직이 바꾼다. 이름의 유래는 그 아래에서 도는 Alley 의 것이라
      "이 스토어는 Alley 로 운영됩니다" 로 연결한다. -->
 <section class="intro">
-    <h2 class="intro-title">골목 가게 같은 앱 스토어</h2>
+    <h2 class="intro-title">골목 상점 같은 앱 스토어</h2>
     <p>
-        이 스토어는 <strong>Alley</strong>로 운영됩니다. Alley는 골목 상가라는 뜻입니다.
-        대로변의 App Store가 아니라 아는 사람만 찾아오는 골목 가게처럼, 조직 안에서만
+        이 스토어는 <strong>Alley</strong>로 운영됩니다. Alley는 골목 상점이라는 뜻입니다.
+        대로변의 App Store가 아니라 아는 사람만 찾아오는 골목 상점처럼, 조직 안에서만
         열려 있는 배포 창구입니다.
     </p>
     <p>

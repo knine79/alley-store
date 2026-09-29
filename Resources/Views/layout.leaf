@@ -34,7 +34,17 @@
                 <!-- 이름을 눌러 내 설정으로. 알림을 받는 사람이 자기 것을 고치는 자리라
                      관리 화면이 아니라 여기에 둔다. -->
                 <a class="chrome-link chrome-user" href="/me/notifications"
-                   title="#(page.user.email)">#(page.user.name)</a>
+                   title="#(page.user.email)">
+                    <!-- 공급자가 준 사진이다. 없으면 이름만 둔다. 없는 자리에 빈 동그라미를
+                         그리면 사진을 못 불러온 것처럼 보인다. `no-referrer` 는 사진
+                         서버에 이 스토어 주소를 흘리지 않으려는 것이고, Google 사진은
+                         referrer 가 붙으면 403 을 주기도 한다. -->
+                    #if(page.user.avatarURL):
+                    <img class="chrome-avatar" src="#(page.user.avatarURL)" alt=""
+                         width="24" height="24" referrerpolicy="no-referrer">
+                    #endif
+                    <span class="chrome-user-name">#(page.user.name)</span>
+                </a>
                 <form method="post" action="/logout">
                     <button class="button button-quiet" type="submit">로그아웃</button>
                 </form>

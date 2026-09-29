@@ -61,7 +61,7 @@ struct ConsoleViewTests {
         try await withMigratedApp { app in
             try await app.testing().test(.GET, "/") { response in
                 let html = response.body.string
-                #expect(html.contains("골목 상가"))
+                #expect(html.contains("골목 상점"))
                 #expect(html.contains("피드백 알림"))
                 #expect(html.contains(#"href="/developers""#))
                 #expect(html.contains("앱을 배포하려면 지금 로그인하세요"))
@@ -163,6 +163,25 @@ struct ConsoleViewTests {
                 let html = response.body.string
                 #expect(html.contains("개발자"))
                 #expect(html.contains("로그아웃"))
+                // 사진이 없으면 빈 자리를 그리지 않는다.
+                #expect(!html.contains("chrome-avatar"))
+            }
+        }
+    }
+
+    @Test("공급자가 준 사진이 있으면 이름 옆에 보인다")
+    func chromeShowsAvatar() async throws {
+        try await withMigratedApp { app in
+            let (user, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            user.avatarURL = "https://images.example.com/dev.png"
+            try await user.save(on: app.db)
+
+            try await app.testing().test(
+                .GET, "/apps", headers: .sessionCookie(token)
+            ) { response in
+                let html = response.body.string
+                #expect(html.contains(#"src="https://images.example.com/dev.png""#))
+                #expect(html.contains(#"referrerpolicy="no-referrer""#))
             }
         }
     }

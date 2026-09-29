@@ -241,13 +241,30 @@ code {
 }
 
 .chrome-user {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
     color: var(--text-muted);
     font-size: var(--font-md);
-    /* 이름이 길어도 껍데기가 무너지지 않게 한다. */
+}
+
+/* 이름이 길어도 껍데기가 무너지지 않게 한다. 말줄임은 이름에만 건다. 링크 전체에
+   걸면 사진까지 잘려 나간다. */
+.chrome-user-name {
     max-width: 14em;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.chrome-avatar {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    object-fit: cover;
+    /* 흰 배경 사진이 흰 머리에 녹아 윤곽이 사라지지 않게 한다. */
+    box-shadow: 0 0 0 1px var(--border);
 }
 
 .chrome-nav form {
