@@ -21,7 +21,13 @@ final class LoopbackListener {
     private let socketHandle: Int32
 
     init() throws {
-        let handle = socket(AF_INET, SOCK_STREAM, 0)
+        // Glibc 는 `SOCK_STREAM` 을 정수가 아니라 enum 으로 내놓는다.
+        #if canImport(Glibc)
+        let streamType = Int32(SOCK_STREAM.rawValue)
+        #else
+        let streamType = SOCK_STREAM
+        #endif
+        let handle = socket(AF_INET, streamType, 0)
         guard handle >= 0 else {
             throw AuthCommand.Failure.cannotListen("소켓을 만들지 못했습니다.")
         }

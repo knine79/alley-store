@@ -325,7 +325,9 @@ extension CLI {
     /// `FileHandle` 에 직접 쓴다.
     public static func say(_ line: String) {
         print(line)
-        fflush(stdout)
+        // `stdout` 을 부르지 않는다. Glibc 에서는 전역 var 라 Swift 6 가 막는다. nil 을
+        // 주면 열린 출력 스트림을 모두 비우고, 여기서 쓰는 것은 표준 출력뿐이다.
+        fflush(nil)
     }
 }
 

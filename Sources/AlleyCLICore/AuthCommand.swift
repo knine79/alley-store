@@ -1,6 +1,11 @@
 import AlleyShared
 import Foundation
 
+// Linux 에서는 `URLSession` 이 따로 떨어져 있다. 같은 모듈의 `StoreAPI` 와 같다.
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
 #if canImport(Network)
 import Network
 #endif
