@@ -94,29 +94,37 @@ struct SelfUpdateLocationTests {
     @Test("쓸 수 있는 폴더의 번들은 갈아끼운다")
     func writableLocationIsReplaceable() throws {
         try withBundle { _, bundle in
-            #expect(SelfUpdate.canReplace(bundle))
+            #expect(SelfUpdate.blocker(for: bundle) == nil)
         }
     }
 
     /// 번들을 지우고 새로 놓는 자리가 부모 폴더다. 번들만 쓸 수 있어서는 안 된다.
-    /// Translocation 과 dmg 는 읽기 전용이라 이 갈래로 떨어진다.
-    @Test("부모 폴더에 쓸 수 없으면 갈아끼우지 않는다")
-    func readOnlyParentIsNotReplaceable() throws {
+    /// MDM 이나 pkg 로 깔려 root 가 가진 경우가 이렇다. 이미 응용 프로그램 폴더에
+    /// 있으므로 "옮기라" 고 하면 안 된다.
+    @Test("쓸 권한이 없으면 옮기라고 하지 않고 권한이 없다고 한다")
+    func noPermissionIsNotAskedToMove() throws {
         try withBundle { parent, bundle in
             try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: parent.path)
-            #expect(!SelfUpdate.canReplace(bundle))
+            #expect(SelfUpdate.blocker(for: bundle) == .noPermission)
+            #expect(!SelfUpdate.Blocker.noPermission.message.contains("옮긴"))
         }
     }
 
     /// 실제 읽기 전용 볼륨이다. 권한 비트가 아니라 마운트가 막는 경우를 본다.
-    @Test("읽기 전용 디스크 이미지 안이면 갈아끼우지 않는다")
-    func readOnlyVolumeIsNotReplaceable() async throws {
+    /// Translocation 도 읽기 전용 마운트라 같은 갈래로 떨어진다.
+    @Test("읽기 전용 디스크 이미지 안이면 옮기라고 한다")
+    func readOnlyVolumeAsksToMove() async throws {
         try withBundle { parent, bundle in
+            // `-srcfolder` 는 폴더의 내용물을 볼륨 맨 위에 놓는다. 번들이 볼륨 안에
+            // 번들로 놓이려면 그것을 담은 폴더를 넘겨야 한다.
+            let stage = parent.appendingPathComponent("stage", isDirectory: true)
+            try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: bundle, to: stage.appendingPathComponent(bundle.lastPathComponent))
             let image = parent.appendingPathComponent("ro.dmg")
             let mount = parent.appendingPathComponent("mnt", isDirectory: true)
             let create = Process()
             create.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
-            create.arguments = ["create", "-quiet", "-srcfolder", bundle.path, "-format", "UDRO", image.path]
+            create.arguments = ["create", "-quiet", "-srcfolder", stage.path, "-format", "UDRO", image.path]
             try create.run()
             create.waitUntilExit()
             try #require(create.terminationStatus == 0)
@@ -136,7 +144,9 @@ struct SelfUpdateLocationTests {
             }
 
             let inside = mount.appendingPathComponent("Alley Store.app")
-            #expect(!SelfUpdate.canReplace(inside))
+            // 없는 경로를 보면 "쓸 수 없다" 로 떨어져 무엇을 봐도 통과한다.
+            try #require(FileManager.default.fileExists(atPath: inside.path))
+            #expect(SelfUpdate.blocker(for: inside) == .readOnlyLocation)
         }
     }
 }
