@@ -107,6 +107,26 @@ struct SecurityHeadersTests {
         }
     }
 
+    @Test("CLI 연결 화면만 루프백으로 폼을 끝낼 수 있다")
+    func opensLoopbackOnlyForCLIConnect() async throws {
+        try await withMigratedApp { app in
+            let (_, session) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            // **연결** 은 `http://127.0.0.1:<포트>` 로 리다이렉트한다. `form-action` 은
+            // 리다이렉트된 끝까지 봐서, 열지 않으면 브라우저가 이동을 조용히 막는다.
+            let path = "\(APIPath.cliAuthorize)?port=51234&state=abc&device=mac"
+            try await app.testing().test(.GET, path, headers: .sessionCookie(session)) { response in
+                #expect(response.status == .ok)
+                let action = try #require(directives(response)["form-action"])
+                #expect(action.contains("http://127.0.0.1:*"))
+            }
+            // 다른 화면에서는 열지 않는다. 주입된 폼이 로컬 서비스로 값을 보내지 못하게.
+            try await app.testing().test(.GET, "/developers") { response in
+                let action = try #require(directives(response)["form-action"])
+                #expect(!action.contains("127.0.0.1"))
+            }
+        }
+    }
+
     @Test("issuer 에서 출처만 뽑는다")
     func extractsProviderOrigin() throws {
         let config = try TestSupport.config(
