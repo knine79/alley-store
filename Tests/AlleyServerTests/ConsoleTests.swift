@@ -7,18 +7,17 @@ import VaporTesting
 
 @Suite("웹 콘솔 화면")
 struct ConsoleViewTests {
-    @Test("로그인하지 않으면 로그인 화면을 준다")
-    func showsLoginWhenSignedOut() async throws {
+    @Test("로그인은 개발자 가이드 맨 아래에 있다")
+    func guideOffersLogin() async throws {
         try await withMigratedApp(overrides: [
             "STORE_NAME": "Example Store",
             "ALLOWED_EMAIL_DOMAINS": "example.com",
         ]) { app in
-            try await app.testing().test(.GET, "/") { response in
+            try await app.testing().test(.GET, "/developers") { response in
                 #expect(response.status == .ok)
-                #expect(response.headers.contentType?.type == "text")
-
                 let html = response.body.string
                 #expect(html.contains("Example Store"))
+                #expect(html.contains("앱을 배포하려면 지금 로그인하세요"))
                 // 어떤 계정으로 로그인할 수 있는지 미리 알려준다.
                 #expect(html.contains("example.com"))
                 #expect(html.contains(APIPath.googleAuthorize))
@@ -26,12 +25,25 @@ struct ConsoleViewTests {
         }
     }
 
-    @Test("허용 도메인이 없으면 화면에 경고가 뜬다")
+    @Test("허용 도메인이 없으면 가이드에 경고가 뜬다")
     func warnsWhenAnyDomainCanSignIn() async throws {
         try await withMigratedApp { app in
-            try await app.testing().test(.GET, "/") { response in
+            try await app.testing().test(.GET, "/developers") { response in
                 // 설정 실수로 로그인이 열려 있는 상태를 눈에 띄게 알린다.
                 #expect(response.body.string.contains("누구나 로그인할 수 있습니다"))
+            }
+        }
+    }
+
+    @Test("첫 화면에는 로그인 버튼이 없다")
+    func homeHasNoLogin() async throws {
+        try await withMigratedApp { app in
+            // 웹으로 로그인하면 개발자가 된다 (ADR-0056). 첫 화면을 여는 사람은 대부분
+            // 스토어 앱을 받으러 온 사람이다.
+            try await app.testing().test(.GET, "/") { response in
+                let html = response.body.string
+                #expect(!html.contains(APIPath.googleAuthorize))
+                #expect(!html.contains("지금 로그인하세요"))
             }
         }
     }
@@ -46,9 +58,14 @@ struct ConsoleViewTests {
                 .GET, "/", headers: .sessionCookie(token)
             ) { response in
                 #expect(response.status == .ok)
+                #expect(response.body.string.contains("개발자를 위한 기능"))
+            }
+            // 가이드 맨 아래는 로그인 대신 앱 목록으로 보낸다. 로그인한 사람에게 로그인
+            // 버튼을 보이면 OAuth 를 다시 탄다.
+            try await app.testing().test(
+                .GET, "/developers", headers: .sessionCookie(token)
+            ) { response in
                 let html = response.body.string
-                #expect(html.contains("개발자를 위한 기능"))
-                // 로그인한 사람에게 로그인 버튼을 보이면 OAuth 를 다시 탄다.
                 #expect(html.contains("내 앱으로 가기"))
                 #expect(!html.contains("앱을 배포하려면 지금 로그인하세요"))
                 #expect(!html.contains(#"href="\#(APIPath.googleAuthorize)""#))
@@ -64,7 +81,6 @@ struct ConsoleViewTests {
                 #expect(html.contains("골목 상점"))
                 #expect(html.contains("피드백 알림"))
                 #expect(html.contains(#"href="/developers""#))
-                #expect(html.contains("앱을 배포하려면 지금 로그인하세요"))
                 // 출시된 스토어 앱이 없으면 누를 버튼을 그리지 않는다.
                 #expect(html.contains("아직 다운로드할 수 있는 스토어 앱이 없습니다"))
                 #expect(!html.contains(#"href="/get""#))
@@ -84,20 +100,18 @@ struct ConsoleViewTests {
         }
     }
 
-    @Test("머리 오른쪽에 로그인 버튼이 있다")
-    func chromeShowsLoginWhenSignedOut() async throws {
+    @Test("머리 로그인 버튼은 개발자 가이드에만 있다")
+    func chromeShowsLoginOnlyOnGuide() async throws {
         try await withMigratedApp { app in
             let button = #"<a class="button button-quiet" href="\#(APIPath.googleAuthorize)">로그인</a>"#
-            // 소개와 가이드는 앱을 배포하려는 사람이 읽는 자리다.
-            for path in ["/", "/developers"] {
-                try await app.testing().test(.GET, path) { response in
-                    #expect(response.body.string.contains(button))
-                }
+            try await app.testing().test(.GET, "/developers") { response in
+                #expect(response.body.string.contains(button))
             }
-            // 스토어 앱을 받으러 온 사람에게는 두지 않는다. 웹으로 로그인하면 개발자가
-            // 된다 (ADR-0056).
-            try await app.testing().test(.GET, "/get") { response in
-                #expect(!response.body.string.contains(button))
+            // 스토어 앱을 받으러 온 사람이 보는 화면에는 두지 않는다.
+            for path in ["/", "/get"] {
+                try await app.testing().test(.GET, path) { response in
+                    #expect(!response.body.string.contains(button))
+                }
             }
         }
     }

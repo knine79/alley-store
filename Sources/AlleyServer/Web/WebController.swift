@@ -35,22 +35,16 @@ public struct WebController: RouteCollection, Sendable {
     /// 섞으면 받으러 온 사람이 명령어 사이에서 다운로드 버튼을 찾아야 한다.
     @Sendable
     func home(request: Request) async throws -> View {
-        let settings = try await request.storeSettings()
-        var page = try await request.pageContext()
-        page.loginPath = APIPath.googleAuthorize
-        return try await request.view.render(
+        // 로그인 버튼을 두지 않는다. 웹으로 로그인하면 개발자가 되는데(ADR-0056), 이
+        // 화면을 여는 사람은 대부분 스토어 앱을 받으러 온 사람이다. 로그인은 개발자
+        // 가이드에 둔다.
+        try await request.view.render(
             "home",
             HomeContext(
-                page: page,
-                isSignedIn: request.auth.has(User.self),
+                page: try await request.pageContext(),
                 hasStoreApp: try await StoreAppGetController.releasedStoreApp(on: request) != nil,
                 storeAppPath: "/\(StoreAppGetController.path)",
-                developersPath: Self.developersPath,
-                allowedEmailDomains: settings.allowedEmailDomains,
-                authorizationPath: APIPath.googleAuthorize,
-                // 공급자가 Google 이 아닐 수 있다 (ADR-0047). 버튼에 "Google" 이
-                // 적혀 있는데 다른 곳으로 가면 사용자가 잘못 누른 줄 안다.
-                isGoogle: request.application.alleyConfig.oauth.isGoogle
+                developersPath: Self.developersPath
             )
         ).get()
     }
@@ -79,7 +73,11 @@ public struct WebController: RouteCollection, Sendable {
                 // 끝의 `/` 를 뗀다. 안 떼면 복사할 명령에 `//get/cli` 가 찍히고,
                 // 그걸 본 사람은 동작하더라도 오타부터 의심한다.
                 serverURL: request.application.alleyConfig.publicBaseURL.trimmingSuffix("/"),
-                authorizationPath: APIPath.googleAuthorize
+                authorizationPath: APIPath.googleAuthorize,
+                allowedEmailDomains: try await request.storeSettings().allowedEmailDomains,
+                // 공급자가 Google 이 아닐 수 있다 (ADR-0047). 버튼에 "Google" 이
+                // 적혀 있는데 다른 곳으로 가면 사용자가 잘못 누른 줄 안다.
+                isGoogle: request.application.alleyConfig.oauth.isGoogle
             )
         ).get()
     }
@@ -149,22 +147,11 @@ public struct WebController: RouteCollection, Sendable {
 
 struct HomeContext: Encodable {
     var page: PageContext
-    /// 로그인해 있으면 맨 아래의 로그인 버튼 대신 앱 목록으로 가는 링크를 둔다.
-    /// 로그인한 사람에게 로그인 버튼을 보이면 OAuth 를 처음부터 다시 탄다.
-    var isSignedIn: Bool
     /// 지금 받을 수 있는 스토어 앱이 있는가. `/get` 이 버튼을 그리는 조건과 같다.
     var hasStoreApp: Bool
     /// 스토어 앱을 받는 공개 페이지 (ADR-0049).
     var storeAppPath: String
     var developersPath: String
-    var allowedEmailDomains: [String]
-    var authorizationPath: String
-    /// 로그인 버튼에 공급자 이름을 적을지.
-    ///
-    /// Google 만 이름을 적는다. 그 버튼은 사람들이 눈으로 찾는 것이고, 다른
-    /// 공급자는 조직마다 부르는 이름이 달라서(회사 계정, SSO, Okta…) 우리가
-    /// 정해줄 수 없다.
-    var isGoogle: Bool
 }
 
 struct DevelopersContext: Encodable {
@@ -177,6 +164,13 @@ struct DevelopersContext: Encodable {
     /// `alley auth login --server` 에 넣을 이 스토어의 주소.
     var serverURL: String
     var authorizationPath: String
+    var allowedEmailDomains: [String]
+    /// 로그인 버튼에 공급자 이름을 적을지.
+    ///
+    /// Google 만 이름을 적는다. 그 버튼은 사람들이 눈으로 찾는 것이고, 다른
+    /// 공급자는 조직마다 부르는 이름이 달라서(회사 계정, SSO, Okta…) 우리가
+    /// 정해줄 수 없다.
+    var isGoogle: Bool
 }
 
 extension HTTPCookies.Value {

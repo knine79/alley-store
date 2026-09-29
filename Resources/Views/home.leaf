@@ -71,34 +71,5 @@
     <p><a href="#(developersPath)">개발자 가이드 보기 →</a></p>
 </section>
 
-<section class="hero hero-cta">
-    #if(isSignedIn):
-    <p class="hero-lead">앱 목록에서 새 앱을 등록하거나 버전을 올릴 수 있습니다.</p>
-    <a class="button button-primary button-large" href="/apps">#(page.appsLabel)으로 가기</a>
-    #else:
-    <!-- 웹에서 로그인하면 개발자가 된다 (ADR-0056). 스토어 앱만 쓸 사람은 여기서
-         로그인할 필요가 없다는 것을 문구가 말한다. -->
-    <p class="hero-lead">앱을 배포하려면 지금 로그인하세요.</p>
-    <a class="button button-primary button-large" href="#(authorizationPath)">
-        #if(isGoogle):Google 계정으로 로그인#else:조직 계정으로 로그인#endif
-    </a>
-
-    #if(count(allowedEmailDomains) > 0):
-    <p class="hero-note">
-        다음 도메인의 계정만 로그인할 수 있습니다.
-        <span class="domain-list">
-            #for(domain in allowedEmailDomains):
-            <code>#(domain)</code>
-            #endfor
-        </span>
-    </p>
-    #else:
-    <p class="hero-note warning">
-        로그인 도메인 제한이 설정되지 않아 누구나 로그인할 수 있습니다.
-        관리자가 설정에서 허용 도메인을 지정해야 합니다.
-    </p>
-    #endif
-    #endif
-</section>
 #endexport
 #endextend
