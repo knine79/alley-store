@@ -18,6 +18,7 @@ import Foundation
 enum SelfUpdate {
     enum SelfUpdateError: LocalizedError {
         case notInBundle
+        case notReplaceable
         case cannotWriteScript(String)
 
         var errorDescription: String? {
@@ -27,10 +28,16 @@ enum SelfUpdate {
                     앱 번들 밖에서 실행 중이라 자기 자신을 업데이트할 수 없습니다. \
                     개발 중에는 정상입니다.
                     """
+            case .notReplaceable:
+                return Self.moveToApplicationsHint
             case .cannotWriteScript(let detail):
                 return "업데이트 준비에 실패했습니다.\n\(detail)"
             }
         }
+
+        /// 배너와 오류가 같은 말을 하게 한 자리에 둔다.
+        static let moveToApplicationsHint =
+            "이 자리에서는 스스로 업데이트할 수 없습니다. 응용 프로그램 폴더로 옮긴 뒤 다시 열어주세요."
     }
 
     /// 지금 도는 앱의 번들 위치.
@@ -39,6 +46,22 @@ enum SelfUpdate {
     static func currentBundle() -> URL? {
         let url = Bundle.main.bundleURL
         return url.pathExtension == "app" ? url : nil
+    }
+
+    /// 이 자리의 번들을 갈아끼울 수 있나.
+    ///
+    /// **못 바꾸는 자리에서 뜬 앱이 흔하다.** 격리 속성이 남은 채 연 앱은 macOS 가
+    /// 읽기 전용 사본(App Translocation)에서 띄우고, dmg 안에서 바로 연 앱도 읽기
+    /// 전용이다. 그 상태로 교체를 시도하면 스크립트가 지우지도 놓지도 못한 채 옛
+    /// 번들을 다시 띄운다. 앱은 여전히 새 버전이 있다고 보므로 다음 차례에 또 종료하고,
+    /// 사용자에게는 앱이 이유 없이 꺼졌다 켜지는 것으로만 보인다.
+    ///
+    /// 경로 이름으로 가리지 않고 실제로 쓸 수 있는지를 본다. Translocation 경로의
+    /// 모양은 문서화된 것이 아니고, 권한 없는 폴더에 둔 경우도 같이 걸러야 한다.
+    /// 스크립트가 하는 일이 번들을 지우고 부모 폴더에 새로 놓는 것이라 둘 다 본다.
+    static func canReplace(_ bundle: URL, fileManager: FileManager = .default) -> Bool {
+        fileManager.isWritableFile(atPath: bundle.path)
+            && fileManager.isWritableFile(atPath: bundle.deletingLastPathComponent().path)
     }
 
     /// 교체를 맡길 스크립트.
@@ -90,6 +113,10 @@ enum SelfUpdate {
     static func replaceAndRelaunch(with replacement: URL) throws {
         guard let destination = currentBundle() else {
             throw SelfUpdateError.notInBundle
+        }
+        // 부르는 쪽이 먼저 거르지만 여기서도 막는다. 여기를 지나면 앱이 종료된다.
+        guard canReplace(destination) else {
+            throw SelfUpdateError.notReplaceable
         }
 
         let scriptURL = FileManager.default.temporaryDirectory
