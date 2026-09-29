@@ -24,6 +24,9 @@ public enum APIPath {
     /// 스토어 앱과 서버가 같은 문자열을 봐야 하므로 여기서만 정의한다.
     public static let clientQueryItem = "client"
     public static let appClient = "app"
+    /// 로그인한 뒤 돌아갈 경로. 이 스토어 안의 상대 경로만 받는다
+    /// (`OAuthStateToken.safeReturnPath`).
+    public static let returnQueryItem = "next"
     /// 스토어 앱이 일회용 코드를 세션 토큰으로 교환하는 경로.
     public static let tokenExchange = "\(apiRoot)/auth/token"
 

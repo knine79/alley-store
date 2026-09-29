@@ -59,7 +59,23 @@ public struct ConsoleErrorMiddleware: AsyncMiddleware {
 
         // 브라우저에서 세션이 끊기면 오류 화면 대신 로그인으로 보낸다.
         // "인증되지 않았습니다"를 읽고 나서 스스로 로그인 주소를 찾아가게 할 이유가 없다.
+        //
+        // **GET 이면 곧장 로그인으로 보내고, 끝나면 이 화면으로 돌아오게 한다.** 첫
+        // 화면은 이제 소개라, 거기 떨어뜨리면 로그인 버튼을 다시 찾아야 하고 보던 화면도
+        // 잃는다. `alley auth login` 이 여는 `/auth/cli?port=…` 는 주소를 잃으면 CLI 가
+        // 끝까지 기다리다 끝난다. POST 는 돌아와도 다시 보낼 폼이 없으니 첫 화면으로 둔다.
         if status == .unauthorized {
+            if request.method == .GET,
+               let path = OAuthStateToken.safeReturnPath(request.url.string)
+            {
+                var components = URLComponents()
+                components.path = APIPath.googleAuthorize
+                components.queryItems = [URLQueryItem(name: APIPath.returnQueryItem, value: path)]
+                // `URLComponents` 는 `+` 를 그대로 둔다. 받는 쪽은 그것을 공백으로 읽는다.
+                components.percentEncodedQuery = components.percentEncodedQuery?
+                    .replacingOccurrences(of: "+", with: "%2B")
+                return request.redirect(to: components.string ?? "/")
+            }
             return request.redirect(to: "/")
         }
 

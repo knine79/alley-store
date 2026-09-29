@@ -181,4 +181,58 @@ struct CLIAuthTests {
         }
         return code
     }
+
+    @Test("로그인하지 않고 연결 화면을 열면 로그인한 뒤 그 화면으로 돌아온다")
+    func unauthenticatedConnectReturnsAfterLogin() async throws {
+        try await withMigratedApp { app in
+            // `alley auth login` 이 여는 주소다. port 와 state 를 잃으면 CLI 는 끝까지
+            // 기다리다 끝난다.
+            let path = "\(APIPath.cliAuthorize)?port=51234&state=abc+def&device=mac"
+            try await app.testing().test(.GET, path) { response in
+                #expect(response.status == .seeOther)
+                let location = try #require(response.headers.first(name: .location))
+                let components = try #require(URLComponents(string: location))
+                #expect(components.path == APIPath.googleAuthorize)
+                // `+` 가 공백으로 바뀌면 state 대조가 어긋난다.
+                #expect(components.queryItems?.first?.value == path)
+                #expect(!location.contains("+"))
+            }
+        }
+    }
+
+    @Test("돌아갈 경로는 이 스토어 안의 상대 경로만 받는다")
+    func returnPathRejectsOtherHosts() {
+        #expect(OAuthStateToken.safeReturnPath("/auth/cli?port=1") == "/auth/cli?port=1")
+        #expect(OAuthStateToken.safeReturnPath("//evil.example") == nil)
+        #expect(OAuthStateToken.safeReturnPath("/\\evil.example") == nil)
+        #expect(OAuthStateToken.safeReturnPath("https://evil.example") == nil)
+        #expect(OAuthStateToken.safeReturnPath("/apps\nSet-Cookie: x") == nil)
+        #expect(OAuthStateToken.safeReturnPath(nil) == nil)
+    }
+
+    @Test("로그인 시작에 넘긴 돌아갈 경로가 서명된 state 에 실린다")
+    func authorizeCarriesReturnPath() async throws {
+        try await withConfiguredApp { app in
+            let next = "/auth/cli?port=1&state=x"
+            var components = URLComponents()
+            components.path = APIPath.googleAuthorize
+            components.queryItems = [URLQueryItem(name: APIPath.returnQueryItem, value: next)]
+            let issued = try await app.testing().sendRequest(.GET, components.string!)
+            let location = try #require(issued.headers.first(name: .location))
+            let rawState = try #require(
+                URLComponents(string: location)?.queryItems?.first { $0.name == "state" }?.value
+            )
+            let state = try await app.jwt.keys.verify(rawState, as: OAuthStateToken.self)
+            #expect(state.returnPath == next)
+
+            // 남의 주소는 싣지 않는다.
+            components.queryItems = [URLQueryItem(name: APIPath.returnQueryItem, value: "//evil.example")]
+            let rejected = try await app.testing().sendRequest(.GET, components.string!)
+            let rejectedLocation = try #require(rejected.headers.first(name: .location))
+            let rejectedState = try #require(
+                URLComponents(string: rejectedLocation)?.queryItems?.first { $0.name == "state" }?.value
+            )
+            #expect(try await app.jwt.keys.verify(rejectedState, as: OAuthStateToken.self).returnPath == nil)
+        }
+    }
 }
