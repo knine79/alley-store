@@ -27,6 +27,11 @@ public struct StoreMeta: Codable, Sendable, Equatable {
     public var apiVersion: Int
     /// 피드백을 익명으로 남길 수 있는지. 스토어 앱이 이걸 보고 체크박스를 띄운다.
     public var allowsAnonymousFeedback: Bool
+    /// 로그인이 Google 로 가는지. 로그인 버튼 문구에만 쓴다 (ADR-0047).
+    ///
+    /// 옵셔널로 둔다. 이 값을 모르는 예전 서버에 새 앱이 붙어도 메타 해석이 깨지면
+    /// 안 된다. 없으면 어느 IdP 에도 틀리지 않는 "조직 계정" 으로 적는다.
+    public var signsInWithGoogle: Bool?
 
     public init(
         storeName: String,
@@ -37,7 +42,8 @@ public struct StoreMeta: Codable, Sendable, Equatable {
         authorizationPath: String = APIPath.googleAuthorize,
         callbackURLScheme: String,
         apiVersion: Int = APIPath.currentAPIVersion,
-        allowsAnonymousFeedback: Bool = true
+        allowsAnonymousFeedback: Bool = true,
+        signsInWithGoogle: Bool? = nil
     ) {
         self.storeName = storeName
         self.logoURL = logoURL
@@ -48,6 +54,7 @@ public struct StoreMeta: Codable, Sendable, Equatable {
         self.callbackURLScheme = callbackURLScheme
         self.apiVersion = apiVersion
         self.allowsAnonymousFeedback = allowsAnonymousFeedback
+        self.signsInWithGoogle = signsInWithGoogle
     }
 }
 
