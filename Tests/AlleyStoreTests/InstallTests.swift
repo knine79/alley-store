@@ -147,6 +147,77 @@ struct InstallStateTests {
         #expect(InstallState.compare(installed: installed(build: nil), releasedBuild: 3) == .unknown)
         #expect(InstallState.compare(installed: installed(build: 1), releasedBuild: nil) == .unknown)
     }
+
+    /// 최신인 앱의 줄에서 하려는 일은 받기가 아니라 열기다.
+    @Test("최신이면 버튼이 앱을 연다")
+    func upToDateOpens() {
+        #expect(InstallState.upToDate.actionTitle == "열기")
+        #expect(InstallState.upToDate.opensInstalledApp)
+    }
+
+    /// 더 새로운 것이 깔려 있을 때 누르면 출시본으로 내려간다. 여는 버튼처럼 보이면
+    /// 그 일이 숨는다.
+    @Test("더 최신이 깔려 있거나 비교할 수 없으면 다시 설치로 남긴다")
+    func aheadAndUnknownStillReinstall() {
+        for state in [InstallState.ahead, .unknown] {
+            #expect(state.actionTitle == "다시 설치")
+            #expect(!state.opensInstalledApp)
+        }
+        #expect(!InstallState.notInstalled.opensInstalledApp)
+        #expect(!InstallState.updateAvailable.opensInstalledApp)
+    }
+
+    /// 깔린 것을 덮어쓰는 상태에서만 묻고, 무엇을 잃는지에 따라 말이 다르다.
+    @Test("깔린 것을 덮어쓸 때만 묻는다")
+    func asksOnlyWhenOverwritingInstalledApp() {
+        #expect(InstallState.ahead.reinstallWarning == .downgrade)
+        #expect(InstallState.unknown.reinstallWarning == .possibleDowngrade)
+        #expect(InstallState.upToDate.reinstallWarning == .overwrite)
+        for state in [InstallState.notInstalled, .notReleased, .updateAvailable] {
+            #expect(state.reinstallWarning == nil)
+        }
+    }
+
+    /// 견줄 수 없을 때 "내려간다" 고 단정하면 틀릴 수 있다.
+    @Test("비교할 수 없으면 내려갈 수 있다고만 말한다")
+    func possibleDowngradeDoesNotClaimDowngrade() {
+        let warning = ReinstallWarning.possibleDowngrade
+        #expect(warning.title.contains("수 있습니다"))
+        let message = warning.message(installed: "2.0", released: "1.0.2 (빌드 3)")
+        #expect(message.contains("2.0"))
+        #expect(message.contains("1.0.2 (빌드 3)"))
+        #expect(message.contains("수 있습니다"))
+    }
+
+    @Test("내려갈 때는 무엇이 무엇으로 바뀌는지 적는다")
+    func downgradeNamesBothVersions() {
+        let message = ReinstallWarning.downgrade.message(
+            installed: "9.9.9 (빌드 99)", released: "1.0.2 (빌드 3)"
+        )
+        #expect(message.contains("9.9.9 (빌드 99)"))
+        #expect(message.contains("1.0.2 (빌드 3)"))
+    }
+
+    @Test("같은 빌드를 다시 받을 때는 덮어쓴다는 것만 알린다")
+    func overwriteIsShort() {
+        let message = ReinstallWarning.overwrite.message(
+            installed: "1.0.2 (빌드 3)", released: "1.0.2 (빌드 3)"
+        )
+        #expect(message == "이 맥에 있는 1.0.2 (빌드 3) 을(를) 덮어씁니다.")
+    }
+
+    /// 내려간 것을 "업데이트" 라고 적으면 거짓말이 된다. 받기 전 상태로 고른다.
+    @Test("갈아끼운 뒤의 안내는 올렸는지 내렸는지를 따른다")
+    func replacedMessageFollowsWhatHappened() {
+        #expect(InstallState.updateAvailable.replacedMessage(appName: "메모장", version: "1.2")
+            == "메모장 을(를) 1.2 로 업데이트했습니다.")
+        #expect(InstallState.ahead.replacedMessage(appName: "메모장", version: "1.2")
+            == "메모장 을(를) 1.2 로 되돌렸습니다.")
+        for state in [InstallState.upToDate, .unknown] {
+            #expect(state.replacedMessage(appName: "메모장", version: "1.2")
+                == "메모장 을(를) 1.2 로 다시 설치했습니다.")
+        }
+    }
 }
 
 @Suite("설치 전 검증")

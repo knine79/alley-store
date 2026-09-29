@@ -1,4 +1,5 @@
 import AlleyShared
+import AppKit
 import Foundation
 import Observation
 
@@ -301,9 +302,19 @@ final class StoreModel {
         await applySelfUpdateIfIdle()
     }
 
+    /// 지금 도는 번들을 제자리에서 갈아끼울 수 없는 까닭. 갈아끼울 수 있으면 nil.
+    ///
+    /// 앱이 도는 동안 자리가 바뀌지 않으므로 한 번만 본다. 번들 밖(`swift run`)이면
+    /// 어차피 교체하지 않으니 막을 것도 없다 (`SelfUpdate.blocker`).
+    let selfUpdateBlocker: SelfUpdate.Blocker? = SelfUpdate.currentBundle()
+        .flatMap { SelfUpdate.blocker(for: $0) }
+
     /// 다른 일이 없을 때만 자기를 갈아끼운다.
+    ///
+    /// 못 바꾸는 자리면 시도하지 않는다. 시도하면 앱이 종료됐다가 옛 번들로 다시 뜨고,
+    /// 주기마다 그것을 되풀이한다. 그 자리에서는 배너가 까닭과 할 일을 안내한다.
     private func applySelfUpdateIfIdle() async {
-        guard progress.isEmpty, let update = selfUpdate else { return }
+        guard selfUpdateBlocker == nil, progress.isEmpty, let update = selfUpdate else { return }
         await updateSelf(update)
     }
 
@@ -314,6 +325,11 @@ final class StoreModel {
     func updateSelf(_ app: AppDTO) async {
         guard let client, let version = app.latestReleasedVersion else { return }
         guard progress[app.id] == nil else { return }
+        // 받기 전에 멈춘다. 다 받고 나서 못 놓는다고 하면 받은 것이 헛일이 된다.
+        if let blocker = selfUpdateBlocker {
+            errorMessage = blocker.message
+            return
+        }
 
         errorMessage = nil
         progress[app.id] = .downloading(0)
@@ -347,10 +363,32 @@ final class StoreModel {
 
     // MARK: - 설치
 
+    /// 깔려 있는 앱을 연다.
+    ///
+    /// 번들 ID 로 찾지 않고 스캔한 자리를 연다. 같은 앱이 두 곳에 있으면 번들 ID
+    /// 로는 Launch Services 가 고른 쪽이 뜨는데, 이 화면이 "설치된 위치" 로 보여주는
+    /// 것은 스캔한 쪽이다. 보여준 것과 다른 것을 열면 안 된다.
+    func open(_ app: AppDTO) {
+        guard let location = installed[app.bundleID]?.location else { return }
+        statusMessage = nil
+        errorMessage = nil
+        NSWorkspace.shared.openApplication(
+            at: location,
+            configuration: NSWorkspace.OpenConfiguration()
+        ) { [weak self] _, error in
+            guard let error else { return }
+            Task { @MainActor in
+                self?.errorMessage = "\(app.name) 을(를) 열지 못했습니다.\n\(error.localizedDescription)"
+            }
+        }
+    }
+
     /// 최신 출시본을 받아 설치한다.
     func install(_ app: AppDTO) async {
         guard let client, let version = app.latestReleasedVersion else { return }
         guard progress[app.id] == nil else { return }
+        // 끝난 뒤에는 새것이 깔려 있어서 무엇을 했는지(올렸나, 내렸나) 알 수 없다.
+        let before = state(of: app)
 
         statusMessage = nil
         errorMessage = nil
@@ -378,7 +416,7 @@ final class StoreModel {
             progress[app.id] = .installing
             installed = InstalledApps.scan()
             statusMessage = result.replacedExisting
-                ? "\(app.name) 을(를) \(version.shortVersion) 로 업데이트했습니다."
+                ? before.replacedMessage(appName: app.name, version: version.shortVersion)
                 : "\(app.name) 을(를) \(result.location.path) 에 설치했습니다."
         } catch StoreClient.ClientError.unauthorized {
             signOut()

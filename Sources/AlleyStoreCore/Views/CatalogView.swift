@@ -132,6 +132,8 @@ struct AppRow: View {
 struct InstallButton: View {
     @Environment(StoreModel.self) private var model
     let app: AppDTO
+    /// 띄울 확인. 있으면 창이 떠 있다.
+    @State private var pendingWarning: ReinstallWarning?
 
     var body: some View {
         if let progress = model.progress[app.id] {
@@ -145,12 +147,64 @@ struct InstallButton: View {
                     .controlSize(.small)
             }
         } else if app.latestReleasedVersion != nil {
-            Button(model.state(of: app).actionTitle) {
-                Task { await model.install(app) }
+            let state = model.state(of: app)
+            Button(state.actionTitle) {
+                if state.opensInstalledApp {
+                    model.open(app)
+                } else {
+                    install(state)
+                }
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
+            // 깔린 것을 덮어쓰기 전에 한 번 묻는다. 개발자가 직접 넣은 빌드일 때가
+            // 많고, 덮어쓰면 그 빌드는 스토어 어디에도 없다.
+            .alert(
+                pendingWarning?.title ?? "",
+                isPresented: Binding(
+                    get: { pendingWarning != nil },
+                    set: { if !$0 { pendingWarning = nil } }
+                ),
+                presenting: pendingWarning
+            ) { _ in
+                Button("다시 설치", role: .destructive) {
+                    Task { await model.install(app) }
+                }
+                Button("취소", role: .cancel) {}
+            } message: { warning in
+                Text(warning.message(installed: installedLabel, released: releasedLabel))
+            }
+            .contextMenu {
+                // 최신인데 앱이 깨졌을 때 고칠 길이다. 버튼이 "열기" 가 되면서
+                // 다시 받는 길이 눈앞에서 사라져서 여기 남긴다.
+                if state.opensInstalledApp {
+                    Button("다시 설치") { install(state) }
+                }
+            }
         }
+    }
+
+    /// 덮어쓰는 경우면 먼저 묻고, 아니면 바로 받는다.
+    private func install(_ state: InstallState) {
+        if let warning = state.reinstallWarning {
+            pendingWarning = warning
+        } else {
+            Task { await model.install(app) }
+        }
+    }
+
+    private var installedLabel: String {
+        model.installed[app.bundleID].map(Self.label) ?? "설치된 버전"
+    }
+
+    private var releasedLabel: String {
+        app.latestReleasedVersion.map { "\($0.shortVersion) (빌드 \($0.buildNumber))" }
+            ?? "스토어의 출시본"
+    }
+
+    private static func label(_ app: InstalledApp) -> String {
+        let version = app.shortVersion ?? "알 수 없는 버전"
+        return app.buildNumber.map { "\(version) (빌드 \($0))" } ?? version
     }
 }
 
@@ -332,7 +386,12 @@ struct SelfUpdateBanner: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(app.name) 새 버전이 있습니다")
                     .font(.callout.weight(.medium))
-                if let version = app.latestReleasedVersion {
+                if let blocker = model.selfUpdateBlocker {
+                    // 누를 버튼을 주지 않는다. 눌러도 할 수 있는 일이 없다.
+                    Text(blocker.message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if let version = app.latestReleasedVersion {
                     Text("업데이트하면 앱이 다시 시작합니다 · \(version.shortVersion)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -340,7 +399,9 @@ struct SelfUpdateBanner: View {
             }
             Spacer()
 
-            if let progress = model.progress[app.id] {
+            if model.selfUpdateBlocker != nil {
+                EmptyView()
+            } else if let progress = model.progress[app.id] {
                 switch progress {
                 case .downloading(let fraction):
                     ProgressView(value: fraction).frame(width: 80).controlSize(.small)

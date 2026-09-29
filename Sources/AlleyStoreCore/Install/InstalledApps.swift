@@ -74,6 +74,40 @@ enum InstalledApps {
     }
 }
 
+/// 깔린 것을 덮어쓰기 전에 띄우는 확인.
+enum ReinstallWarning: Equatable {
+    /// 깔린 것이 더 새롭다. 누르면 확실히 내려간다.
+    case downgrade
+    /// 빌드 번호를 못 읽어 견줄 수 없다. 내려갈 수도 있다. "내려간다" 고 단정하면
+    /// 틀릴 수 있고, 아무 말도 안 하면 내려갈 때 놀란다.
+    case possibleDowngrade
+    /// 같은 빌드다. 잃는 것은 없지만 깔린 것을 지우고 새로 놓는다는 것만 알린다.
+    case overwrite
+
+    var title: String {
+        switch self {
+        case .downgrade: return "이전 버전으로 바뀝니다"
+        case .possibleDowngrade: return "이전 버전으로 바뀔 수 있습니다"
+        case .overwrite: return "다시 설치할까요?"
+        }
+    }
+
+    /// 무엇이 무엇으로 바뀌는지 숫자로 적는다. "이전 버전" 만으로는 얼마나
+    /// 내려가는지 모른다.
+    func message(installed: String, released: String) -> String {
+        switch self {
+        case .downgrade:
+            return "이 맥에 있는 \(installed) 이(가) 스토어의 최신 출시본보다 새롭습니다. "
+                + "다시 설치하면 \(released) 로 덮어씁니다."
+        case .possibleDowngrade:
+            return "이 맥에 있는 \(installed) 와(과) 스토어의 \(released) 중 어느 쪽이 "
+                + "새로운지 알 수 없습니다. 다시 설치하면 이전 버전으로 덮어쓸 수 있습니다."
+        case .overwrite:
+            return "이 맥에 있는 \(installed) 을(를) 덮어씁니다."
+        }
+    }
+}
+
 /// 설치된 것과 출시된 것을 견준 결과.
 enum InstallState: Equatable {
     case notInstalled
@@ -97,7 +131,44 @@ enum InstallState: Equatable {
         // 버튼 자체가 안 그려지는 상태다. `InstallButton` 이 출시본이 없으면
         // 아무것도 내놓지 않는다. 여기서는 자리만 채운다.
         case .notReleased: return "설치"
-        case .upToDate, .ahead, .unknown: return "다시 설치"
+        // 최신이면 받을 것이 없다. 이 줄에 와서 하려는 일은 대개 앱을 여는 것이다.
+        // 다시 설치는 깨진 설치를 고칠 때만 쓰므로 버튼의 보조 메뉴로 내린다.
+        case .upToDate: return "열기"
+        // 더 새로운 것이 깔려 있으면 누르는 순간 출시본으로 내려간다. "열기" 로
+        // 적으면 그 일이 숨는다.
+        case .ahead, .unknown: return "다시 설치"
+        }
+    }
+
+    /// 버튼이 앱을 여는가, 받는가.
+    var opensInstalledApp: Bool { self == .upToDate }
+
+    /// 깔린 것을 갈아끼운 뒤 알리는 말. `self` 는 받기 **전** 상태다.
+    ///
+    /// 전부 "업데이트했습니다" 라고 하면 내려간 경우에도 올라간 것처럼 읽힌다.
+    /// 올라갔는지 모르는 경우(`unknown`)와 같은 빌드를 다시 받은 경우는 한 일
+    /// 그대로 "다시 설치" 라고 적는다.
+    func replacedMessage(appName: String, version: String) -> String {
+        switch self {
+        case .updateAvailable:
+            return "\(appName) 을(를) \(version) 로 업데이트했습니다."
+        case .ahead:
+            return "\(appName) 을(를) \(version) 로 되돌렸습니다."
+        case .upToDate, .unknown, .notInstalled, .notReleased:
+            return "\(appName) 을(를) \(version) 로 다시 설치했습니다."
+        }
+    }
+
+    /// 받기 전에 물어야 하는 것. 이미 깔린 것을 덮어쓰는 상태에서만 있다.
+    ///
+    /// 깔린 것은 덮어쓰면 되돌릴 수 없다. 스토어에 없는 빌드(개발자가 직접 넣은
+    /// 것)일 수 있어서다. 무엇을 잃는지는 상태마다 달라서 말도 다르게 한다.
+    var reinstallWarning: ReinstallWarning? {
+        switch self {
+        case .ahead: return .downgrade
+        case .unknown: return .possibleDowngrade
+        case .upToDate: return .overwrite
+        case .notInstalled, .notReleased, .updateAvailable: return nil
         }
     }
 
