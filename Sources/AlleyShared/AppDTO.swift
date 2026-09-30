@@ -63,6 +63,11 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
     public var iconURL: String?
     public var category: String?
     public var ownerID: UUID
+    /// 이 앱을 만드는 사람들의 이름. 소유자가 맨 앞이고 공동 관리자가 뒤따른다.
+    ///
+    /// 스토어 앱이 상세 화면에 "개발자" 로 보여준다. 받는 사람이 알고 싶은 것은 "이 앱을
+    /// 누구에게 물어보면 되나" 다. 나간 사람은 뺀다. 이 값을 모르는 예전 서버에서는 nil 이다.
+    public var developerNames: [String]?
     /// 현재 조직에 출시된 최신 버전. 아직 출시본이 없으면 nil.
     public var latestReleasedVersion: VersionDTO?
     /// 별점 요약. 목록에서도 보여주므로 앱과 함께 내려준다.
@@ -94,6 +99,7 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
         iconURL: String? = nil,
         category: String? = nil,
         ownerID: UUID,
+        developerNames: [String]? = nil,
         latestReleasedVersion: VersionDTO? = nil,
         rating: RatingSummary? = nil,
         isStoreApp: Bool? = nil,
@@ -109,6 +115,7 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
         self.iconURL = iconURL
         self.category = category
         self.ownerID = ownerID
+        self.developerNames = developerNames
         self.latestReleasedVersion = latestReleasedVersion
         self.rating = rating
         self.isStoreApp = isStoreApp

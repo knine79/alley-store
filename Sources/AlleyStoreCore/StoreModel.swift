@@ -150,13 +150,29 @@ final class StoreModel {
             // 설치 현황은 디스크를 봐야 안다. 목록과 함께 갱신해야 화면이 어긋나지 않는다.
             async let remote = client.apps()
             let scanned = InstalledApps.scan()
-            apps = try await remote.sorted { $0.name < $1.name }
+            apps = try await remote
+                .map { Self.resolvingIcon($0, against: client.server) }
+                .sorted { $0.name < $1.name }
             installed = scanned
         } catch StoreClient.ClientError.unauthorized {
             signOut()
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// 아이콘 주소가 상대 주소면 서버 주소에 붙인다.
+    ///
+    /// 예전 서버는 `/apps/<id>/icon.png` 를 그대로 내려준다. `URL(string:)` 은 그것을
+    /// 호스트 없는 주소로 만들고, `AsyncImage` 는 아무 데도 가지 않은 채 빈 자리를 남긴다.
+    /// 지금 서버는 절대 주소를 주므로 이것은 예전 서버에 붙었을 때의 대비다.
+    nonisolated static func resolvingIcon(_ app: AppDTO, against server: URL) -> AppDTO {
+        guard let icon = app.iconURL, icon.hasPrefix("/"), !icon.hasPrefix("//"),
+              let absolute = URL(string: icon, relativeTo: server)?.absoluteString
+        else { return app }
+        var resolved = app
+        resolved.iconURL = absolute
+        return resolved
     }
 
     // MARK: - 피드백

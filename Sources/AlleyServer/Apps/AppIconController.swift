@@ -77,7 +77,7 @@ struct AppIconController: RouteCollection, Sendable {
             "앱 아이콘을 받았습니다 [\(app.bundleID), \(size.width)×\(size.height), 올린 사람: \(user.email)]"
         )
         try await app.$versions.load(on: request.db)
-        return try app.toDTO()
+        return try app.toDTO(baseURL: request.application.alleyConfig.publicBaseURL)
     }
 
     // MARK: - 내주기

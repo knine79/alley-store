@@ -115,10 +115,17 @@ extension App {
     ///
     /// 최신 출시본은 조회하는 쿼리가 따로 필요해서 호출자가 넘긴다.
     /// 목록 응답에서 앱마다 별도 쿼리를 돌리면 N+1 이 된다.
+    ///
+    /// `baseURL` 을 주면 이 서버에 있는 아이콘의 주소를 절대 주소로 바꾼다. **API 로
+    /// 내보낼 때는 꼭 준다.** 스토어 앱은 받은 문자열을 그대로 `URL` 로 만들어 그림을
+    /// 부르는데, `/apps/<id>/icon.png` 같은 상대 주소는 호스트가 없어 아무 데도 가지
+    /// 않는다. 목록의 아이콘이 모두 빈 자리로 나왔다. 웹 화면은 같은 출처에서 그리므로
+    /// 상대 주소로 충분하다.
     public func toDTO(
         latestReleased: Version? = nil,
         rating: RatingSummary? = nil,
-        isStoreApp: Bool = false
+        isStoreApp: Bool = false,
+        baseURL: String? = nil
     ) throws -> AppDTO {
         AppDTO(
             id: try requireID(),
@@ -127,9 +134,10 @@ extension App {
             name: name,
             summary: summary,
             description: details,
-            iconURL: iconURL,
+            iconURL: Self.absolute(iconURL, base: baseURL),
             category: category,
             ownerID: $owner.id,
+            developerNames: developerNames,
             latestReleasedVersion: try latestReleased?.toDTO(),
             rating: rating,
             isStoreApp: isStoreApp ? true : nil,
@@ -254,5 +262,29 @@ public struct AddAppAlertsSetting: AsyncMigration {
             throw MigrationError.needsSQLDatabase
         }
         try await sql.raw("ALTER TABLE apps DROP COLUMN IF EXISTS alerts").run()
+    }
+}
+
+extension App {
+    /// 소유자와 공동 관리자의 이름. 소유자가 맨 앞이다.
+    ///
+    /// 소유자와 멤버를 미리 읽어둔 호출만 이름을 싣는다. 읽지 않았다고 여기서 쿼리를
+    /// 돌리면 목록이 앱마다 한 번씩 조회하게 된다. 나간 사람은 뺀다 (ADR-0061).
+    var developerNames: [String]? {
+        guard let owner = $owner.value else { return nil }
+        let others = ($members.value ?? [])
+            .compactMap { $0.$user.value }
+            .filter { $0.isActive && $0.id != owner.id }
+            .map(\.name)
+            // 읽는 순서가 쿼리마다 달라질 수 있다. 화면이 흔들리지 않게 이름순으로 둔다.
+            .sorted()
+        return [owner.name] + others
+    }
+
+    /// `/` 로 시작하는 주소에만 서버 주소를 붙인다. 예전처럼 사람이 적어 넣은 외부 주소는
+    /// 이미 절대 주소라 그대로 둔다.
+    static func absolute(_ path: String?, base: String?) -> String? {
+        guard let path, let base, path.hasPrefix("/"), !path.hasPrefix("//") else { return path }
+        return base.trimmingSuffix("/") + path
     }
 }

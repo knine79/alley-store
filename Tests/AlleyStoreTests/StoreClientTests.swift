@@ -1,3 +1,4 @@
+import AlleyShared
 import Foundation
 import Testing
 
@@ -47,3 +48,30 @@ struct ServerAddressTests {
         #expect(StoreClient.normalize(serverAddress: raw) == nil)
     }
 }
+
+@Suite("아이콘 주소")
+struct IconURLResolvingTests {
+    private func app(icon: String?) -> AppDTO {
+        AppDTO(
+            id: UUID(), bundleID: "com.example.notes", name: "메모장", iconURL: icon,
+            ownerID: UUID(), createdAt: Date(), updatedAt: Date()
+        )
+    }
+
+    @Test("상대 주소는 서버 주소에 붙인다")
+    func resolvesRelative() {
+        // 예전 서버는 `/apps/<id>/icon.png` 를 그대로 준다. 그대로 쓰면 그림이 안 나온다.
+        let server = URL(string: "https://store.example.com")!
+        #expect(StoreModel.resolvingIcon(app(icon: "/apps/x/icon.png?v=1"), against: server).iconURL
+            == "https://store.example.com/apps/x/icon.png?v=1")
+    }
+
+    @Test("절대 주소와 빈 값은 그대로 둔다")
+    func keepsAbsolute() {
+        let server = URL(string: "https://store.example.com")!
+        #expect(StoreModel.resolvingIcon(app(icon: "https://cdn.example.com/a.png"), against: server).iconURL
+            == "https://cdn.example.com/a.png")
+        #expect(StoreModel.resolvingIcon(app(icon: nil), against: server).iconURL == nil)
+    }
+}
+
