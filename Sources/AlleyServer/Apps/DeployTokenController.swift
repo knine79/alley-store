@@ -86,7 +86,7 @@ public struct DeployTokenController: RouteCollection, Sendable {
     @Sendable
     func currentApp(request: Request) async throws -> AppDTO {
         let token = try request.requireDeployToken()
-        return try token.app.toDTO()
+        return try token.app.toDTO(baseURL: request.application.alleyConfig.publicBaseURL)
     }
 }
 

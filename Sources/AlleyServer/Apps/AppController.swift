@@ -36,7 +36,13 @@ public struct AppController: RouteCollection, Sendable {
     @Sendable
     func list(request: Request) async throws -> [AppDTO] {
         let user = try request.requireUser()
-        let apps = try await App.query(on: request.db).sort(\.$name).all()
+        // 소유자와 멤버를 함께 읽는다. 스토어 앱이 상세에 개발자 이름을 보여준다
+        // (`developerNames`). 앱마다 따로 읽으면 N+1 이 된다.
+        let apps = try await App.query(on: request.db)
+            .with(\.$owner)
+            .with(\.$members) { $0.with(\.$user) }
+            .sort(\.$name)
+            .all()
         let latest = try await App.latestReleasedVersions(on: request.db)
         // 앱마다 따로 세면 N+1 이 된다. 한 번에 모아 접는다.
         let ratings = try await Feedback.summaries(
@@ -57,7 +63,8 @@ public struct AppController: RouteCollection, Sendable {
             return try app.toDTO(
                 latestReleased: released,
                 rating: ratings[appID],
-                isStoreApp: appID == storeAppID
+                isStoreApp: appID == storeAppID,
+                baseURL: request.application.alleyConfig.publicBaseURL
             )
         }
     }
@@ -98,7 +105,7 @@ public struct AppController: RouteCollection, Sendable {
         )
 
         let response = Response(status: .created)
-        try response.content.encode(try app.toDTO())
+        try response.content.encode(try app.toDTO(baseURL: request.application.alleyConfig.publicBaseURL))
         return response
     }
 
@@ -109,9 +116,12 @@ public struct AppController: RouteCollection, Sendable {
         _ = try request.requireUser()
         let app = try await request.findApp()
         let appID = try app.requireID()
+        try await app.$owner.load(on: request.db)
+        try await app.$members.load(on: request.db)
+        for member in app.members { try await member.$user.load(on: request.db) }
         let latest = try await App.latestReleasedVersion(ofApp: appID, on: request.db)
         let rating = try await Feedback.summary(ofApp: appID, on: request.db)
-        return try app.toDTO(latestReleased: latest, rating: rating)
+        return try app.toDTO(latestReleased: latest, rating: rating, baseURL: request.application.alleyConfig.publicBaseURL)
     }
 
     @Sendable
@@ -127,7 +137,7 @@ public struct AppController: RouteCollection, Sendable {
         )
 
         let latest = try await App.latestReleasedVersion(ofApp: try app.requireID(), on: request.db)
-        return try app.toDTO(latestReleased: latest)
+        return try app.toDTO(latestReleased: latest, baseURL: request.application.alleyConfig.publicBaseURL)
     }
 
     // MARK: - 멤버

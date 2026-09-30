@@ -240,12 +240,20 @@ struct AppDetailView: View {
 
                 Divider()
 
+                // 받는 사람이 알고 싶은 것은 "이 앱을 누구에게 물어보면 되나" 다. 소유자가
+                // 맨 앞이고 공동 관리자가 뒤따른다 (`AppDTO.developerNames`).
+                if let developers = app.developerNames, !developers.isEmpty {
+                    LabeledContent("개발자") {
+                        Text(developers.joined(separator: ", ")).textSelection(.enabled)
+                    }
+                }
                 LabeledContent("번들 ID") {
                     Text(app.bundleID).font(.callout.monospaced()).textSelection(.enabled)
                 }
                 if let version = app.latestReleasedVersion {
                     LabeledContent("최신 출시본") {
-                        Text("\(version.shortVersion) (빌드 \(version.buildNumber))")
+                        // 번들에 적힌 값을 보인다. 스토어의 빌드 번호는 번들과 다를 수 있다 (ADR-0066).
+                        Text("\(version.shortVersion) (빌드 \(version.bundleVersion ?? String(version.buildNumber)))")
                     }
                     if let size = version.fileSize {
                         LabeledContent("크기") {
