@@ -197,8 +197,9 @@ extension InstallState {
     /// 1 을 매겼으면 "깔린 것이 더 새롭다" 가 된다.
     ///
     /// 서버가 번들 값을 모를 때(이 칸이 생기기 전에 서명한 버전, 예전 서버)는 지금까지처럼
-    /// 정수 빌드 번호로, 그것도 안 되면 버전 문자열로 견준다. 이미 출시된 앱을 다시
-    /// 올리지 않아도 "열기" 가 되게 하려는 폴백이다.
+    /// 정수 빌드 번호로, 그것도 안 되면 버전 문자열로 견준다. `CFBundleVersion` 에 점이
+    /// 든 앱은 이미 출시된 버전도 다시 올리지 않고 "열기" 가 되게 하려는 폴백이다.
+    /// 정수인데 스토어 번호와 어긋난 앱(번들 250, 스토어 1)은 그 버전을 다시 올려야 한다.
     static func compare(installed: InstalledApp?, released: VersionDTO?) -> InstallState {
         guard let installed else {
             return released == nil ? .notReleased : .notInstalled
@@ -206,7 +207,15 @@ extension InstallState {
         guard let released else { return .unknown }
 
         if let theirs = released.bundleVersion, let ours = installed.bundleVersion {
-            return order(ours, theirs)
+            let byBundle = order(ours, theirs)
+            // **번들 값이 같아도 버전 문자열이 다르면 그쪽으로 한 번 더 가린다.** Xcode
+            // 기본값대로 `CFBundleVersion` 을 1 에 두고 마케팅 버전만 올리는 앱이 흔하다.
+            // 번들 값만 보면 1.0 이 깔린 채 1.1 이 나와도 "최신" 이라 업데이트가 숨는다.
+            if byBundle == .upToDate, let short = installed.shortVersion,
+               short != released.shortVersion {
+                return order(short, released.shortVersion)
+            }
+            return byBundle
         }
         if released.bundleVersion == nil, installed.buildNumber != nil {
             return compare(installed: installed, releasedBuild: released.buildNumber)

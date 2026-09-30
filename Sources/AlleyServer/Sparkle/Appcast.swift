@@ -15,6 +15,8 @@ enum Appcast {
     struct Item {
         var shortVersion: String
         var buildNumber: Int
+        /// 번들의 `CFBundleVersion` (ADR-0066). 있으면 `sparkle:version` 으로 이것을 낸다.
+        var bundleVersion: String? = nil
         var releaseNotes: String?
         var minimumSystemVersion: String?
         var publishedAt: Date
@@ -42,7 +44,9 @@ enum Appcast {
             "    <item>",
             "      <title>\(escape(item.shortVersion))</title>",
             "      <pubDate>\(rfc822(item.publishedAt))</pubDate>",
-            "      <sparkle:version>\(item.buildNumber)</sparkle:version>",
+            // Sparkle 은 이 값을 깔린 번들의 `CFBundleVersion` 과 견준다. 스토어가 매긴
+            // 번호를 내면 번들이 `1.8.25` 인 앱은 영영 "이미 최신" 이 된다 (ADR-0066).
+            "      <sparkle:version>\(escape(item.bundleVersion ?? String(item.buildNumber)))</sparkle:version>",
             "      <sparkle:shortVersionString>\(escape(item.shortVersion))</sparkle:shortVersionString>",
         ]
 
