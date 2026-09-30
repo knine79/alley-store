@@ -216,11 +216,19 @@ enum MCPToolbox {
         }
         // 도구를 부를 때마다 목록을 다시 받아오면 왕복이 두 배가 된다. 한 세션
         // 안에서 앱 목록은 거의 바뀌지 않는다.
-        let apps = try await AppDirectory.shared.apps(using: api)
-        if let id = UUID(uuidString: raw), let found = apps.first(where: { $0.id == id }) {
+        func find(in apps: [AppDTO]) -> AppDTO? {
+            if let id = UUID(uuidString: raw), let found = apps.first(where: { $0.id == id }) {
+                return found
+            }
+            return apps.first(where: { $0.bundleID.caseInsensitiveCompare(raw) == .orderedSame })
+        }
+        if let found = find(in: try await AppDirectory.shared.apps(using: api)) {
             return found
         }
-        if let found = apps.first(where: { $0.bundleID.caseInsensitiveCompare(raw) == .orderedSame }) {
+        // **못 찾으면 한 번 다시 받는다.** 세션 도중에 앱이 등록되거나 공동 관리자로
+        // 들어온 경우다. `list_apps` 는 매번 새로 받아서 그 앱이 보이는데, 여기서는 보인
+        // 앱을 "없다" 고 답하게 된다. 그런 적이 있었다.
+        if let found = find(in: try await AppDirectory.shared.reload(using: api)) {
             return found
         }
         throw ToolError.appNotFound(raw)
@@ -319,5 +327,11 @@ actor AppDirectory {
         let fetched = try await api.apps()
         cached = fetched
         return fetched
+    }
+
+    /// 들고 있던 것을 버리고 새로 받는다.
+    func reload(using api: StoreAPI) async throws -> [AppDTO] {
+        cached = nil
+        return try await apps(using: api)
     }
 }
