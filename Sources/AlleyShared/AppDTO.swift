@@ -127,6 +127,12 @@ public struct VersionDTO: Codable, Sendable, Identifiable, Equatable {
     public var releaseNotes: String?
     /// 실행에 필요한 최소 macOS 버전. 예: `14.0`
     public var minimumOSVersion: String?
+    /// 번들에 실제로 적힌 `CFBundleVersion` (ADR-0066). 예: `1.8.25`
+    ///
+    /// `buildNumber` 는 스토어가 매기는 정수라 번들의 값과 같다는 보장이 없다. 스토어
+    /// 앱은 깔린 번들과 이것을 견준다. 이 값을 모르는 예전 서버이거나, 워커가 알리기
+    /// 전이면 nil 이다.
+    public var bundleVersion: String?
     public var state: VersionState
     public var fileSize: Int64?
     public var sha256: String?
@@ -145,6 +151,7 @@ public struct VersionDTO: Codable, Sendable, Identifiable, Equatable {
         buildNumber: Int,
         releaseNotes: String? = nil,
         minimumOSVersion: String? = nil,
+        bundleVersion: String? = nil,
         state: VersionState,
         fileSize: Int64? = nil,
         sha256: String? = nil,
@@ -158,6 +165,7 @@ public struct VersionDTO: Codable, Sendable, Identifiable, Equatable {
         self.buildNumber = buildNumber
         self.releaseNotes = releaseNotes
         self.minimumOSVersion = minimumOSVersion
+        self.bundleVersion = bundleVersion
         self.state = state
         self.fileSize = fileSize
         self.sha256 = sha256

@@ -398,6 +398,9 @@ struct SigningJobReportTests {
             // 빌드 번호는 고치지 않는다. 앱 안에서 겹칠 수 없는 값이라 여기서 바꾸면
             // 다른 버전과 충돌할 수 있고 그 충돌을 풀 방법이 없다.
             #expect(stored.buildNumber == 1)
+            // 대신 번들의 값을 따로 적는다. 스토어 앱이 깔린 것과 견줄 값이다 (ADR-0066).
+            #expect(stored.bundleVersion == "271")
+            #expect(try stored.toDTO().bundleVersion == "271")
         }
     }
 

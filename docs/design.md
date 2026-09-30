@@ -518,7 +518,10 @@ appcast는 XML 엔드포인트 하나라 구현 비용이 거의 없습니다.
 
 1. `/Applications`와 `~/Applications`를 스캔해 각 번들의 `CFBundleIdentifier`와
  `CFBundleVersion`을 읽습니다
-2. 스토어에 등록된 번들 ID와 대조해 설치 여부와 버전을 판단합니다
+2. 스토어에 등록된 번들 ID와 대조해 설치 여부와 버전을 판단합니다. 견주는 값은
+ 스토어의 빌드 번호가 아니라 **워커가 서명하며 읽어둔 번들의 `CFBundleVersion`** 입니다.
+ 스토어의 빌드 번호는 스토어가 매기는 정수라 번들 값과 같다는 보장이 없습니다
+ ([ADR-0066](adr/0066-compare-installed-apps-by-bundle-version.md))
 3. 사용자가 다른 위치에 설치한 앱은 `NSWorkspace.urlForApplication(withBundleIdentifier:)`로
  보완 조회합니다. 그래도 못 찾으면 미설치로 간주하고, 설치를 시도할 때 중복이
  감지되면 사용자에게 알립니다

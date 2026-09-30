@@ -216,7 +216,7 @@ final class StoreModel {
     func state(of app: AppDTO) -> InstallState {
         InstallState.compare(
             installed: installed[app.bundleID],
-            releasedBuild: app.latestReleasedVersion?.buildNumber
+            released: app.latestReleasedVersion
         )
     }
 

@@ -1,3 +1,4 @@
+import AlleyShared
 import CryptoKit
 import Foundation
 import Testing
@@ -140,6 +141,84 @@ struct InstallStateTests {
     func ahead() {
         // 개발자가 로컬 빌드를 직접 넣어둔 경우다. 업데이트라고 하면 거짓말이 된다.
         #expect(InstallState.compare(installed: installed(build: 9), releasedBuild: 3) == .ahead)
+    }
+
+    // MARK: - 번들 값으로 견주기 (ADR-0066)
+
+    private func installed(bundleVersion: String?, shortVersion: String? = "1.0.0") -> InstalledApp {
+        InstalledApp(
+            bundleID: "com.example.notes",
+            shortVersion: shortVersion,
+            buildNumber: bundleVersion.flatMap(Int.init),
+            location: URL(fileURLWithPath: "/Applications/메모장.app"),
+            bundleVersion: bundleVersion
+        )
+    }
+
+    private func released(build: Int = 1, bundleVersion: String?, shortVersion: String = "1.0.0") -> VersionDTO {
+        VersionDTO(
+            id: UUID(), appID: UUID(), shortVersion: shortVersion, buildNumber: build,
+            bundleVersion: bundleVersion, state: .released, createdAt: Date()
+        )
+    }
+
+    @Test("CFBundleVersion 에 점이 있어도 같으면 최신이다")
+    func dottedBundleVersionMatches() {
+        // 근무 체크 도우미가 이랬다. 스토어의 빌드 번호는 1, 번들은 1.8.25.
+        #expect(InstallState.compare(
+            installed: installed(bundleVersion: "1.8.25"),
+            released: released(build: 1, bundleVersion: "1.8.25")
+        ) == .upToDate)
+    }
+
+    @Test("CFBundleVersion 을 앞에서부터 숫자로 견준다")
+    func dottedBundleVersionOrders() {
+        #expect(InstallState.compare(
+            installed: installed(bundleVersion: "1.8.25"),
+            released: released(bundleVersion: "1.8.100")
+        ) == .updateAvailable)
+        #expect(InstallState.compare(
+            installed: installed(bundleVersion: "1.9"),
+            released: released(bundleVersion: "1.8.25")
+        ) == .ahead)
+        // 모자란 자리는 0 이다.
+        #expect(InstallState.order("1.8", "1.8.0") == .upToDate)
+    }
+
+    @Test("스토어가 매긴 빌드 번호가 아니라 번들 값을 믿는다")
+    func prefersBundleVersionOverStoreBuild() {
+        // 정수 번들이라도 스토어가 1 을 매겼으면, 빌드 번호로는 "깔린 것이 더 새롭다" 가 된다.
+        #expect(InstallState.compare(
+            installed: installed(bundleVersion: "250"),
+            released: released(build: 1, bundleVersion: "250")
+        ) == .upToDate)
+    }
+
+    @Test("서버가 번들 값을 모르면 버전 문자열로 견준다")
+    func fallsBackToShortVersion() {
+        // 이 칸이 생기기 전에 서명한 출시본이다. 다시 올리지 않아도 "열기" 가 돼야 한다.
+        #expect(InstallState.compare(
+            installed: installed(bundleVersion: "1.8.25", shortVersion: "1.8.25"),
+            released: released(build: 1, bundleVersion: nil, shortVersion: "1.8.25")
+        ) == .upToDate)
+        #expect(InstallState.compare(
+            installed: installed(bundleVersion: "1.8.25", shortVersion: "1.8.25"),
+            released: released(build: 2, bundleVersion: nil, shortVersion: "1.8.26")
+        ) == .updateAvailable)
+    }
+
+    @Test("서버가 번들 값을 모르고 깔린 쪽이 정수면 예전처럼 빌드 번호로 견준다")
+    func keepsIntegerPathForOldVersions() {
+        // 스토어 앱 자신이 그렇다. 올릴 때 `--build` 를 번들 값과 맞춘다.
+        #expect(InstallState.compare(
+            installed: installed(bundleVersion: "26"),
+            released: released(build: 27, bundleVersion: nil)
+        ) == .updateAvailable)
+    }
+
+    @Test("숫자로 읽을 수 없으면 짐작하지 않는다")
+    func nonNumericIsUnknown() {
+        #expect(InstallState.order("1.0-beta", "1.0") == .unknown)
     }
 
     @Test("비교할 수 없으면 그렇다고 말한다")

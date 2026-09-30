@@ -1,12 +1,15 @@
+import AlleyShared
 import Foundation
 
 /// 이 맥에 이미 깔려 있는 앱 하나.
 struct InstalledApp: Equatable, Sendable {
     var bundleID: String
     var shortVersion: String?
-    /// `CFBundleVersion`. 스토어의 빌드 번호와 같은 값이라 이것으로 최신 여부를 판단한다.
+    /// `CFBundleVersion` 을 정수로 읽은 것. 정수가 아니면 nil 이다.
     var buildNumber: Int?
     var location: URL
+    /// `CFBundleVersion` 원문. `1.8.25` 처럼 점이 들어가도 그대로 둔다 (ADR-0066).
+    var bundleVersion: String? = nil
 }
 
 /// 설치된 앱을 찾는다.
@@ -69,7 +72,8 @@ enum InstalledApps {
             shortVersion: parsed["CFBundleShortVersionString"] as? String,
             // 빌드 번호는 관례상 정수지만 형식이 강제되지 않는다. 숫자로 못 읽으면 없는 셈 친다.
             buildNumber: (parsed["CFBundleVersion"] as? String).flatMap(Int.init),
-            location: bundle
+            location: bundle,
+            bundleVersion: parsed["CFBundleVersion"] as? String
         )
     }
 }
@@ -185,6 +189,56 @@ enum InstallState: Equatable {
 }
 
 extension InstallState {
+    /// 깔린 번들과 출시본을 견준다 (ADR-0066).
+    ///
+    /// **번들에 적힌 값끼리 견준다.** 스토어의 빌드 번호는 스토어가 앱 안에서 매기는
+    /// 정수라, 번들의 `CFBundleVersion` 과 같다는 보장이 없다. 그 전제로 견주면
+    /// `CFBundleVersion` 이 `1.8.25` 인 앱은 영영 "비교 불가" 가 되고, 정수라도 스토어가
+    /// 1 을 매겼으면 "깔린 것이 더 새롭다" 가 된다.
+    ///
+    /// 서버가 번들 값을 모를 때(이 칸이 생기기 전에 서명한 버전, 예전 서버)는 지금까지처럼
+    /// 정수 빌드 번호로, 그것도 안 되면 버전 문자열로 견준다. 이미 출시된 앱을 다시
+    /// 올리지 않아도 "열기" 가 되게 하려는 폴백이다.
+    static func compare(installed: InstalledApp?, released: VersionDTO?) -> InstallState {
+        guard let installed else {
+            return released == nil ? .notReleased : .notInstalled
+        }
+        guard let released else { return .unknown }
+
+        if let theirs = released.bundleVersion, let ours = installed.bundleVersion {
+            return order(ours, theirs)
+        }
+        if released.bundleVersion == nil, installed.buildNumber != nil {
+            return compare(installed: installed, releasedBuild: released.buildNumber)
+        }
+        if let ours = installed.shortVersion {
+            return order(ours, released.shortVersion)
+        }
+        return .unknown
+    }
+
+    /// `1.8.25` 같은 값을 앞에서부터 숫자로 견준다.
+    ///
+    /// 같은 문자열이면 최신이다. 모자란 자리는 0 으로 본다(`1.8` 은 `1.8.0`). 숫자가
+    /// 아닌 조각이 있으면 견주지 않는다. 짐작해서 "업데이트 있음" 이라고 하면 받은 뒤에도
+    /// 같은 표시가 남는다.
+    static func order(_ installed: String, _ released: String) -> InstallState {
+        if installed == released { return .upToDate }
+        let parse: (String) -> [Int]? = { value in
+            let parts = value.split(separator: ".", omittingEmptySubsequences: false)
+            let numbers = parts.compactMap { Int($0) }
+            return numbers.count == parts.count && !numbers.isEmpty ? numbers : nil
+        }
+        guard let ours = parse(installed), let theirs = parse(released) else { return .unknown }
+        for index in 0..<max(ours.count, theirs.count) {
+            let a = index < ours.count ? ours[index] : 0
+            let b = index < theirs.count ? theirs[index] : 0
+            if a < b { return .updateAvailable }
+            if a > b { return .ahead }
+        }
+        return .upToDate
+    }
+
     /// 빌드 번호로만 비교한다.
     ///
     /// 버전 문자열(`1.0.0`)은 사람이 정하는 값이라 앱마다 규칙이 다르고, 되돌아가는
