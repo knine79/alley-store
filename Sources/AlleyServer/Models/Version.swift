@@ -28,6 +28,15 @@ public final class Version: Model, @unchecked Sendable {
     @OptionalField(key: "minimum_os_version")
     public var minimumOSVersion: String?
 
+    /// 번들의 `CFBundleVersion`. 워커가 서명하면서 읽어 알린다 (ADR-0066).
+    ///
+    /// `buildNumber` 와 다른 값이다. 그쪽은 이 스토어가 앱 안에서 매기는 정수이고,
+    /// 이것은 번들에 실제로 적힌 문자열이다(`1.8.25` 처럼 적는 앱이 흔하다). 스토어
+    /// 앱은 깔린 번들의 같은 값과 이것을 견줘 최신인지 본다. 워커가 알리기 전이거나
+    /// 이 칸이 생기기 전에 서명한 버전은 nil 이다.
+    @OptionalField(key: "bundle_version")
+    public var bundleVersion: String?
+
     @Enum(key: "state")
     public var state: VersionState
 
@@ -121,6 +130,7 @@ extension Version {
             buildNumber: buildNumber,
             releaseNotes: releaseNotes,
             minimumOSVersion: minimumOSVersion,
+            bundleVersion: bundleVersion,
             state: state,
             fileSize: artifact?.fileSize,
             sha256: artifact?.sha256,
@@ -215,6 +225,26 @@ public struct AddVersionEntitlements: AsyncMigration {
     public func revert(on database: any Database) async throws {
         try await database.schema(Version.schema)
             .deleteField("entitlements")
+            .update()
+    }
+}
+
+/// 번들의 `CFBundleVersion` 을 적는 칸 (ADR-0066).
+///
+/// 이미 있는 버전은 비워 둔다. 번들을 다시 열어 읽을 방법이 서버에 없다. 스토어 앱은
+/// 이 값이 없으면 버전 문자열로 견준다.
+public struct AddVersionBundleVersion: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        try await database.schema(Version.schema)
+            .field("bundle_version", .string)
+            .update()
+    }
+
+    public func revert(on database: any Database) async throws {
+        try await database.schema(Version.schema)
+            .deleteField("bundle_version")
             .update()
     }
 }

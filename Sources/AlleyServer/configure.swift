@@ -184,6 +184,9 @@ private func configureMigrations(_ app: Application) {
 
     // 사람 토큰이 어디서 발급됐는지 (ADR-0064).
     app.migrations.add(AddUserTokenOrigin())
+
+    // 번들의 CFBundleVersion 을 버전에 적는다 (ADR-0066).
+    app.migrations.add(AddVersionBundleVersion())
 }
 
 /// 미들웨어 스택.

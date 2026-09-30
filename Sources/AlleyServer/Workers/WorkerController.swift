@@ -414,7 +414,8 @@ public struct WorkerController: RouteCollection, Sendable {
     /// 업데이트 표시가 틀린다.
     ///
     /// 빌드 번호는 손대지 않는다. 앱 안에서 겹칠 수 없는 값이라 바꾸면 다른 버전과
-    /// 충돌할 수 있고, 그 충돌을 여기서 풀 방법이 없다. 대신 다르면 로그에 남긴다.
+    /// 충돌할 수 있고, 그 충돌을 여기서 풀 방법이 없다. 대신 번들의 `CFBundleVersion` 은
+    /// 따로 적는다. 스토어 앱이 깔린 것과 견줄 값은 이쪽이다 (ADR-0066).
     private func applyBundleMetadata(
         _ metadata: BundleMetadata,
         to version: Version,
@@ -432,14 +433,8 @@ public struct WorkerController: RouteCollection, Sendable {
         if let minimum = metadata.minimumOSVersion, minimum != version.minimumOSVersion {
             version.minimumOSVersion = minimum
         }
-        if let build = metadata.buildVersion, build != String(version.buildNumber) {
-            // 고치지 않는다. 위 주석 참고.
-            logger.notice(
-                """
-                번들의 빌드 번호가 등록된 값과 다릅니다: 등록 \(version.buildNumber), \
-                번들 \(build). 겹침 검사 때문에 서버가 고치지 않습니다.
-                """
-            )
+        if let build = metadata.buildVersion {
+            version.bundleVersion = build
         }
     }
 

@@ -73,6 +73,7 @@
 | [0063](0063-leaving-is-something-you-can-do-yourself.md) | 나가는 것은 본인도 할 수 있다 | 수락됨 | 2026-09-28 |
 | [0064](0064-the-cli-gets-its-token-from-the-browser.md) | CLI 는 토큰을 브라우저에서 받아온다 | 수락됨 | 2026-09-28 |
 | [0065](0065-the-store-hands-out-the-cli.md) | 스토어가 CLI 를 내준다 | 수락됨 | 2026-09-29 |
+| [0066](0066-compare-installed-apps-by-bundle-version.md) | 설치된 앱은 번들의 CFBundleVersion 으로 견준다 | 수락됨 | 2026-09-30 |
 
 ## 언제 쓰나
 
