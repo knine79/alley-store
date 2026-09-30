@@ -37,6 +37,16 @@ struct AppcastXMLTests {
         #expect(xml.contains("sparkle:edSignature=\"sig==\""))
     }
 
+    @Test("번들 값이 있으면 sparkle:version 으로 그것을 낸다")
+    func prefersBundleVersion() {
+        // Sparkle 은 이 값을 깔린 CFBundleVersion 과 견준다. 스토어 번호를 내면 번들이
+        // 1.8.25 인 앱은 영영 "이미 최신" 이 된다 (ADR-0066).
+        var entry = item()
+        entry.bundleVersion = "1.8.25"
+        let xml = Appcast.xml(appName: "메모장", items: [entry])
+        #expect(xml.contains("<sparkle:version>1.8.25</sparkle:version>"))
+    }
+
     @Test("XML 에서 뜻을 갖는 문자를 바꾼다")
     func escapesSpecialCharacters() {
         // 앱 이름에 & 하나가 들어가면 Sparkle 이 피드 전체를 못 읽는다.

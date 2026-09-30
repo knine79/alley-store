@@ -202,14 +202,17 @@ struct InstallButton: View {
         model.installed[app.bundleID].map(Self.label) ?? "설치된 버전"
     }
 
+    /// 두 라벨 모두 번들에 적힌 값을 쓴다 (ADR-0066). 깔린 쪽은 번들 값, 출시본은 스토어
+    /// 번호로 적으면 "빌드 250 → 빌드 1" 처럼 내려가는 것으로 읽힌다.
     private var releasedLabel: String {
-        app.latestReleasedVersion.map { "\($0.shortVersion) (빌드 \($0.buildNumber))" }
-            ?? "스토어의 출시본"
+        app.latestReleasedVersion.map { version in
+            "\(version.shortVersion) (빌드 \(version.bundleVersion ?? String(version.buildNumber)))"
+        } ?? "스토어의 출시본"
     }
 
     private static func label(_ app: InstalledApp) -> String {
         let version = app.shortVersion ?? "알 수 없는 버전"
-        return app.buildNumber.map { "\(version) (빌드 \($0))" } ?? version
+        return app.bundleVersion.map { "\(version) (빌드 \($0))" } ?? version
     }
 }
 
@@ -290,10 +293,9 @@ struct AppDetailView: View {
     /// 있으므로, 깔려 있고 그것이 최신 출시본과 같을 때만 폼을 띄운다. 예전 버전을
     /// 깔아둔 사람이 그 버전에 남기는 경로는 웹 콘솔에 있다.
     private var reviewableVersion: VersionDTO? {
-        guard let installed = model.installed[app.bundleID],
-              let released = app.latestReleasedVersion,
-              installed.buildNumber == released.buildNumber
-        else {
+        // 빌드 번호를 직접 견주지 않는다. 스토어의 빌드 번호와 번들의 값은 다를 수 있다
+        // (ADR-0066). 목록의 "최신" 표시와 같은 판단을 쓴다.
+        guard model.state(of: app) == .upToDate, let released = app.latestReleasedVersion else {
             return nil
         }
         return released

@@ -209,10 +209,20 @@ struct InstallStateTests {
 
     @Test("서버가 번들 값을 모르고 깔린 쪽이 정수면 예전처럼 빌드 번호로 견준다")
     func keepsIntegerPathForOldVersions() {
-        // 스토어 앱 자신이 그렇다. 올릴 때 `--build` 를 번들 값과 맞춘다.
+        // 이 칸이 생기기 전에 서명한 버전이 그렇다. 스토어 앱은 서버가 빌드 번호를
+        // `CFBundleVersion` 에 박으므로 번들 값과 빌드 번호가 늘 같다.
         #expect(InstallState.compare(
             installed: installed(bundleVersion: "26"),
             released: released(build: 27, bundleVersion: nil)
+        ) == .updateAvailable)
+    }
+
+    @Test("번들 값이 같아도 버전 문자열이 오르면 업데이트다")
+    func marketingOnlyBump() {
+        // Xcode 기본값대로 CFBundleVersion 을 1 에 두고 마케팅 버전만 올리는 앱이다.
+        #expect(InstallState.compare(
+            installed: installed(bundleVersion: "1", shortVersion: "1.0"),
+            released: released(bundleVersion: "1", shortVersion: "1.1")
         ) == .updateAvailable)
     }
 

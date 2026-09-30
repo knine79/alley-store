@@ -134,6 +134,7 @@ public struct AppcastController: RouteCollection, Sendable {
                 Appcast.Item(
                     shortVersion: version.shortVersion,
                     buildNumber: version.buildNumber,
+                    bundleVersion: version.bundleVersion,
                     releaseNotes: version.releaseNotes,
                     minimumSystemVersion: version.minimumOSVersion,
                     publishedAt: version.releasedAt ?? version.createdAt ?? Date(),
