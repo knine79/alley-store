@@ -79,7 +79,12 @@ struct CatalogView: View {
                 }
             }
         }
-        .task { await model.refresh() }
+        // 목록을 읽고, 스토어 앱 자신의 새 버전이 있으면 그 자리에서 갈아끼운다.
+        //
+        // 읽기만 하면 자기 업데이트는 아래 주기의 첫 차례, 즉 30분 뒤에야 적용된다.
+        // 그 사이 사람은 배너만 보고, 창을 닫으면 그 차례마저 오지 않는다. 자기
+        // 업데이트는 묻지 않는다는 것이 원래 뜻이다 (`watchForUpdates`).
+        .task { await model.checkForUpdatesNow() }
         // 창을 열어둔 채로 두는 사람이 있다. 목록이 어제 것으로 굳어 있으면
         // 업데이트가 있어도 모른다.
         .task { await model.watchForUpdates() }
