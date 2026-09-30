@@ -197,6 +197,11 @@ struct CLIConfigTests {
         #expect(config.token == "alleyd_abc")
     }
 
+    /// 아무것도 없는 자격증명 자리.
+    static let nowhere = FileManager.default.temporaryDirectory
+        .appendingPathComponent("alley-cli-tests-\(UUID().uuidString)", isDirectory: true)
+        .appendingPathComponent("credentials")
+
     @Test("없는 값을 알려준다", arguments: [
         ["ALLEY_TOKEN": "alleyd_abc"],
         ["ALLEY_SERVER_URL": "store.example.com"],
@@ -204,8 +209,11 @@ struct CLIConfigTests {
     ])
     func complainsAboutMissing(_ environment: [String: String]) {
         // CI 는 사람이 앉아 있지 않다. 무엇이 빠졌는지 로그에 분명히 남아야 한다.
+        //
+        // 자격증명 파일은 없는 자리를 준다. 기본 자리를 두면 이 맥에서 `alley auth
+        // login` 을 한 사람의 진짜 토큰을 읽어 시험이 통과해버린다. 그런 적이 있었다.
         #expect(throws: CLIConfig.ConfigError.self) {
-            try CLIConfig.load(from: environment)
+            try CLIConfig.load(from: environment, credentialsAt: Self.nowhere)
         }
     }
 
@@ -291,9 +299,10 @@ struct CommandRunTests {
     @Test("설정이 없으면 서버를 부르기 전에 멈춘다")
     func missingConfigStopsEarly() async {
         let complaints = Recorder()
+        // 자격증명을 찾는 자리를 비워둔 곳으로 돌린다. 위 시험과 같은 이유다.
         let code = await CLI.run(
             arguments: ["whoami"],
-            environment: [:],
+            environment: ["XDG_CONFIG_HOME": CLIConfigTests.nowhere.deletingLastPathComponent().path],
             output: { _ in },
             complain: { complaints.append($0) }
         )
