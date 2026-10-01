@@ -13,17 +13,46 @@ public struct SessionToken: JWTPayload, Sendable {
     public var subject: SubjectClaim
     public var expiration: ExpirationClaim
     public var issuedAt: IssuedAtClaim
+    /// 공급자에게서 신원을 확인받은 시각. 토큰을 갱신해도 바뀌지 않는다 (ADR-0069).
+    ///
+    /// 옵셔널인 것은 이 칸이 생기기 전에 발급된 토큰 때문이다. 그때는 `iat` 를 쓴다.
+    /// 그 토큰들은 갱신된 적이 없으니 `iat` 가 곧 로그인 시각이다.
+    public var authenticatedAt: IssuedAtClaim?
 
     enum CodingKeys: String, CodingKey {
         case subject = "sub"
         case expiration = "exp"
         case issuedAt = "iat"
+        case authenticatedAt = "auth_time"
     }
 
-    public init(userID: UUID, issuedAt: Date, ttl: TimeInterval) {
+    /// 갱신만으로 버틸 수 있는 최대 기간. 지나면 공급자에게 다시 확인받는다.
+    ///
+    /// 사람 토큰(`UserToken.lifetime`)과 같은 90일이다. 갱신에 끝이 없으면 한 번 새어
+    /// 나간 토큰을 앱이 켜져 있는 한 계속 쓸 수 있다.
+    public static let maximumAge: TimeInterval = 90 * 24 * 60 * 60
+
+    public init(userID: UUID, issuedAt: Date, ttl: TimeInterval, authenticatedAt: Date? = nil) {
+        let authenticatedAt = authenticatedAt ?? issuedAt
         self.subject = .init(value: userID.uuidString)
         self.issuedAt = .init(value: issuedAt)
-        self.expiration = .init(value: issuedAt.addingTimeInterval(ttl))
+        // 갱신한 토큰도 로그인한 지 90일을 넘겨 살지 않는다. 자르지 않으면 89일째에
+        // 갱신한 토큰이 거기서 수명만큼 더 산다.
+        self.expiration = .init(value: min(
+            issuedAt.addingTimeInterval(ttl),
+            authenticatedAt.addingTimeInterval(Self.maximumAge)
+        ))
+        self.authenticatedAt = .init(value: authenticatedAt)
+    }
+
+    /// 처음 로그인한 시각. 예전 토큰은 `iat`.
+    public var authenticationDate: Date {
+        authenticatedAt?.value ?? issuedAt.value
+    }
+
+    /// 이 토큰을 갱신해줘도 되는지.
+    public func isRenewable(at now: Date) -> Bool {
+        now.timeIntervalSince(authenticationDate) < Self.maximumAge
     }
 
     public func verify(using algorithm: some JWTAlgorithm) async throws {

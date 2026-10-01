@@ -174,12 +174,31 @@ final class StoreModel {
         }
     }
 
+    /// 수명의 절반이 지난 토큰을 새 토큰으로 바꾼다 (ADR-0069).
+    ///
+    /// **실패해도 로그아웃하지 않는다.** 지금 토큰은 아직 유효하다. 네트워크가 끊겼거나
+    /// 로그인한 지 오래되어 서버가 거절해도(403) 남은 수명 동안은 그대로 쓴다. 정말
+    /// 만료되면 다음 요청이 401 을 받고 그때 로그인 화면으로 간다.
+    private func renewSessionIfDue() async {
+        guard let client, let token = client.token, SessionRenewal.isDue(token) else { return }
+        guard let renewed = try? await client.renewSession() else { return }
+        // 기다리는 동안 로그아웃했으면 새 토큰을 넣지 않는다. 넣으면 로그아웃이 되살아난다.
+        guard self.client?.token == token else { return }
+        credentials.setToken(renewed.token, for: client.server)
+        self.client?.token = renewed.token
+    }
+
     // MARK: - 목록
 
     func refresh() async {
-        guard let client, case .ready = phase else { return }
+        guard case .ready = phase else { return }
         isLoading = true
         defer { isLoading = false }
+
+        // 목록보다 먼저 한다. 앱이 켜질 때와 30분마다 여기를 지나므로 따로 타이머를
+        // 두지 않아도 된다.
+        await renewSessionIfDue()
+        guard let client else { return }
 
         do {
             // 설치 현황은 디스크를 봐야 안다. 목록과 함께 갱신해야 화면이 어긋나지 않는다.
