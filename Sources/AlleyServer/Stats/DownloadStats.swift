@@ -61,6 +61,33 @@ enum DownloadStats {
         )
     }
 
+    /// 앱 여럿의 다운로드 수를 한 번에 센다. 목록 API 가 쓴다.
+    ///
+    /// 앱마다 `summary` 를 부르면 목록이 앱 수만큼 쿼리를 돈다.
+    static func totals(
+        ofApps appIDs: [UUID],
+        on database: any Database
+    ) async throws -> [UUID: Int] {
+        guard !appIDs.isEmpty, let sql = database as? any SQLDatabase else { return [:] }
+        let rows = try await sql.raw(
+            """
+            SELECT v.app_id AS app_id, COUNT(*) AS total
+              FROM downloads d
+              JOIN versions v ON v.id = d.version_id
+             WHERE v.app_id IN (\(binds: appIDs))
+             GROUP BY v.app_id
+            """
+        ).all()
+        return rows.reduce(into: [:]) { result, row in
+            guard let id = try? row.decode(column: "app_id", as: UUID.self),
+                  let total = try? row.decode(column: "total", as: Int.self)
+            else {
+                return
+            }
+            result[id] = total
+        }
+    }
+
     /// 앱 하나의 버전별 다운로드 수.
     static func perVersion(
         ofApp appID: UUID,

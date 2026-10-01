@@ -68,6 +68,11 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
     /// 스토어 앱이 상세 화면에 "개발자" 로 보여준다. 받는 사람이 알고 싶은 것은 "이 앱을
     /// 누구에게 물어보면 되나" 다. 나간 사람은 뺀다. 이 값을 모르는 예전 서버에서는 nil 이다.
     public var developerNames: [String]?
+    /// 지금까지 받아간 횟수. 모든 버전을 합치고, 같은 사람이 여러 번 받아도 매번 센다.
+    ///
+    /// "설치 수" 가 아니다. 서버가 아는 것은 받아갔다는 사실까지다 (`DownloadStats`).
+    /// 이 값을 모르는 예전 서버에서는 nil 이다.
+    public var downloadCount: Int?
     /// 현재 조직에 출시된 최신 버전. 아직 출시본이 없으면 nil.
     public var latestReleasedVersion: VersionDTO?
     /// 별점 요약. 목록에서도 보여주므로 앱과 함께 내려준다.
@@ -100,6 +105,7 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
         category: String? = nil,
         ownerID: UUID,
         developerNames: [String]? = nil,
+        downloadCount: Int? = nil,
         latestReleasedVersion: VersionDTO? = nil,
         rating: RatingSummary? = nil,
         isStoreApp: Bool? = nil,
@@ -116,6 +122,7 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
         self.category = category
         self.ownerID = ownerID
         self.developerNames = developerNames
+        self.downloadCount = downloadCount
         self.latestReleasedVersion = latestReleasedVersion
         self.rating = rating
         self.isStoreApp = isStoreApp
