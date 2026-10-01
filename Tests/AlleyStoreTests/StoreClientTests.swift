@@ -75,3 +75,21 @@ struct IconURLResolvingTests {
     }
 }
 
+
+@Suite("스크린샷 주소의 출처")
+struct ScreenshotOriginTests {
+    @Test("기본 포트는 적었든 안 적었든 같은 출처다")
+    func defaultPorts() {
+        let server = URL(string: "https://store.example.com")!
+        #expect(StoreClient.sameOrigin(URL(string: "https://store.example.com:443/a")!, server))
+        #expect(StoreClient.sameOrigin(URL(string: "https://STORE.example.com/a")!, server))
+    }
+
+    @Test("다른 호스트, 스킴, 포트에는 토큰을 보내지 않는다")
+    func rejectsOtherOrigins() {
+        let server = URL(string: "https://store.example.com")!
+        #expect(!StoreClient.sameOrigin(URL(string: "https://evil.example.com/a")!, server))
+        #expect(!StoreClient.sameOrigin(URL(string: "http://store.example.com/a")!, server))
+        #expect(!StoreClient.sameOrigin(URL(string: "https://store.example.com:8443/a")!, server))
+    }
+}

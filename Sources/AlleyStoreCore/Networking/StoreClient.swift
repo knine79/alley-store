@@ -75,6 +75,34 @@ struct StoreClient: Sendable {
         try await get(APIPath.download(versionID: versionID), as: DownloadTicket.self)
     }
 
+    /// 로그인해야 받는 그림 (앱 스크린샷). `AsyncImage` 는 토큰을 붙이지 못해 직접 받는다.
+    ///
+    /// 서버가 준 주소만 받는다. 다른 호스트로 토큰을 보내지 않는다.
+    func authenticatedImage(at url: URL) async throws -> Data {
+        guard Self.sameOrigin(url, server) else {
+            throw ClientError.malformedResponse
+        }
+        var request = URLRequest(url: url)
+        authorize(&request)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ClientError.malformedResponse }
+        guard http.statusCode != 401 else { throw ClientError.unauthorized }
+        guard (200..<300).contains(http.statusCode) else {
+            throw ClientError.server(status: http.statusCode, reason: nil)
+        }
+        return data
+    }
+
+    /// 같은 출처인지. 기본 포트는 적었든 안 적었든 같게 본다 (`https://a` 와 `https://a:443`).
+    static func sameOrigin(_ lhs: URL, _ rhs: URL) -> Bool {
+        func port(_ url: URL) -> Int? {
+            url.port ?? (url.scheme == "https" ? 443 : url.scheme == "http" ? 80 : nil)
+        }
+        return lhs.scheme?.lowercased() == rhs.scheme?.lowercased()
+            && lhs.host?.lowercased() == rhs.host?.lowercased()
+            && port(lhs) == port(rhs)
+    }
+
     // MARK: - 피드백
 
     func feedback(ofApp id: UUID) async throws -> [FeedbackDTO] {

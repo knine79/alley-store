@@ -1055,6 +1055,7 @@ struct AppRow: Encodable {
     var category: String?
     var categoryOptions: [CategoryOption]
     var tags: [String]
+    var screenshots: [ScreenshotRow]
     /// 편집 칸에 다시 채울 값. 쉼표로 잇는다.
     var tagsText: String
     var ownerEmail: String
@@ -1087,6 +1088,15 @@ struct AppRow: Encodable {
         self.category = AppCategory(stored: app.category)?.title
         self.categoryOptions = CategoryOption.options(selected: app.category)
         self.tags = app.tags
+        let appID = try app.requireID()
+        self.screenshots = app.screenshotKeys.compactMap { key in
+            AppScreenshots.id(fromKey: key).map { id in
+                ScreenshotRow(
+                    id: id.uuidString.lowercased(),
+                    url: APIPath.appScreenshot(appID, id: id)
+                )
+            }
+        }
         self.tagsText = app.tags.joined(separator: ", ")
         // 목록에서 소유자를 함께 읽어두므로 여기서 관계를 만지지 않는다.
         self.ownerEmail = app.$owner.value?.email ?? ""
@@ -1246,6 +1256,13 @@ struct AppFormContext: Encodable {
     var categoryOptions: [CategoryOption]
 }
 
+/// 앱 상세에 그리는 스크린샷 한 장.
+struct ScreenshotRow: Encodable {
+    var id: String
+    /// 쿠키로 받는 같은 출처 주소. 스토어 앱과 같은 경로다.
+    var url: String
+}
+
 /// 분류 고르기 칸의 한 줄 (`AppCategory`).
 struct CategoryOption: Encodable {
     var value: String
@@ -1298,6 +1315,8 @@ struct AppDetailContext: Encodable {
     /// 익명 체크박스를 띄울지. 스토어 설정에서 온다.
     var canUpload: Bool
     var canManage: Bool
+    /// 앱 하나에 둘 수 있는 스크린샷 수 (`AppScreenshots`).
+    var screenshotLimit = AppScreenshots.maximumCount
     /// 권한이 모자라 실패한 버전 옆에 붙일 안내. 그 파일을 어디서 구하나 (ADR-0036).
     var entitlementsWhereToFind: String
     /// 왜 내 맥에서는 되는데 여기서는 안 되나. 멀쩡히 쓰던 앱이라 이 줄이 없으면

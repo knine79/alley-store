@@ -146,6 +146,8 @@ final class StoreModel {
         credentials.setToken(nil, for: client.server)
         self.client?.token = nil
         apps = []
+        // 로그인해야 받는 그림이다. 다음에 로그인한 사람에게 이어 보여주지 않는다.
+        screenshotCache.removeAllObjects()
 
         if case .ready(let meta, _) = phase {
             phase = .signedOut(meta)
@@ -249,6 +251,32 @@ final class StoreModel {
         var resolved = app
         resolved.iconURL = absolute
         return resolved
+    }
+
+    // MARK: - 스크린샷
+
+    /// 받아둔 스크린샷. 앱 상세를 다시 열 때 또 받지 않는다.
+    ///
+    /// 주소에 UUID 가 들어 있어 그림이 바뀌면 주소도 바뀐다. 무효화할 일이 없다.
+    /// 한 장이 수 MB 라 끝없이 들고 있지 않는다. 메모리가 모자라면 `NSCache` 가 버린다.
+    private let screenshotCache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 30
+        return cache
+    }()
+
+    /// 스크린샷 한 장. 못 받으면 nil 이고 그 자리를 비워둔다.
+    func screenshot(_ address: String) async -> NSImage? {
+        if let cached = screenshotCache.object(forKey: address as NSString) { return cached }
+        guard let client, let token = client.token, let url = URL(string: address),
+              let data = try? await client.authenticatedImage(at: url),
+              let image = NSImage(data: data)
+        else { return nil }
+        // 받는 동안 로그아웃했거나 다른 사람으로 바뀌었으면 넣지 않는다. 넣으면 비워둔
+        // 캐시가 앞사람의 그림으로 다시 찬다.
+        guard self.client?.token == token else { return nil }
+        screenshotCache.setObject(image, forKey: address as NSString)
+        return image
     }
 
     // MARK: - 피드백

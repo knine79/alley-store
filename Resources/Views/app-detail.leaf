@@ -334,6 +334,37 @@
 #endif
 
 #if(canUpload):
+<section class="section" id="screenshots">
+    <h2 class="section-title">스크린샷</h2>
+    <p class="page-lead">
+        스토어 앱의 앱 상세에 보입니다. 받기 전에 무엇을 하는 앱인지 알 수 있게 합니다.
+        PNG 나 JPEG 로 #(screenshotLimit)장까지, 한 장에 5MB 까지 올립니다.
+    </p>
+
+    #if(count(app.screenshots) > 0):
+    <div class="screenshot-grid">
+        #for(shot in app.screenshots):
+        <figure class="screenshot">
+            <a href="#(shot.url)" target="_blank" rel="noopener"><img src="#(shot.url)" alt="스크린샷" loading="lazy"></a>
+            <form method="post" action="/apps/#(app.id)/screenshots/#(shot.id)/delete">
+                <button class="button button-small" type="submit">지우기</button>
+            </form>
+        </figure>
+        #endfor
+    </div>
+    #endif
+
+    #if(count(app.screenshots) < screenshotLimit):
+    <form class="form-inline" method="post" action="/apps/#(app.id)/screenshots"
+          enctype="multipart/form-data">
+        <input class="input" type="file" name="image" accept="image/png,image/jpeg" required>
+        <button class="button" type="submit">올리기</button>
+    </form>
+    #endif
+</section>
+#endif
+
+#if(canUpload):
 <section class="section" id="members">
     <h2 class="section-title">업로드 권한</h2>
     <ul class="person-list">

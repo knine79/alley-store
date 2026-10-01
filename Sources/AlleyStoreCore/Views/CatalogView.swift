@@ -312,6 +312,9 @@ struct AppDetailView: View {
                 if let description = app.description {
                     Text(description).textSelection(.enabled)
                 }
+                if let screenshots = app.screenshotURLs, !screenshots.isEmpty {
+                    ScreenshotStrip(addresses: screenshots)
+                }
                 if let tags = app.tags, !tags.isEmpty {
                     // 왜 검색에 걸렸는지 알 수 있게 보인다.
                     Text(tags.map { "#\($0)" }.joined(separator: "  "))
@@ -431,6 +434,67 @@ struct AppDetailView: View {
                     .controlSize(.large)
             }
         }
+    }
+}
+
+/// 앱 상세의 스크린샷 줄. 가로로 넘겨 본다.
+///
+/// 그림은 로그인한 요청으로만 받는다 (`StoreModel.screenshot`). 받기 전과 실패했을
+/// 때는 같은 크기의 빈 칸을 둬서 줄 높이가 흔들리지 않게 한다.
+struct ScreenshotStrip: View {
+    let addresses: [String]
+    static let height: CGFloat = 220
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 12) {
+                ForEach(addresses, id: \.self) { address in
+                    Screenshot(address: address)
+                }
+            }
+        }
+        .frame(height: Self.height)
+    }
+}
+
+private struct Screenshot: View {
+    @Environment(StoreModel.self) private var model
+    let address: String
+    @State private var image: NSImage?
+    @State private var isEnlarged = false
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .onTapGesture { isEnlarged = true }
+                    .help("눌러서 크게 보기")
+                    .sheet(isPresented: $isEnlarged) {
+                        VStack(alignment: .trailing, spacing: 12) {
+                            Image(nsImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(minWidth: 640, minHeight: 400)
+                            // Esc 로도 닫힌다. 시트를 닫는 길이 그림 클릭뿐이면 찾지 못한다.
+                            Button("닫기") { isEnlarged = false }
+                                .keyboardShortcut(.cancelAction)
+                        }
+                        .padding()
+                    }
+            } else {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(.quaternary)
+                    .aspectRatio(16 / 10, contentMode: .fit)
+            }
+        }
+        .frame(height: ScreenshotStrip.height)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
+        .accessibilityLabel("스크린샷")
+        .task(id: address) { image = await model.screenshot(address) }
     }
 }
 

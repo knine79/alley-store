@@ -196,6 +196,9 @@ private func configureMigrations(_ app: Application) {
 
     // 분류를 코드에 정한 목록으로 옮긴다 (이슈 #44).
     app.migrations.add(NormalizeAppCategories())
+
+    // 앱 상세에 스크린샷을 둔다 (이슈 #40).
+    app.migrations.add(AddAppScreenshots())
 }
 
 /// 미들웨어 스택.
