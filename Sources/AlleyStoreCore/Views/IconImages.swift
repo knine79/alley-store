@@ -14,25 +14,35 @@ final class IconImages {
     static let shared = IconImages()
 
     private var images: [URL: NSImage] = [:]
-    private var pending: [URL: Task<NSImage?, Never>] = [:]
+    /// 받는 중인 것. 같은 아이콘을 동시에 여러 번 받지 않는다.
+    ///
+    /// **`Task` 가 주고받는 것은 `Data` 다.** `NSImage` 는 `Sendable` 이 아니라서 다른
+    /// 실행 맥락에서 만들어 메인 액터로 넘기면 Swift 6 가 막는다. 잘라낸 PNG 바이트만
+    /// 넘기고 `NSImage` 는 여기서 만든다.
+    private var pending: [URL: Task<Data?, Never>] = [:]
 
     func image(for url: URL) async -> NSImage? {
         if let cached = images[url] { return cached }
-        if let running = pending[url] { return await running.value }
 
-        let task = Task<NSImage?, Never> {
-            guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
-            return Self.trimmed(data)
+        let task: Task<Data?, Never>
+        if let running = pending[url] {
+            task = running
+        } else {
+            task = Task.detached(priority: .utility) {
+                guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+                return Self.trimmedPNG(data)
+            }
+            pending[url] = task
         }
-        pending[url] = task
-        let image = await task.value
+        let data = await task.value
         pending[url] = nil
-        if let image { images[url] = image }
+        guard let data, let image = NSImage(data: data) else { return nil }
+        images[url] = image
         return image
     }
 
-    /// 그림 데이터에서 투명한 여백을 걷어낸 것. 읽지 못하면 nil, 걷어낼 것이 없으면 그대로.
-    nonisolated static func trimmed(_ data: Data) -> NSImage? {
+    /// 그림 데이터에서 투명한 여백을 걷어낸 PNG. 읽지 못하면 nil, 걷어낼 것이 없으면 그대로.
+    nonisolated static func trimmedPNG(_ data: Data) -> Data? {
         guard let source = NSImage(data: data),
               let cgImage = source.cgImage(forProposedRect: nil, context: nil, hints: nil)
         else {
@@ -42,9 +52,9 @@ final class IconImages {
               bounds.size != CGSize(width: cgImage.width, height: cgImage.height),
               let cropped = cgImage.cropping(to: bounds)
         else {
-            return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+            return data
         }
-        return NSImage(cgImage: cropped, size: NSSize(width: cropped.width, height: cropped.height))
+        return NSBitmapImageRep(cgImage: cropped).representation(using: .png, properties: [:])
     }
 
     /// 그림이 실제로 있는 영역. 원본 픽셀 좌표(위가 0)다. 전부 투명하면 nil.
