@@ -126,7 +126,8 @@ public struct WorkerLoop: Sendable {
                     resultEdSignature: output.edSignature,
                     bundleMetadata: output.bundleMetadata,
                     diskImageSHA256: output.diskImageSHA256,
-                    diskImageSize: output.diskImageSize
+                    diskImageSize: output.diskImageSize,
+                    iconSize: output.iconSize
                 ),
                 for: job.id
             )
