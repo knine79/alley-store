@@ -21,6 +21,7 @@
         <h1 class="page-title">#(app.name)</h1>
         <p class="identity-meta">
             <code>#(app.bundleID)</code>
+            #if(app.category):<span class="badge">#(app.category)</span>#endif
             #if(app.ratingAverage):
             <span class="rating-summary">★ #(app.ratingAverage) <span class="rating-count">(#(app.ratingCount))</span></span>
             #endif
@@ -69,7 +70,9 @@
 
             <label class="field">
                 <span class="field-label">분류 <span class="field-optional">선택</span></span>
-                <input class="input" type="text" name="category" value="#(app.category)">
+                <select class="input" name="category">
+                    #for(option in app.categoryOptions):<option value="#(option.value)"#if(option.selected): selected#endif>#(option.title)</option>#endfor
+                </select>
             </label>
 
             <label class="field">

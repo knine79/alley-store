@@ -193,6 +193,9 @@ private func configureMigrations(_ app: Application) {
 
     // 앱에 검색용 태그를 붙인다 (이슈 #43).
     app.migrations.add(AddAppTags())
+
+    // 분류를 코드에 정한 목록으로 옮긴다 (이슈 #44).
+    app.migrations.add(NormalizeAppCategories())
 }
 
 /// 미들웨어 스택.

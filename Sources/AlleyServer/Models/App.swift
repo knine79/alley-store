@@ -140,6 +140,30 @@ public struct AddAppTags: AsyncMigration {
     }
 }
 
+/// 사람이 적어둔 분류를 정해진 값으로 옮긴다 (이슈 #44).
+///
+/// 분류는 자유 텍스트였다. 화면 이름과 같은 값("개발 도구")은 저장할 값
+/// ("developer-tools")으로 바꾼다. **목록에 없는 값은 지우지 않는다.** 읽는 쪽이 미분류로
+/// 다루므로 남겨둬도 해가 없고, 지우면 사람이 적은 것을 되살릴 수 없다. 앱 정보를 다시
+/// 저장하면 그때 미분류가 된다.
+public struct NormalizeAppCategories: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+        for category in AppCategory.allCases {
+            try await sql.raw(
+                "UPDATE apps SET category = \(bind: category.rawValue) WHERE btrim(category) = \(bind: category.title)"
+            ).run()
+        }
+    }
+
+    /// 되돌리지 않는다. 바꾼 값은 저장할 값으로 읽어도 같은 분류다.
+    public func revert(on database: any Database) async throws {}
+}
+
 extension App {
     /// 클라이언트가 보는 형태로 바꾼다.
     ///

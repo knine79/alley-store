@@ -77,6 +77,7 @@
 | [0067](0067-worker-extracts-the-app-icon.md) | 앱 아이콘은 워커가 번들에서 뽑는다 | 수락됨 | 2026-10-01 |
 | [0068](0068-store-app-signs-in-through-the-default-browser.md) | 스토어 앱은 기본 브라우저로 로그인하고 PKCE 로 코드를 지킨다 | 수락됨 | 2026-10-01 |
 | [0069](0069-store-app-renews-its-session-token.md) | 스토어 앱은 세션 토큰 수명의 절반이 지나면 새 토큰으로 바꾼다 | 수락됨 | 2026-10-01 |
+| [0070](0070-app-categories-are-a-fixed-list.md) | 앱 분류는 코드에 정한 목록에서 고른다 | 수락됨 | 2026-10-01 |
 
 ## 언제 쓰나
 

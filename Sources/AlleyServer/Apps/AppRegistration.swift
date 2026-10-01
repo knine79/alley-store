@@ -43,7 +43,7 @@ enum AppRegistration {
             name: name,
             summary: normalized(payload.summary),
             details: normalized(payload.description),
-            category: normalized(payload.category),
+            category: try validatedCategory(payload.category),
             tags: try validatedTags(payload.tags ?? []),
             ownerID: try owner.requireID(),
             bundleIDPending: pending
@@ -78,7 +78,7 @@ enum AppRegistration {
         // 빈 문자열로 지우는 것과 항목을 안 보낸 것을 구분한다.
         if let summary = payload.summary { app.summary = normalized(summary) }
         if let details = payload.description { app.details = normalized(details) }
-        if let category = payload.category { app.category = normalized(category) }
+        if let category = payload.category { app.category = try validatedCategory(category) }
         if let tags = payload.tags { app.tags = try validatedTags(tags) }
         if let iconURL = payload.iconURL {
             app.iconURL = iconURL.isEmpty
@@ -86,6 +86,19 @@ enum AppRegistration {
                 : try StoreSettingsValidation.validatedLogoURL(iconURL)
         }
         try await app.save(on: database)
+    }
+
+    /// 정해진 분류인지 본다 (`AppCategory`). 비우면 미분류다.
+    ///
+    /// 화면 이름("개발 도구")으로 보내도 받아서 저장할 값으로 바꾼다. 목록에 없는 값은
+    /// 거절한다. 받아두면 거를 때 아무 분류에도 들지 않는 앱이 생긴다.
+    static func validatedCategory(_ raw: String?) throws -> String? {
+        guard let value = normalized(raw) else { return nil }
+        guard let category = AppCategory(stored: value) else {
+            let known = AppCategory.allCases.map(\.title).joined(separator: ", ")
+            throw Abort(.badRequest, reason: "알 수 없는 분류입니다: \(value). 고를 수 있는 것: \(known)")
+        }
+        return category.rawValue
     }
 
     /// 태그 규칙을 지났는지 본다. 어긋나면 사람이 읽을 문장으로 거절한다.
