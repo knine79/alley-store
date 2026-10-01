@@ -217,13 +217,15 @@ enum FeedbackSubmission {
         let body = payload.body?.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasBody = !(body ?? "").isEmpty
 
-        guard payload.rating != nil || hasBody else {
-            throw Abort(.badRequest, reason: "별점이나 글 중 하나는 있어야 합니다.")
+        // **별점은 반드시 있어야 한다.** 예전에는 글만 남길 수도 있었는데, 그러면 목록의
+        // "★ 4.6 (30)" 의 30 과 피드백 개수가 어긋나고 리뷰 수로 정렬할 기준도 둘로
+        // 갈린다. 리뷰를 받는 다른 스토어도 별점을 요구한다. 예전에 글만 남긴 것은 그대로
+        // 두고 보여준다. 모델의 `rating` 이 옵셔널인 것은 그 때문이다.
+        guard let rating = payload.rating else {
+            throw Abort(.badRequest, reason: "별점을 골라주세요.")
         }
-        if let rating = payload.rating {
-            guard (1...5).contains(rating) else {
-                throw Abort(.badRequest, reason: "별점은 1에서 5 사이여야 합니다.")
-            }
+        guard (1...5).contains(rating) else {
+            throw Abort(.badRequest, reason: "별점은 1에서 5 사이여야 합니다.")
         }
         guard version.state.isPubliclyVisible else {
             throw Abort(.conflict, reason: "아직 출시되지 않은 버전입니다.")
