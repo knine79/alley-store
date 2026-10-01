@@ -27,6 +27,20 @@ public enum APIPath {
     /// 로그인한 뒤 돌아갈 경로. 이 스토어 안의 상대 경로만 받는다
     /// (`OAuthStateToken.safeReturnPath`).
     public static let returnQueryItem = "next"
+    /// 스토어 앱이 로그인을 시작할 때 보내는 PKCE challenge (ADR-0068).
+    ///
+    /// 앱이 만든 verifier 의 SHA-256 을 base64url 로 적은 값이다. 서버는 이 값을
+    /// 일회용 코드에 묶어두고, 교환할 때 verifier 를 함께 가져온 쪽에만 내준다.
+    public static let codeChallengeQueryItem = "code_challenge"
+    /// 스토어 앱이 로그인마다 만드는 무작위 값 (ADR-0068).
+    ///
+    /// 서버는 이 값을 콜백 URL 의 ``appCallbackStateQueryItem`` 으로 그대로 돌려준다.
+    /// 앱은 지금 기다리는 로그인의 값과 맞지 않는 콜백을 버린다. 브라우저를 다시 켜면
+    /// 복원된 예전 로그인 탭이 저절로 끝나 콜백을 보내는데, 그것이 지금 로그인을
+    /// 가로채지 않게 한다.
+    public static let appStateQueryItem = "app_state"
+    /// 앱으로 돌아가는 콜백 URL 에서 ``appStateQueryItem`` 을 돌려주는 자리.
+    public static let appCallbackStateQueryItem = "state"
     /// 스토어 앱이 일회용 코드를 세션 토큰으로 교환하는 경로.
     public static let tokenExchange = "\(apiRoot)/auth/token"
 

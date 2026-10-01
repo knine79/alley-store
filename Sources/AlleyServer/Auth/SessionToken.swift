@@ -57,6 +57,14 @@ public struct OAuthStateToken: JWTPayload, Sendable {
     /// **서명된 state 안에 싣는다.** 쿠키나 쿼리로 따로 들고 다니면 콜백에서 누가 바꿔
     /// 끼웠는지 알 수 없다. 여기 들어오는 값은 이미 `safeReturnPath` 를 지났다.
     public var returnPath: String?
+    /// 스토어 앱이 보낸 PKCE challenge. 콜백에서 발급하는 코드에 그대로 묶는다
+    /// (ADR-0068).
+    ///
+    /// 이것도 **서명된 state 안에 싣는다.** 공급자에게 갔다 오는 동안 서버가 따로 들고
+    /// 있을 자리가 없고, 밖에 두면 누가 바꿔 끼웠는지 알 수 없다.
+    public var codeChallenge: String?
+    /// 스토어 앱이 보낸 로그인별 무작위 값. 콜백 URL 에 그대로 돌려준다 (ADR-0068).
+    public var appState: String?
     public var expiration: ExpirationClaim
     /// 재생 공격을 어렵게 하는 무작위 값.
     public var nonce: String
@@ -64,6 +72,8 @@ public struct OAuthStateToken: JWTPayload, Sendable {
     enum CodingKeys: String, CodingKey {
         case target = "tgt"
         case returnPath = "ret"
+        case codeChallenge = "cch"
+        case appState = "ast"
         case expiration = "exp"
         case nonce = "nnc"
     }
@@ -75,11 +85,15 @@ public struct OAuthStateToken: JWTPayload, Sendable {
     public init(
         target: Target,
         returnPath: String? = nil,
+        codeChallenge: String? = nil,
+        appState: String? = nil,
         now: Date = Date(),
         nonce: String = UUID().uuidString
     ) {
         self.target = target
         self.returnPath = returnPath
+        self.codeChallenge = codeChallenge
+        self.appState = appState
         self.expiration = .init(value: now.addingTimeInterval(Self.lifetime))
         self.nonce = nonce
     }
