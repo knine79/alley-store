@@ -299,12 +299,12 @@ struct InstallStateTests {
     @Test("갈아끼운 뒤의 안내는 올렸는지 내렸는지를 따른다")
     func replacedMessageFollowsWhatHappened() {
         #expect(InstallState.updateAvailable.replacedMessage(appName: "메모장", version: "1.2")
-            == "메모장 을(를) 1.2 로 업데이트했습니다.")
+            == "메모장을 1.2로 업데이트했습니다.")
         #expect(InstallState.ahead.replacedMessage(appName: "메모장", version: "1.2")
-            == "메모장 을(를) 1.2 로 되돌렸습니다.")
+            == "메모장을 1.2로 되돌렸습니다.")
         for state in [InstallState.upToDate, .unknown] {
             #expect(state.replacedMessage(appName: "메모장", version: "1.2")
-                == "메모장 을(를) 1.2 로 다시 설치했습니다.")
+                == "메모장을 1.2로 다시 설치했습니다.")
         }
     }
 }
@@ -400,3 +400,23 @@ struct InstallLocationTests {
         )
     }
 }
+
+@Suite("조사 고르기")
+struct JosaTests {
+    @Test("받침을 보고 을/를 을 고른다")
+    func object() {
+        #expect(Josa.object("근무 체크 도우미") == "근무 체크 도우미를")
+        #expect(Josa.object("메모장") == "메모장을")
+        #expect(Josa.object("Soft Mouse") == "Soft Mouse을(를)")
+    }
+
+    @Test("ㄹ 받침과 숫자를 읽어 으로/로 를 고른다")
+    func direction() {
+        #expect(Josa.direction("1.8.26") == "1.8.26으로")
+        #expect(Josa.direction("1.2") == "1.2로")
+        #expect(Josa.direction("2.1") == "2.1로")
+        #expect(Josa.direction("1.0") == "1.0으로")
+        #expect(Josa.direction("서울") == "서울로")
+    }
+}
+
