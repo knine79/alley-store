@@ -13,6 +13,13 @@ struct CatalogView: View {
     @State private var selection: AppDTO.ID?
     @State private var search = ""
 
+    init(meta: StoreMeta, user: UserDTO, selection: AppDTO.ID? = nil) {
+        self.meta = meta
+        self.user = user
+        // 처음 고른 앱을 밖에서 줄 수 있게 한다. 화면을 서버 없이 그려볼 때 쓴다.
+        _selection = State(initialValue: selection)
+    }
+
     private var visible: [AppDTO] {
         guard !search.isEmpty else { return model.catalog }
         return model.catalog.filter {
@@ -54,13 +61,6 @@ struct CatalogView: View {
             model.updateCount > 0 ? "업데이트 \(model.updateCount)개" : ""
         )
         .toolbar {
-            ToolbarItem(placement: .status) {
-                if let status = model.statusMessage {
-                    Text(status)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-            }
             ToolbarItem {
                 Button {
                     Task { await model.refresh() }
@@ -88,6 +88,17 @@ struct CatalogView: View {
         // 창을 열어둔 채로 두는 사람이 있다. 목록이 어제 것으로 굳어 있으면
         // 업데이트가 있어도 모른다.
         .task { await model.watchForUpdates() }
+        // 방금 한 일을 아래쪽 가운데에 잠깐 띄운다 (`StoreModel.announce`). 툴바 상태 칸에
+        // 회색 글자로 두면 눈에 안 띄고, 사라지지 않아 언제 일인지 알 수 없었다. 위쪽에
+        // 띄우면 상세의 앱 이름을 가린다.
+        .overlay(alignment: .bottom) {
+            if let status = model.statusMessage {
+                StatusToast(message: status)
+                    .padding(.bottom, 20)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(duration: 0.35), value: model.statusMessage)
         .safeAreaInset(edge: .top) {
             if let update = model.selfUpdate {
                 SelfUpdateBanner(app: update)
@@ -117,8 +128,12 @@ struct AppRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(app.name)
                     .font(.body.weight(.medium))
+                // 설치 상태는 적지 않는다. 오른쪽 버튼(설치·업데이트·열기)이 이미 말한다.
+                // 그 자리에는 누가 만들었는지를 둔다.
                 HStack(spacing: 6) {
-                    Text(model.state(of: app).summary)
+                    if let developers = app.developerNames, !developers.isEmpty {
+                        Text(developers.joined(separator: ", ")).lineLimit(1)
+                    }
                     if let average = app.rating?.displayAverage {
                         Text("★ \(average)")
                     }
@@ -240,8 +255,7 @@ struct AppDetailView: View {
 
                 Divider()
 
-                // 받는 사람이 알고 싶은 것은 "이 앱을 누구에게 물어보면 되나" 다. 소유자가
-                // 맨 앞이고 공동 관리자가 뒤따른다 (`AppDTO.developerNames`).
+                // 위쪽 한 줄에도 있지만, 앱 정보를 훑는 사람은 여기서 찾는다.
                 if let developers = app.developerNames, !developers.isEmpty {
                     LabeledContent("개발자") {
                         Text(developers.joined(separator: ", ")).textSelection(.enabled)
@@ -309,18 +323,34 @@ struct AppDetailView: View {
         return released
     }
 
+    /// "김개발, 이동료 · 다운로드 1,234회 · ★ 4.6 (12)". 아는 것만 잇는다.
+    private var byline: String? {
+        var parts: [String] = []
+        if let developers = app.developerNames, !developers.isEmpty {
+            parts.append(developers.joined(separator: ", "))
+        }
+        if let count = app.downloadCount {
+            parts.append("다운로드 \(count.formatted())회")
+        }
+        if let rating = app.rating, let average = rating.displayAverage {
+            parts.append("★ \(average) (\(rating.count))")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     private var header: some View {
         HStack(alignment: .top, spacing: 16) {
             AppIcon(app: app, size: 64)
             VStack(alignment: .leading, spacing: 4) {
                 Text(app.name).font(.largeTitle.weight(.semibold))
-                HStack(spacing: 8) {
-                    Text(model.state(of: app).summary)
-                    if let rating = app.rating, let average = rating.displayAverage {
-                        Text("★ \(average) (\(rating.count))")
-                    }
+                // 누가 만들었고 얼마나 받아갔는지를 이름 바로 아래에 둔다. 받을지 말지를
+                // 정하는 사람이 가장 먼저 보는 것이 이 둘이다. 설치 상태는 적지 않는다.
+                // 오른쪽 버튼이 이미 말한다.
+                if let byline {
+                    Text(byline)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                 }
-                .foregroundStyle(.secondary)
             }
             Spacer()
             if app.latestReleasedVersion == nil {
@@ -437,3 +467,23 @@ struct SelfUpdateBanner: View {
         .overlay(alignment: .bottom) { Divider() }
     }
 }
+
+/// 방금 한 일을 알리는 한 줄. 잠깐 떴다가 사라진다.
+struct StatusToast: View {
+    let message: String
+
+    var body: some View {
+        Label(message, systemImage: "checkmark.circle.fill")
+            .font(.callout.weight(.medium))
+            .symbolRenderingMode(.multicolor)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(.separator, lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+            // 알림이 떠 있는 동안에도 아래를 누를 수 있어야 한다.
+            .allowsHitTesting(false)
+            .accessibilityAddTraits(.isStaticText)
+    }
+}
+

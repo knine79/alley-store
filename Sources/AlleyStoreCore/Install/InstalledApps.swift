@@ -152,14 +152,18 @@ enum InstallState: Equatable {
     /// 전부 "업데이트했습니다" 라고 하면 내려간 경우에도 올라간 것처럼 읽힌다.
     /// 올라갔는지 모르는 경우(`unknown`)와 같은 빌드를 다시 받은 경우는 한 일
     /// 그대로 "다시 설치" 라고 적는다.
+    ///
+    /// 조사는 앞말의 받침을 보고 고른다 (`Josa`). "을(를)", "로" 를 둘 다 적으면 기계가
+    /// 쓴 문장으로 읽힌다.
     func replacedMessage(appName: String, version: String) -> String {
+        let target = "\(Josa.object(appName)) \(Josa.direction(version))"
         switch self {
         case .updateAvailable:
-            return "\(appName) 을(를) \(version) 로 업데이트했습니다."
+            return "\(target) 업데이트했습니다."
         case .ahead:
-            return "\(appName) 을(를) \(version) 로 되돌렸습니다."
+            return "\(target) 되돌렸습니다."
         case .upToDate, .unknown, .notInstalled, .notReleased:
-            return "\(appName) 을(를) \(version) 로 다시 설치했습니다."
+            return "\(target) 다시 설치했습니다."
         }
     }
 

@@ -35,7 +35,25 @@ final class StoreModel {
 
     var errorMessage: String?
     /// 방금 무엇을 했는지 알리는 한 줄. 설치가 끝났다는 것 정도.
-    var statusMessage: String?
+    ///
+    /// **잠깐 보였다가 사라진다** (`announce`). 예전에는 다음 설치를 시작할 때까지
+    /// 툴바에 남아서, 한참 뒤에 본 사람은 그것이 언제 일인지 알 수 없었다.
+    private(set) var statusMessage: String?
+    private var statusDismissal: Task<Void, Never>?
+
+    /// 알림이 머무는 시간. 한 줄을 읽기에 충분하고, 다음 일을 가리지 않을 만큼.
+    static let statusDuration: Duration = .seconds(4)
+
+    /// 알림을 띄우고 잠시 뒤 거둔다. 연달아 오면 마지막 것만 남기고 시간을 다시 잰다.
+    func announce(_ message: String) {
+        statusDismissal?.cancel()
+        statusMessage = message
+        statusDismissal = Task { [weak self] in
+            try? await Task.sleep(for: Self.statusDuration)
+            guard !Task.isCancelled else { return }
+            self?.statusMessage = nil
+        }
+    }
 
     /// 이 빌드에 박혀 나온 서버 주소.
     ///
@@ -218,7 +236,7 @@ final class StoreModel {
             await loadFeedback(for: app)
             // 평균이 바뀌었으므로 목록도 다시 읽는다.
             await refresh()
-            statusMessage = "\(app.name) 에 남겼습니다."
+            announce("\(app.name)에 피드백을 남겼습니다.")
             return true
         } catch StoreClient.ClientError.unauthorized {
             signOut()
@@ -386,6 +404,7 @@ final class StoreModel {
     /// 것은 스캔한 쪽이다. 보여준 것과 다른 것을 열면 안 된다.
     func open(_ app: AppDTO) {
         guard let location = installed[app.bundleID]?.location else { return }
+        statusDismissal?.cancel()
         statusMessage = nil
         errorMessage = nil
         NSWorkspace.shared.openApplication(
@@ -406,6 +425,7 @@ final class StoreModel {
         // 끝난 뒤에는 새것이 깔려 있어서 무엇을 했는지(올렸나, 내렸나) 알 수 없다.
         let before = state(of: app)
 
+        statusDismissal?.cancel()
         statusMessage = nil
         errorMessage = nil
         progress[app.id] = .downloading(0)
@@ -431,9 +451,10 @@ final class StoreModel {
 
             progress[app.id] = .installing
             installed = InstalledApps.scan()
-            statusMessage = result.replacedExisting
+            // 설치된 자리는 상세의 "설치된 위치" 가 말한다. 알림은 한눈에 읽히는 길이로 둔다.
+            announce(result.replacedExisting
                 ? before.replacedMessage(appName: app.name, version: version.shortVersion)
-                : "\(app.name) 을(를) \(result.location.path) 에 설치했습니다."
+                : "\(Josa.object(app.name)) 설치했습니다.")
         } catch StoreClient.ClientError.unauthorized {
             signOut()
         } catch {
@@ -441,3 +462,25 @@ final class StoreModel {
         }
     }
 }
+
+#if DEBUG
+extension StoreModel {
+    /// 서버 없이 목록 화면을 세운다. 미리보기와 화면 확인에만 쓴다.
+    ///
+    /// 로그인해야 목록이 뜨므로, 화면을 눈으로 보려면 서버와 계정이 있어야 했다. 이것은
+    /// 그 자리를 건너뛰고 상태만 채운다. 릴리스 빌드에는 들어가지 않는다.
+    func stage(
+        meta: StoreMeta,
+        user: UserDTO,
+        apps: [AppDTO],
+        installed: [String: InstalledApp] = [:],
+        status: String? = nil
+    ) {
+        phase = .ready(meta, user)
+        self.apps = apps
+        self.installed = installed
+        statusMessage = status
+    }
+}
+#endif
+
