@@ -34,6 +34,7 @@ func routes(_ app: Application) throws {
     try app.register(collection: NotificationController())
     try app.register(collection: AppcastController())
     try app.register(collection: AppIconController())
+    try app.register(collection: AppScreenshotController())
 
     // 브랜딩 이미지. 로그인 전에도 보여야 해서 인증 밖에 둔다.
     try app.register(collection: BrandingController())

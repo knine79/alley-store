@@ -63,6 +63,11 @@ public enum APIPath {
         "\(apps)/\(id.uuidString)"
     }
 
+    /// 앱 스크린샷 하나. 로그인해야 받는다 (이슈 #40).
+    public static func appScreenshot(_ appID: UUID, id: UUID) -> String {
+        "\(app(appID))/screenshots/\(id.uuidString.lowercased())"
+    }
+
     /// 앱별 업로드 권한자 목록.
     public static func members(ofApp id: UUID) -> String {
         "\(app(id))/members"

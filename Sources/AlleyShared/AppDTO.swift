@@ -67,6 +67,11 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
     /// 분류(`category`)와 다르다. 분류는 앱마다 하나이고 목록을 거르는 데 쓰고, 태그는
     /// 여러 개이고 검색어와 맞춰보는 데 쓴다. 이 값을 모르는 예전 서버에서는 nil 이다.
     public var tags: [String]?
+    /// 앱 화면 스크린샷 주소. 올린 순서대로다 (이슈 #40).
+    ///
+    /// **로그인한 요청으로만 받는다.** 사내 앱 화면에는 사내 데이터가 찍힐 수 있다.
+    /// 아이콘처럼 아무나 받는 주소로 두지 않는다. 예전 서버에서는 nil 이다.
+    public var screenshotURLs: [String]?
     public var ownerID: UUID
     /// 이 앱을 만드는 사람들의 이름. 소유자가 맨 앞이고 공동 관리자가 뒤따른다.
     ///
@@ -109,6 +114,7 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
         iconURL: String? = nil,
         category: String? = nil,
         tags: [String]? = nil,
+        screenshotURLs: [String]? = nil,
         ownerID: UUID,
         developerNames: [String]? = nil,
         downloadCount: Int? = nil,
@@ -127,6 +133,7 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
         self.iconURL = iconURL
         self.category = category
         self.tags = tags
+        self.screenshotURLs = screenshotURLs
         self.ownerID = ownerID
         self.developerNames = developerNames
         self.downloadCount = downloadCount

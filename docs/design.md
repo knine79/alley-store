@@ -306,7 +306,7 @@ Google 에서는 `hd`(hosted domain) claim 까지 함께 봅니다. 그 claim �
 | `store_settings` | 스토어 이름, 로고, 강조색, 허용 도메인, 번들 ID 프리픽스 (singleton, [ADR-0011](adr/0011-store-settings-in-database.md)) |
 | `branding_assets` | 종류(파비콘·로고·앱 아이콘), 스토리지 키, 크기 ([ADR-0045](adr/0045-branding-assets-in-storage.md)) |
 | `store_app_settings` | 스토어 앱의 번들 ID·이름·URL 스킴·베이스 번들 (singleton, [ADR-0046](adr/0046-server-assembles-store-app.md)) |
-| `apps`           | bundle_id, 이름, 아이콘, 설명, 분류(`AppCategory` 8개 중 하나, [ADR-0070](adr/0070-app-categories-are-a-fixed-list.md)), 태그(검색용, 10개·20자까지), owner_id |
+| `apps`           | bundle_id, 이름, 아이콘, 설명, 분류(`AppCategory` 8개 중 하나, [ADR-0070](adr/0070-app-categories-are-a-fixed-list.md)), 태그(검색용, 10개·20자까지), 스크린샷 키(5장까지, [ADR-0071](adr/0071-app-screenshots-need-sign-in.md)), owner_id |
 | `app_members`    | app_id, user_id (앱별 업로드 권한)                                |
 | `versions`       | app_id, short_version, build_number, 릴리즈 노트, min_macos, 상태, entitlements ([ADR-0020](adr/0020-uploader-provides-entitlements.md)) |
 | `artifacts`      | version_id, kind(unsigned/signed), s3_key, sha256, size    |
@@ -612,6 +612,7 @@ GET   /api/v1/deploy/app               # 배포 토큰이 자기 앱을 확인
 GET   /api/v1/versions/:id/signing     # 서명 상태·실패 갈래·할 일 (ADR-0060)
 GET   /api/v1/apps/:id/sparkle         # SUPublicEDKey 와 쓸 수 있는 상태 (ADR-0060)
 GET   /api/v1/apps/:id/feedback        # 별점·피드백 목록
+GET   /api/v1/apps/:id/screenshots/:sid  # 앱 스크린샷 (로그인 필요, ADR-0071)
 POST  /api/v1/versions/:id/feedback    # 별점·피드백 남기기
 POST  /api/v1/apps/:id/notification-targets  # 알림 채널 등록 (ADR-0059)
 GET   /api/v1/admin/portal/certificates      # 인증서 만료 현황 (ASC API)
