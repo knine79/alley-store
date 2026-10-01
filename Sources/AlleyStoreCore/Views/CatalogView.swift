@@ -14,6 +14,8 @@ struct CatalogView: View {
     @State private var search = ""
     /// 고른 정렬. 다음에 켰을 때도 그대로 둔다. 매번 다시 고르게 하면 고르지 않는다.
     @AppStorage("catalogSort") private var sort: CatalogSort = .name
+    /// 거를 분류. nil 이면 전부 보인다.
+    @State private var categoryFilter: AppCategory?
 
     init(meta: StoreMeta, user: UserDTO, selection: AppDTO.ID? = nil) {
         self.meta = meta
@@ -23,7 +25,19 @@ struct CatalogView: View {
     }
 
     private var visible: [AppDTO] {
-        CatalogSearch.filter(sort.sorted(model.catalog), query: search)
+        // 고른 분류의 앱이 목록에서 사라지면 거르기 칸도 사라진다. 그때 빈 목록에
+        // 갇히지 않게 거르지 않는다.
+        let active = categoryFilter.flatMap { availableCategories.contains($0) ? $0 : nil }
+        let inCategory = active.map { category in
+            model.catalog.filter { AppCategory(stored: $0.category) == category }
+        } ?? model.catalog
+        return CatalogSearch.filter(sort.sorted(inCategory), query: search)
+    }
+
+    /// 목록에 실제로 있는 분류만 고르게 한다. 고르면 빈 목록이 되는 칸은 내지 않는다.
+    private var availableCategories: [AppCategory] {
+        let present = Set(model.catalog.compactMap { AppCategory(stored: $0.category) })
+        return AppCategory.allCases.filter(present.contains)
     }
 
     var body: some View {
@@ -59,6 +73,21 @@ struct CatalogView: View {
             model.updateCount > 0 ? "업데이트 \(model.updateCount)개" : ""
         )
         .toolbar {
+            if !availableCategories.isEmpty {
+                ToolbarItem {
+                    Picker(selection: $categoryFilter) {
+                        Text("모든 분류").tag(AppCategory?.none)
+                        Divider()
+                        ForEach(availableCategories) { category in
+                            Text(category.title).tag(AppCategory?.some(category))
+                        }
+                    } label: {
+                        Label("분류", systemImage: "line.3.horizontal.decrease.circle")
+                    }
+                    .pickerStyle(.menu)
+                    .help("분류로 거르기")
+                }
+            }
             ToolbarItem {
                 Picker(selection: $sort) {
                     ForEach(CatalogSort.allCases) { option in
@@ -144,6 +173,9 @@ struct AppRow: View {
                 // 그 자리에는 누가 만들었고 얼마나 받아갔는지를 둔다. 폭이 모자라면 이름이
                 // 먼저 줄어들고 숫자는 남는다.
                 HStack(spacing: 6) {
+                    if let category = AppCategory(stored: app.category) {
+                        Text(category.title).fixedSize()
+                    }
                     if let developers = app.developerNames, !developers.isEmpty {
                         Text(developers.joined(separator: ", "))
                             .lineLimit(1)
@@ -290,6 +322,9 @@ struct AppDetailView: View {
 
                 Divider()
 
+                if let category = AppCategory(stored: app.category) {
+                    LabeledContent("분류") { Text(category.title) }
+                }
                 // 위쪽 한 줄에도 있지만, 앱 정보를 훑는 사람은 여기서 찾는다.
                 if let developers = app.developerNames, !developers.isEmpty {
                     LabeledContent("개발자") {

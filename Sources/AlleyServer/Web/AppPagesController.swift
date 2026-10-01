@@ -210,7 +210,8 @@ struct AppPagesController: RouteCollection, Sendable {
                 enforceBundleIDPrefix: settings.enforceBundleIDPrefix,
                 appsPath: APIPath.apps,
                 versionRootPath: "\(APIPath.apiRoot)/versions",
-                pendingApps: try await pendingRows(for: request)
+                pendingApps: try await pendingRows(for: request),
+                categoryOptions: CategoryOption.options(selected: values.category)
             )
         ).get()
     }
@@ -1050,7 +1051,9 @@ struct AppRow: Encodable {
     var name: String
     var summary: String?
     var details: String?
+    /// 화면에 쓰는 분류 이름. 미분류거나 목록에 없는 예전 값이면 nil.
     var category: String?
+    var categoryOptions: [CategoryOption]
     var tags: [String]
     /// 편집 칸에 다시 채울 값. 쉼표로 잇는다.
     var tagsText: String
@@ -1081,7 +1084,8 @@ struct AppRow: Encodable {
         self.name = app.name
         self.summary = app.summary
         self.details = app.details
-        self.category = app.category
+        self.category = AppCategory(stored: app.category)?.title
+        self.categoryOptions = CategoryOption.options(selected: app.category)
         self.tags = app.tags
         self.tagsText = app.tags.joined(separator: ", ")
         // 목록에서 소유자를 함께 읽어두므로 여기서 관계를 만지지 않는다.
@@ -1239,6 +1243,26 @@ struct AppFormContext: Encodable {
     var versionRootPath: String
     /// 이 사람이 걸어둔 확인 중인 등록. 같은 앱을 또 만들지 않게 보여준다 (ADR-0039).
     var pendingApps: [PendingAppRow]
+    var categoryOptions: [CategoryOption]
+}
+
+/// 분류 고르기 칸의 한 줄 (`AppCategory`).
+struct CategoryOption: Encodable {
+    var value: String
+    var title: String
+    var selected: Bool
+
+    /// 고를 수 있는 분류 전부. 맨 앞은 "미분류" 이고 값이 비어 있다.
+    ///
+    /// 목록에 없는 예전 값이 저장돼 있으면 아무것도 고르지 않은 것으로 그린다. 그대로
+    /// 저장하면 미분류가 된다.
+    static func options(selected stored: String?) -> [CategoryOption] {
+        let current = AppCategory(stored: stored)
+        return [CategoryOption(value: "", title: "미분류", selected: current == nil)]
+            + AppCategory.allCases.map {
+                CategoryOption(value: $0.rawValue, title: $0.title, selected: $0 == current)
+            }
+    }
 }
 
 struct AppDetailContext: Encodable {

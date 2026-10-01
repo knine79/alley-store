@@ -57,6 +57,7 @@ struct VersionPagesController: RouteCollection, Sendable {
                 summary: app.summary ?? "",
                 description: app.details ?? "",
                 category: app.category ?? "",
+                categoryOptions: CategoryOption.options(selected: app.category),
                 tags: app.tags.joined(separator: ", "),
                 versionID: try version.requireID().uuidString,
                 versionPath: APIPath.version(try version.requireID())
@@ -78,7 +79,7 @@ struct VersionPagesController: RouteCollection, Sendable {
         }
         app.summary = blankToNil(values.summary)
         app.details = blankToNil(values.description)
-        app.category = blankToNil(values.category)
+        app.category = try AppRegistration.validatedCategory(values.category)
         if let tags = values.tags {
             app.tags = try AppRegistration.validatedTags(AppTags.split(tags))
         }
@@ -290,6 +291,7 @@ struct VersionConfirmContext: Encodable {
     var summary: String
     var description: String
     var category: String
+    var categoryOptions: [CategoryOption]
     var tags: String
     var versionID: String
     /// 브라우저가 값이 올 때까지 폴링할 경로.
