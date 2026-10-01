@@ -23,11 +23,7 @@ struct CatalogView: View {
     }
 
     private var visible: [AppDTO] {
-        guard !search.isEmpty else { return sort.sorted(model.catalog) }
-        return sort.sorted(model.catalog.filter {
-            $0.name.localizedCaseInsensitiveContains(search)
-                || $0.bundleID.localizedCaseInsensitiveContains(search)
-        })
+        CatalogSearch.filter(sort.sorted(model.catalog), query: search)
     }
 
     var body: some View {
@@ -36,7 +32,7 @@ struct CatalogView: View {
                 AppRow(app: app)
                     .tag(app.id)
             }
-            .searchable(text: $search, prompt: "앱 검색")
+            .searchable(text: $search, prompt: "이름, 개발자, 태그, 설명")
             .navigationSplitViewColumnWidth(min: 280, ideal: 320)
             .overlay {
                 if model.catalog.isEmpty, !model.isLoading {
@@ -283,6 +279,13 @@ struct AppDetailView: View {
                 }
                 if let description = app.description {
                     Text(description).textSelection(.enabled)
+                }
+                if let tags = app.tags, !tags.isEmpty {
+                    // 왜 검색에 걸렸는지 알 수 있게 보인다.
+                    Text(tags.map { "#\($0)" }.joined(separator: "  "))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                 }
 
                 Divider()
