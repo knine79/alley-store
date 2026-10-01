@@ -46,6 +46,10 @@ public final class App: Model, @unchecked Sendable {
     @Field(key: "tags")
     public var tags: [String]
 
+    /// 스크린샷이 스토리지에 놓인 자리. 올린 순서대로다 (`AppScreenshotController`).
+    @Field(key: "screenshot_keys")
+    public var screenshotKeys: [String]
+
     /// 번들 ID 가 아직 확정되지 않았다.
     ///
     /// dmg 로 올린 직후가 그렇다. `bundleID` 에는 임시값이 들어 있고, 워커가 번들에서
@@ -109,6 +113,7 @@ public final class App: Model, @unchecked Sendable {
         self.iconURL = iconURL
         self.category = category
         self.tags = tags
+        self.screenshotKeys = []
         self.$owner.id = ownerID
         // 값을 넣지 않으면 저장할 때 죽는다. Fluent 의 `@Field` 는 기본값이 없다.
         self.bundleIDPending = bundleIDPending
@@ -137,6 +142,27 @@ public struct AddAppTags: AsyncMigration {
             throw MigrationError.needsSQLDatabase
         }
         try await sql.raw("ALTER TABLE apps DROP COLUMN IF EXISTS tags").run()
+    }
+}
+
+/// 앱에 스크린샷 자리를 만든다 (이슈 #40). 이미 있는 행은 빈 배열이다.
+public struct AddAppScreenshots: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+        try await sql.raw(
+            "ALTER TABLE apps ADD COLUMN IF NOT EXISTS screenshot_keys text[] NOT NULL DEFAULT '{}'"
+        ).run()
+    }
+
+    public func revert(on database: any Database) async throws {
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+        try await sql.raw("ALTER TABLE apps DROP COLUMN IF EXISTS screenshot_keys").run()
     }
 }
 
@@ -192,6 +218,7 @@ extension App {
             iconURL: Self.absolute(iconURL, base: baseURL),
             category: category,
             tags: tags,
+            screenshotURLs: try screenshotURLs(baseURL: baseURL),
             ownerID: $owner.id,
             developerNames: developerNames,
             downloadCount: downloadCount,
@@ -340,6 +367,16 @@ extension App {
 
     /// `/` 로 시작하는 주소에만 서버 주소를 붙인다. 예전처럼 사람이 적어 넣은 외부 주소는
     /// 이미 절대 주소라 그대로 둔다.
+    /// 스크린샷 주소. 올린 순서대로다.
+    func screenshotURLs(baseURL: String?) throws -> [String] {
+        let appID = try requireID()
+        return screenshotKeys.compactMap { key in
+            AppScreenshots.id(fromKey: key).flatMap {
+                Self.absolute(APIPath.appScreenshot(appID, id: $0), base: baseURL)
+            }
+        }
+    }
+
     static func absolute(_ path: String?, base: String?) -> String? {
         guard let path, let base, path.hasPrefix("/"), !path.hasPrefix("//") else { return path }
         return base.trimmingSuffix("/") + path
