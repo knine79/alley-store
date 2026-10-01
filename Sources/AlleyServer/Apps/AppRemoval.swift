@@ -87,6 +87,7 @@ public enum AppRemoval {
             .compactMap(\.screenshotKey)
         // 아이콘은 버전이 아니라 앱에 붙어 있어서 위 목록에 안 잡힌다.
         if let icon = app.iconStorageKey { keys.append(icon) }
+        keys += app.screenshotKeys
 
         for key in keys {
             do {
