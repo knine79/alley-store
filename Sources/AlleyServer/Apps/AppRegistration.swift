@@ -44,6 +44,7 @@ enum AppRegistration {
             summary: normalized(payload.summary),
             details: normalized(payload.description),
             category: normalized(payload.category),
+            tags: try validatedTags(payload.tags ?? []),
             ownerID: try owner.requireID(),
             bundleIDPending: pending
         )
@@ -78,12 +79,22 @@ enum AppRegistration {
         if let summary = payload.summary { app.summary = normalized(summary) }
         if let details = payload.description { app.details = normalized(details) }
         if let category = payload.category { app.category = normalized(category) }
+        if let tags = payload.tags { app.tags = try validatedTags(tags) }
         if let iconURL = payload.iconURL {
             app.iconURL = iconURL.isEmpty
                 ? nil
                 : try StoreSettingsValidation.validatedLogoURL(iconURL)
         }
         try await app.save(on: database)
+    }
+
+    /// 태그 규칙을 지났는지 본다. 어긋나면 사람이 읽을 문장으로 거절한다.
+    static func validatedTags(_ raw: [String]) throws -> [String] {
+        do {
+            return try AppTags.normalize(raw)
+        } catch let error as AppTags.ValidationError {
+            throw Abort(.badRequest, reason: error.description)
+        }
     }
 
     // MARK: - 임시 번들 ID

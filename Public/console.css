@@ -1007,6 +1007,14 @@ a.tab:hover {
     color: var(--text-muted);
 }
 
+/* 앱 상세의 태그. 배지를 그대로 쓰고 줄바꿈만 허용한다. */
+.tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    margin: var(--space-2) 0;
+}
+
 /* ── 상태 배지 ───────────────────────────────────────────── */
 
 .badge {
