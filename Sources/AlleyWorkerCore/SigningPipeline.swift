@@ -29,6 +29,8 @@ public struct SigningPipeline: Sendable {
         /// 함께 만든 dmg 의 검증값 (ADR-0050). 요구받지 않았으면 nil.
         public var diskImageSHA256: String?
         public var diskImageSize: Int64?
+        /// 올린 아이콘 PNG 의 크기 (ADR-0067). 못 뽑았거나 자리가 없었으면 nil.
+        public var iconSize: Int64?
     }
 
     public enum PipelineError: Error, CustomStringConvertible {
@@ -145,6 +147,12 @@ public struct SigningPipeline: Sendable {
 
         try await client.upload(result, to: job.resultUploadURL)
 
+        // 아이콘은 zip 다음이다. 없어도 배포는 되는 값이라, 여기서 무엇이 잘못돼도
+        // 이미 올라간 결과물을 버리지 않는다 (ADR-0067).
+        if let uploadURL = job.iconUploadURL {
+            output.iconSize = await uploadIcon(of: bundle, to: uploadURL, workspace: workspace, client: client)
+        }
+
         // **dmg 는 서버가 요구할 때만 만든다** (ADR-0050). 워커는 이 잡이 무엇인지
         // 모르고, 지시서에 자리가 있으면 만들 뿐이다.
         //
@@ -160,6 +168,31 @@ public struct SigningPipeline: Sendable {
         }
 
         return output
+    }
+
+    /// 번들의 아이콘을 PNG 로 뽑아 올린다. 올렸으면 그 크기, 아니면 nil (ADR-0067).
+    ///
+    /// **실패를 삼킨다.** 서명·공증은 이미 끝났고 아이콘은 없어도 되는 값이다. 왜
+    /// 없는지는 잡 로그에 남겨서 화면에서 알 수 있게 한다.
+    private func uploadIcon(
+        of bundle: AppBundle,
+        to uploadURL: String,
+        workspace: URL,
+        client: WorkerClient
+    ) async -> Int64? {
+        guard let png = AppIcon.png(forBundleAt: bundle.url) else {
+            await progress(.uploading, "번들에서 앱 아이콘을 찾지 못했습니다. 스토어에는 아이콘 없이 나갑니다.")
+            return nil
+        }
+        let file = workspace.appendingPathComponent("icon.png")
+        do {
+            try png.write(to: file)
+            try await client.upload(file, to: uploadURL)
+            return Int64(png.count)
+        } catch {
+            await progress(.uploading, "앱 아이콘을 올리지 못했습니다: \(error)")
+            return nil
+        }
     }
 
     /// 서명·공증이 끝난 `.app` 을 dmg 로 감싼다 (ADR-0050).

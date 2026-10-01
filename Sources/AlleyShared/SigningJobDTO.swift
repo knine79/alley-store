@@ -34,6 +34,14 @@ public struct SigningJobDTO: Codable, Sendable, Identifiable, Equatable {
     /// 옵셔널이라 이 필드를 모르는 예전 워커는 지금까지처럼 zip 만 만든다. 그 결과는
     /// 모자랄 뿐 틀리지 않는다.
     public var diskImageUploadURL: String?
+    /// 번들의 앱 아이콘을 PNG 로 뽑아 여기 올리라는 뜻 (ADR-0067).
+    ///
+    /// 브라우저는 zip 의 `.icns` 만 열 수 있어서 dmg, CLI 로 올린 빌드, `Assets.car` 에만
+    /// 아이콘이 든 번들은 아이콘 없이 남았다. 워커는 macOS 라 어느 경우든 꺼낼 수 있다.
+    ///
+    /// 옵셔널이라 이 필드를 모르는 예전 워커는 아무것도 올리지 않는다. 아이콘이 없는
+    /// 채로 남을 뿐 배포는 그대로 된다.
+    public var iconUploadURL: String?
     /// 업로더가 함께 올린 entitlements plist 의 XML 원문. 안 올렸으면 nil (ADR-0020).
     ///
     /// 옵셔널이라 합성 디코더가 `decodeIfPresent` 로 읽는다. 이 필드를 모르는 예전
@@ -51,6 +59,7 @@ public struct SigningJobDTO: Codable, Sendable, Identifiable, Equatable {
         artifactDownloadURL: String,
         resultUploadURL: String,
         diskImageUploadURL: String? = nil,
+        iconUploadURL: String? = nil,
         entitlements: String? = nil,
         expiresAt: Date
     ) {
@@ -63,6 +72,7 @@ public struct SigningJobDTO: Codable, Sendable, Identifiable, Equatable {
         self.artifactDownloadURL = artifactDownloadURL
         self.resultUploadURL = resultUploadURL
         self.diskImageUploadURL = diskImageUploadURL
+        self.iconUploadURL = iconUploadURL
         self.entitlements = entitlements
         self.expiresAt = expiresAt
     }
@@ -105,6 +115,10 @@ public struct SigningJobUpdate: Codable, Sendable {
     /// 말하는 것만 믿으면 빈 dmg 가 붙은 버전이 출시된다.
     public var diskImageSHA256: String?
     public var diskImageSize: Int64?
+    /// 아이콘 PNG 를 올렸으면 그 크기 (ADR-0067). 못 뽑았거나 안 올렸으면 nil 이다.
+    ///
+    /// dmg 와 같은 이유로 서버가 스토리지에서 한 번 더 확인한다.
+    public var iconSize: Int64?
 
     public init(
         state: SigningJobState,
@@ -117,7 +131,8 @@ public struct SigningJobUpdate: Codable, Sendable {
         resultEdSignature: String? = nil,
         bundleMetadata: BundleMetadata? = nil,
         diskImageSHA256: String? = nil,
-        diskImageSize: Int64? = nil
+        diskImageSize: Int64? = nil,
+        iconSize: Int64? = nil
     ) {
         self.state = state
         self.phase = phase
@@ -130,6 +145,7 @@ public struct SigningJobUpdate: Codable, Sendable {
         self.bundleMetadata = bundleMetadata
         self.diskImageSHA256 = diskImageSHA256
         self.diskImageSize = diskImageSize
+        self.iconSize = iconSize
     }
 }
 

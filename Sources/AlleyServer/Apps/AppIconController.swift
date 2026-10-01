@@ -62,7 +62,7 @@ struct AppIconController: RouteCollection, Sendable {
         app.iconStorageKey = key
         // 화면과 스토어 앱이 보는 것은 이 값이다. 우리가 내주는 주소를 적어두면
         // `AppDTO` 를 그대로 쓰는 쪽(스토어 앱 목록)이 아무것도 몰라도 된다.
-        app.iconURL = "/apps/\(appID.uuidString)/icon.png?v=\(Int(Date().timeIntervalSince1970))"
+        app.iconURL = Self.servedURL(appID: appID)
         try await app.save(on: request.db)
 
         if let previousKey, previousKey != key {
@@ -78,6 +78,14 @@ struct AppIconController: RouteCollection, Sendable {
         )
         try await app.$versions.load(on: request.db)
         return try app.toDTO(baseURL: request.application.alleyConfig.publicBaseURL)
+    }
+
+    /// 앱에 적어두는 아이콘 주소. 우리가 내주는 경로다.
+    ///
+    /// 끝의 `v` 는 바뀔 때마다 주소를 바꿔 캐시를 끊는다. 브라우저 업로드와 워커
+    /// 보고(ADR-0067)가 같은 꼴을 써야 화면이 어느 쪽에서 왔는지 몰라도 된다.
+    static func servedURL(appID: UUID) -> String {
+        "/apps/\(appID.uuidString)/icon.png?v=\(Int(Date().timeIntervalSince1970))"
     }
 
     // MARK: - 내주기

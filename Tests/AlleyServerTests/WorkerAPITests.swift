@@ -520,6 +520,117 @@ struct SigningJobReportTests {
         }
     }
 
+    // MARK: - 번들의 아이콘 (ADR-0067)
+
+    @Test("지시서에 아이콘 자리를 내준다")
+    func ticketCarriesIconUploadURL() async throws {
+        try await withMigratedApp { app in
+            _ = app.useFakeStorage()
+            let (_, token) = try await app.makeWorker()
+            let (owner, _) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            let record = try await app.seedApp(bundleID: "com.example.tool", name: "도구", owner: owner)
+            let version = try await app.seedVersion(
+                appID: try record.requireID(), short: "1.0.0", build: 1, state: .uploaded, by: owner
+            )
+            try await SigningJob.enqueue(versionID: try version.requireID(), on: app.db)
+
+            try await app.testing().test(.GET, nextJobPath, headers: .bearer(token)) { response in
+                let ticket = try response.content.decode(SigningJobDTO.self)
+                let url = try #require(ticket.iconUploadURL)
+                #expect(url.contains("/versions/\(try version.requireID().uuidString)/icon.png"))
+            }
+        }
+    }
+
+    /// dmg 나 CLI 로 올려 브라우저가 아이콘을 못 꺼낸 앱이 여기서 아이콘을 얻는다.
+    @Test("워커가 올린 아이콘을 앱 아이콘으로 붙인다")
+    func attachesReportedIcon() async throws {
+        try await withMigratedApp { app in
+            let storage = app.useFakeStorage()
+            let (token, version, job) = try await claimedJob(on: app, storage: storage)
+            let iconKey = try await putSignedResult(for: version, storage: storage, on: app)
+            try await storage.put(PNGFixture.png(width: 512, height: 512), to: iconKey, contentType: nil)
+
+            try await reportSuccess(job, token: token, iconSize: 512, on: app)
+
+            let storedApp = try #require(try await App.find(version.$app.id, on: app.db))
+            #expect(storedApp.iconStorageKey == iconKey)
+            #expect(storedApp.iconURL?.hasPrefix("/apps/\(version.$app.id.uuidString)/icon.png?v=") == true)
+        }
+    }
+
+    /// 아이콘은 없어도 되는 값이다. 그림이 아닌 것이 올라왔다고 서명 결과를 버리지
+    /// 않고, 앱 아이콘을 그것으로 바꾸지도 않는다.
+    @Test("그림이 아니면 붙이지 않고 버전은 그대로 준비된다")
+    func ignoresInvalidIcon() async throws {
+        try await withMigratedApp { app in
+            let storage = app.useFakeStorage()
+            let (token, version, job) = try await claimedJob(on: app, storage: storage)
+            let iconKey = try await putSignedResult(for: version, storage: storage, on: app)
+            try await storage.put(Data("not a png".utf8), to: iconKey, contentType: nil)
+
+            try await reportSuccess(job, token: token, iconSize: 9, on: app)
+
+            let storedApp = try #require(try await App.find(version.$app.id, on: app.db))
+            #expect(storedApp.iconStorageKey == nil)
+            let storedVersion = try #require(try await Version.find(try version.requireID(), on: app.db))
+            #expect(storedVersion.state == .ready)
+        }
+    }
+
+    /// 실패했던 옛 빌드를 다시 돌려 성공해도 아이콘이 옛것으로 되돌아가면 안 된다.
+    @Test("더 새 빌드가 이미 서명됐으면 붙이지 않는다")
+    func keepsIconOfNewerBuild() async throws {
+        try await withMigratedApp { app in
+            let storage = app.useFakeStorage()
+            let (token, version, job) = try await claimedJob(on: app, storage: storage)
+            let owner = try #require(try await User.query(on: app.db).first())
+            try await app.seedVersion(
+                appID: version.$app.id, short: "2.0.0", build: 2, state: .ready, by: owner
+            )
+            let iconKey = try await putSignedResult(for: version, storage: storage, on: app)
+            try await storage.put(PNGFixture.png(width: 512, height: 512), to: iconKey, contentType: nil)
+
+            try await reportSuccess(job, token: token, iconSize: 512, on: app)
+
+            let storedApp = try #require(try await App.find(version.$app.id, on: app.db))
+            #expect(storedApp.iconStorageKey == nil)
+            #expect(try await storage.head(key: iconKey) == nil)
+        }
+    }
+
+    /// 서명 결과물을 스토리지에 넣고 아이콘이 놓일 키를 돌려준다.
+    private func putSignedResult(
+        for version: Version,
+        storage: FakeArtifactStorage,
+        on app: Application
+    ) async throws -> String {
+        let versionID = try version.requireID()
+        let key = app.artifactStorage.newKey(
+            ArtifactStorage.objectKey(appID: version.$app.id, versionID: versionID, kind: .signed)
+        )
+        try await storage.put(Data(repeating: 0, count: 4096), to: key, contentType: nil)
+        return app.artifactStorage.newKey(
+            ArtifactStorage.iconKey(appID: version.$app.id, versionID: versionID)
+        )
+    }
+
+    private func reportSuccess(
+        _ job: SigningJob,
+        token: String,
+        iconSize: Int64,
+        on app: Application
+    ) async throws {
+        try await app.testing().test(
+            .PATCH, try updatePath(job), headers: .bearer(token),
+            beforeRequest: { request in
+                try request.content.encode(
+                    SigningJobUpdate(state: .succeeded, resultSize: 4096, iconSize: iconSize)
+                )
+            }
+        ) { #expect($0.status == .noContent) }
+    }
+
     @Test("공증에 들어가면 버전 상태에도 남는다")
     func notarizingIsReflected() async throws {
         try await withMigratedApp { app in

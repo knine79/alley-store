@@ -203,6 +203,14 @@ public struct WorkerController: RouteCollection, Sendable {
             )
             : nil
 
+        // 아이콘 자리는 모든 잡에 내준다 (ADR-0067). 번들이 바뀔 때마다 아이콘도 바뀔 수
+        // 있고, 무엇이 바뀌었는지는 번들을 연 워커만 안다.
+        let icon = try await request.artifactStorage.uploadURL(
+            key: request.artifactStorage.newKey(
+                ArtifactStorage.iconKey(appID: appID, versionID: versionID)
+            )
+        )
+
         // 번들 ID 가 아직 임시값이면 워커가 대조 대신 정책 검사를 한다 (ADR-0034).
         // 그러려면 정책을 함께 보내야 한다. 워커는 조직 설정을 모른다.
         let settings = try await request.storeSettings()
@@ -218,11 +226,12 @@ public struct WorkerController: RouteCollection, Sendable {
             artifactDownloadURL: download.url,
             resultUploadURL: upload.url,
             diskImageUploadURL: diskImage?.url,
+            iconUploadURL: icon.url,
             // 올린 사람이 준 것이 있으면 실어 보낸다. 미서명 업로드에는 워커가 읽어낼
             // 기존 서명이 없어서, 이것 없이는 권한 없이 서명된다 (ADR-0020).
             entitlements: job.version.entitlements,
             // 가장 먼저 만료되는 쪽이 이 잡의 유효 기간이다.
-            expiresAt: [download.expiresAt, upload.expiresAt, diskImage?.expiresAt]
+            expiresAt: [download.expiresAt, upload.expiresAt, diskImage?.expiresAt, icon.expiresAt]
                 .compactMap { $0 }.min() ?? download.expiresAt
         )
     }
@@ -392,6 +401,11 @@ public struct WorkerController: RouteCollection, Sendable {
         }
         try version.transition(to: .ready)
         try await version.save(on: request.db)
+
+        // 버전이 준비된 뒤에 붙인다. 앞에서 실패하면 아이콘만 바뀐 채로 남는다.
+        if update.iconSize != nil {
+            await attachIcon(version: version, on: request)
+        }
 
         job.state = .succeeded
         job.phase = nil
@@ -615,6 +629,70 @@ public struct WorkerController: RouteCollection, Sendable {
             on: request.db
         )
         request.logger.notice("dmg 를 붙였습니다 [버전: \(versionID), 크기: \(size)바이트]")
+    }
+
+    /// 워커가 번들에서 뽑아 올린 아이콘을 앱 아이콘으로 붙인다 (ADR-0067).
+    ///
+    /// **번들이 진실이다.** 등록할 때 브라우저가 올린 아이콘이 있어도 갈아끼운다. 스토어
+    /// 목록과 Dock 에 뜨는 것이 같아야 하고, 그것을 정하는 것은 실제로 나가는 번들이다.
+    ///
+    /// **더 새 빌드가 이미 서명됐으면 붙이지 않는다.** 실패했던 옛 빌드를 다시 돌려
+    /// 성공하거나, 워커 둘이 옛 빌드를 늦게 끝내면 아이콘이 옛것으로 되돌아간다. 그때
+    /// 지워지는 것은 최신 아이콘이라 되돌릴 방법도 없다.
+    ///
+    /// 여기서 무엇이 잘못돼도 **잡을 실패시키지 않는다.** 아이콘은 없어도 되는 값이고,
+    /// 서명과 공증은 이미 끝났다. 내용은 브라우저가 올릴 때와 같은 규칙으로 본다.
+    /// 워커가 올린 것이라고 그림이 아닌 것을 목록에 걸 이유는 없다.
+    private func attachIcon(version: Version, on request: Request) async {
+        let app = version.app
+        do {
+            let appID = try app.requireID()
+            let versionID = try version.requireID()
+            let key = request.artifactStorage.newKey(
+                ArtifactStorage.iconKey(appID: appID, versionID: versionID)
+            )
+
+            let newer = try await Version.query(on: request.db)
+                .filter(\.$app.$id == appID)
+                .filter(\.$buildNumber > version.buildNumber)
+                .filter(\.$state ~~ [.ready, .released])
+                .count()
+            guard newer == 0 else {
+                request.logger.notice(
+                    "더 새 빌드가 있어 이 빌드의 아이콘은 붙이지 않습니다 [버전: \(versionID)]"
+                )
+                try? await request.artifactStorage.delete(key: key)
+                return
+            }
+
+            let data = try await request.artifactStorage.get(
+                key: key, limit: AppIconController.maximumSize
+            )
+            let size: PNGInspection.Size
+            do {
+                size = try PNGInspection.validate(data, rule: .atLeast(32), label: "앱 아이콘")
+            } catch {
+                // 아무도 가리키지 않을 오브젝트다. 남겨두면 앱을 지워도 쫓을 길이 없다.
+                try? await request.artifactStorage.delete(key: key)
+                throw error
+            }
+
+            let previousKey = app.iconStorageKey
+            app.iconStorageKey = key
+            app.iconURL = AppIconController.servedURL(appID: appID)
+            try await app.save(on: request.db)
+
+            if let previousKey, previousKey != key {
+                try? await request.artifactStorage.delete(key: previousKey)
+            }
+            request.logger.notice(
+                "번들의 아이콘을 붙였습니다 [\(app.bundleID), \(size.width)×\(size.height), 버전: \(versionID)]"
+            )
+        } catch {
+            request.logger.warning(
+                "워커가 올린 아이콘을 붙이지 못했습니다 [버전: \(version.id?.uuidString ?? "?"), 오류: \(error)]"
+            )
+        }
     }
 
     private func upsertArtifact(
