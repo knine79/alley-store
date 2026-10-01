@@ -165,8 +165,12 @@ final class StoreModel {
             self.client?.token = nil
             phase = .signedOut(meta)
         } catch {
+            // **로그아웃 화면으로 보내지 않는다.** 토큰이 틀렸다는 답(401)을 받은 것이
+            // 아니라 답을 못 받은 것이다. 잠자기에서 막 깨어 네트워크가 붙기 전에 앱이
+            // 켜지면 여기로 온다. 예전에는 로그인 화면을 띄웠고, 토큰은 멀쩡한데 사람은
+            // 로그아웃된 줄 알았다. `/meta` 가 실패했을 때와 같은 연결 화면에 둔다.
             errorMessage = error.localizedDescription
-            phase = .signedOut(meta)
+            phase = .connecting
         }
     }
 
