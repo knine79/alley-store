@@ -43,10 +43,10 @@ struct StoreClient: Sendable {
         try await get(APIPath.currentUser, as: UserDTO.self)
     }
 
-    func exchange(code: String) async throws -> TokenExchangeResponse {
+    func exchange(code: String, verifier: String) async throws -> TokenExchangeResponse {
         try await post(
             APIPath.tokenExchange,
-            body: TokenExchangeRequest(code: code),
+            body: TokenExchangeRequest(code: code, codeVerifier: verifier),
             as: TokenExchangeResponse.self,
             authenticated: false
         )

@@ -277,6 +277,17 @@ Google이 우리 서버로 `code`를 보내고, 서버가 그 `code`를 Google�
 
 OAuth 왕복에서 두 가지를 합니다. CSRF 방어와, 인증 후 어디로 돌려보낼지
 기억하기(웹/앱). Alley는 저장소를 두지 않으려고 서명된 10분짜리 JWT에 담습니다.
+스토어 앱이 보낸 PKCE challenge 도 여기 실려 공급자에게 갔다 옵니다.
+
+### PKCE (Proof Key for Code Exchange)
+
+코드를 받은 쪽이 로그인을 시작한 쪽과 같은지 확인하는 방법입니다. 시작할 때 무작위
+값(verifier)의 해시만 보내고, 코드를 바꿀 때 원래 값을 보냅니다.
+
+Alley 에서는 스토어 앱 로그인에 씁니다. 코드가 커스텀 스킴 URL 을 타고 앱으로 가는데,
+같은 스킴을 등록한 다른 앱도 그 URL 을 받을 수 있습니다. 그 앱에는 verifier 가 없어서
+코드를 받아도 세션 토큰으로 바꾸지 못합니다
+([ADR-0068](adr/0068-store-app-signs-in-through-the-default-browser.md)).
 
 ### `sub` claim
 

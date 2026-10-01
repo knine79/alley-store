@@ -42,8 +42,11 @@ public struct AuthController: RouteCollection, Sendable {
         let returnPath = target == .web
             ? OAuthStateToken.safeReturnPath(request.query[String.self, at: APIPath.returnQueryItem])
             : nil
+        let codeChallenge = target == .app
+            ? try Self.codeChallenge(in: request)
+            : nil
         let state = try await request.jwt.sign(
-            OAuthStateToken(target: target, returnPath: returnPath)
+            OAuthStateToken(target: target, returnPath: returnPath, codeChallenge: codeChallenge)
         )
         let metadata = try await request.application.oidcDirectory.metadata(
             using: request.client, logger: request.logger
@@ -164,7 +167,11 @@ public struct AuthController: RouteCollection, Sendable {
 
         case .app:
             // 앱은 일회용 코드만 받아가고, 세션 토큰은 별도 POST 로 교환한다.
-            let (plaintext, model) = AuthCode.issue(userID: userID)
+            // 로그인을 시작한 앱이 보낸 challenge 를 코드에 묶는다 (ADR-0068).
+            let (plaintext, model) = AuthCode.issue(
+                userID: userID,
+                codeChallenge: state.codeChallenge
+            )
             try await model.save(on: request.db)
             var components = URLComponents()
             components.scheme = config.store.callbackURLScheme
@@ -192,6 +199,13 @@ public struct AuthController: RouteCollection, Sendable {
         guard authCode.isUsable(at: now) else {
             throw Abort(.unauthorized, reason: "코드가 이미 사용되었거나 만료되었습니다.")
         }
+        // **맞지 않으면 소진하지 않는다.** 코드를 가로챈 쪽이 틀린 verifier 로 한 번
+        // 불러 코드를 태워버리면, 진짜 앱은 로그인을 다시 해야 한다. verifier 는
+        // 256비트라 소진하지 않아도 2분 안에 맞힐 수 없다.
+        guard authCode.admits(verifier: payload.codeVerifier) else {
+            request.logger.notice("PKCE verifier 가 맞지 않아 코드를 내주지 않았습니다")
+            throw Abort(.unauthorized, reason: "코드가 유효하지 않습니다.")
+        }
 
         // 먼저 소진 처리한다. 같은 코드로 두 번 토큰을 받는 일을 막는다.
         authCode.consumedAt = now
@@ -217,6 +231,21 @@ public struct AuthController: RouteCollection, Sendable {
     }
 
     // MARK: - 보조
+
+    /// 스토어 앱이 보낸 PKCE challenge. 없으면 nil.
+    ///
+    /// **없는 것은 받는다.** challenge 를 보내지 않던 예전 스토어 앱이 아직 남아 있다.
+    /// 그 앱은 스스로를 스토어에서 업데이트하므로, 다 바뀐 뒤에 이것을 필수로 올린다.
+    /// **잘못 생긴 것은 받지 않는다.** 그대로 묶으면 아무도 교환할 수 없는 코드가 된다.
+    static func codeChallenge(in request: Request) throws -> String? {
+        guard let raw = request.query[String.self, at: APIPath.codeChallengeQueryItem] else {
+            return nil
+        }
+        guard PKCE.isWellFormed(challenge: raw) else {
+            throw Abort(.badRequest, reason: "로그인 요청이 올바르지 않습니다. 스토어 앱에서 다시 시도해주세요.")
+        }
+        return raw
+    }
 
     private func signSession(request: Request, userID: UUID) async throws -> String {
         let ttl = TimeInterval(request.application.alleyConfig.security.sessionTTL)

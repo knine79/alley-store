@@ -187,6 +187,9 @@ private func configureMigrations(_ app: Application) {
 
     // 번들의 CFBundleVersion 을 버전에 적는다 (ADR-0066).
     app.migrations.add(AddVersionBundleVersion())
+
+    // 스토어 앱이 받는 코드에 PKCE challenge 를 묶는다 (ADR-0068).
+    app.migrations.add(AddAuthCodeChallenge())
 }
 
 /// 미들웨어 스택.
