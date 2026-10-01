@@ -12,6 +12,8 @@ struct CatalogView: View {
 
     @State private var selection: AppDTO.ID?
     @State private var search = ""
+    /// 고른 정렬. 다음에 켰을 때도 그대로 둔다. 매번 다시 고르게 하면 고르지 않는다.
+    @AppStorage("catalogSort") private var sort: CatalogSort = .name
 
     init(meta: StoreMeta, user: UserDTO, selection: AppDTO.ID? = nil) {
         self.meta = meta
@@ -21,11 +23,11 @@ struct CatalogView: View {
     }
 
     private var visible: [AppDTO] {
-        guard !search.isEmpty else { return model.catalog }
-        return model.catalog.filter {
+        guard !search.isEmpty else { return sort.sorted(model.catalog) }
+        return sort.sorted(model.catalog.filter {
             $0.name.localizedCaseInsensitiveContains(search)
                 || $0.bundleID.localizedCaseInsensitiveContains(search)
-        }
+        })
     }
 
     var body: some View {
@@ -61,6 +63,17 @@ struct CatalogView: View {
             model.updateCount > 0 ? "업데이트 \(model.updateCount)개" : ""
         )
         .toolbar {
+            ToolbarItem {
+                Picker(selection: $sort) {
+                    ForEach(CatalogSort.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                } label: {
+                    Label("정렬", systemImage: "arrow.up.arrow.down")
+                }
+                .pickerStyle(.menu)
+                .help("목록 정렬")
+            }
             ToolbarItem {
                 Button {
                     Task { await model.refresh() }
