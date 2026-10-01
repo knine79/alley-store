@@ -43,6 +43,8 @@ public enum APIPath {
     public static let appCallbackStateQueryItem = "state"
     /// 스토어 앱이 일회용 코드를 세션 토큰으로 교환하는 경로.
     public static let tokenExchange = "\(apiRoot)/auth/token"
+    /// 스토어 앱이 아직 유효한 세션 토큰을 새 토큰으로 바꾸는 경로 (ADR-0069).
+    public static let tokenRenewal = "\(apiRoot)/auth/token/renew"
 
     /// CLI 를 연결하는 화면. 브라우저가 연다 (ADR-0064).
     public static let cliAuthorize = "/auth/cli"

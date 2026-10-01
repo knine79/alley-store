@@ -21,6 +21,7 @@ public struct AuthController: RouteCollection, Sendable {
 
         let authenticated = routes.grouped(SessionAuthenticator(), User.guardMiddleware())
         authenticated.get(APIPath.currentUser.pathComponents, use: currentUser)
+        authenticated.post(APIPath.tokenRenewal.pathComponents, use: renewToken)
     }
 
     // MARK: - 로그인 시작
@@ -244,6 +245,48 @@ public struct AuthController: RouteCollection, Sendable {
         return TokenExchangeResponse(
             token: token,
             expiresIn: request.application.alleyConfig.security.sessionTTL,
+            user: try user.toDTO()
+        )
+    }
+
+    // MARK: - 앱 토큰 갱신
+
+    /// 아직 유효한 세션 토큰을 새 토큰으로 바꾼다 (ADR-0069).
+    ///
+    /// 세션 수명은 며칠이고 스토어 앱은 몇 주씩 켜져 있다. 갱신할 길이 없으면 매일
+    /// 쓰는 사람도 수명이 다하는 날 로그아웃된다.
+    ///
+    /// 여기까지 왔다면 `SessionAuthenticator` 가 서명, 만료, 탈퇴 여부를 이미 봤다.
+    /// 여기서는 그 밖의 두 가지를 본다.
+    @Sendable
+    func renewToken(request: Request) async throws -> TokenExchangeResponse {
+        let user = try request.requireUser()
+        // **헤더로 온 토큰만 갱신한다.** 쿠키는 브라우저가 알아서 붙이므로, 쿠키로
+        // 갱신해주면 다른 사이트가 사람 모르게 이 경로를 부르게 할 수 있다. 웹 콘솔은
+        // 이 경로를 쓰지 않는다.
+        guard let bearer = request.headers.bearerAuthorization else {
+            throw Abort(.unauthorized, reason: "세션 토큰을 Authorization 헤더로 보내세요.")
+        }
+        let current = try await request.jwt.verify(bearer.token, as: SessionToken.self)
+
+        // 갱신에 끝을 둔다. 지나면 토큰이 만료될 때까지 쓰다가 다시 로그인한다.
+        // 401 이 아니라 403 인 것은 이 토큰이 아직 유효하기 때문이다. 앱이 이 답을
+        // 보고 토큰을 버리면 멀쩡한 세션을 앞당겨 끊는다.
+        guard current.isRenewable(at: Date()) else {
+            throw Abort(.forbidden, reason: "로그인한 지 오래되어 갱신할 수 없습니다. 다시 로그인하세요.")
+        }
+
+        let now = Date()
+        let payload = SessionToken(
+            userID: try user.requireID(),
+            issuedAt: now,
+            ttl: TimeInterval(request.application.alleyConfig.security.sessionTTL),
+            authenticatedAt: current.authenticationDate
+        )
+        return TokenExchangeResponse(
+            token: try await request.jwt.sign(payload),
+            // 90일에서 잘렸으면 `SESSION_TTL` 보다 짧다. 실제로 남은 시간을 준다.
+            expiresIn: Int(payload.expiration.value.timeIntervalSince(now)),
             user: try user.toDTO()
         )
     }

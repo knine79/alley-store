@@ -226,7 +226,9 @@ PNG 이고, 바깥은 "어느 크기 자리에 무엇이 들어 있다" 를 적�
 저장하지 않아도 내용을 믿을 수 있습니다.
 
 Alley는 세션 토큰과 OAuth `state`에 씁니다. 세션 토큰에 무엇을 담고 무엇을 담지
-않는지는 [ADR-0008](adr/0008-session-token-design.md)에 있습니다.
+않는지는 [ADR-0008](adr/0008-session-token-design.md)에 있습니다. 세션 토큰의
+`auth_time` 은 처음 로그인한 시각이고, 스토어 앱이 토큰을 갱신해도 바뀌지 않습니다
+([ADR-0069](adr/0069-store-app-renews-its-session-token.md)).
 
 ### Bearer 토큰
 
