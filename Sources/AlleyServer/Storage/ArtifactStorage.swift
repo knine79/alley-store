@@ -144,6 +144,18 @@ public struct ArtifactStorage: ArtifactStoring {
         "apps/\(appID.uuidString)/versions/\(versionID.uuidString)/\(kind.rawValue).\(kind.fileExtension)"
     }
 
+    /// 워커가 번들에서 뽑은 아이콘이 놓이는 자리 (ADR-0067).
+    ///
+    /// `ArtifactKind` 에 넣지 않는다. 그것은 받아서 설치하는 파일의 갈래이고, 아이콘은
+    /// 버전이 아니라 앱에 붙는다. 버전 아래에 두는 것은 잡마다 미리 자리를 내줘야 해서다.
+    ///
+    /// 다른 이미지와 달리 키에 UUID 가 없다. 아이콘 서빙과 캐시는 "키가 같으면 내용도
+    /// 같다" 에 기대는데(`StoredImageCache`), 여기서는 버전의 번들이 바뀌지 않아서
+    /// 그것이 성립한다. 같은 버전을 다시 서명해도 같은 그림이 나온다.
+    public static func iconKey(appID: UUID, versionID: UUID) -> String {
+        "apps/\(appID.uuidString)/versions/\(versionID.uuidString)/icon.png"
+    }
+
     public func uploadURL(key: String) async throws -> PresignedURL {
         try await sign(key: key, method: .PUT)
     }
