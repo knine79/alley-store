@@ -74,6 +74,24 @@ struct SessionRenewalTests {
         }
     }
 
+    @Test("만료가 잘리면 응답의 남은 시간도 그만큼 줄어든다")
+    func expiresInReflectsCap() async throws {
+        try await withMigratedApp { app in
+            let (user, _) = try await app.makeUser(email: "user@example.com", role: .user)
+            // 90일까지 하루 남았다. `SESSION_TTL` 이 7일이어도 하루만 산다.
+            let old = try await sign(
+                app, userID: try user.requireID(),
+                authenticatedAt: Date().addingTimeInterval(-SessionToken.maximumAge + 86_400)
+            )
+
+            try await app.testing().test(.POST, APIPath.tokenRenewal, headers: .bearer(old)) { response in
+                #expect(response.status == .ok)
+                let body = try response.content.decode(TokenExchangeResponse.self)
+                #expect(abs(body.expiresIn - 86_400) < 10)
+            }
+        }
+    }
+
     @Test("갱신한 토큰도 로그인한 지 90일을 넘겨 살지 않는다")
     func renewedTokenStopsAtMaximumAge() {
         let loggedInAt = Date(timeIntervalSince1970: 1_790_000_000)
