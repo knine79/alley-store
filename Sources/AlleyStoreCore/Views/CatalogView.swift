@@ -401,25 +401,26 @@ struct AppIcon: View {
         Color(hue: Double(abs(app.bundleID.hashValue) % 360) / 360, saturation: 0.45, brightness: 0.75)
     }
 
+    /// 여백을 걷어낸 아이콘 (`IconImages`). 받기 전이나 실패하면 nil 이고 그동안 글자를 그린다.
+    @State private var image: NSImage?
+
     var body: some View {
         Group {
-            if let url = app.iconURL.flatMap(URL.init(string:)) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFit()
-                    default:
-                        // 받는 동안과 실패했을 때가 같다. 둘 다 "그림이 없다" 이고,
-                        // 자리가 비어 있으면 줄 높이가 흔들린다.
-                        placeholder
-                    }
-                }
+            if let image {
+                Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
             } else {
+                // 받는 동안과 실패했을 때가 같다. 둘 다 "그림이 없다" 이고,
+                // 자리가 비어 있으면 줄 높이가 흔들린다.
                 placeholder
             }
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+        .task(id: app.iconURL) {
+            image = nil
+            guard let url = app.iconURL.flatMap(URL.init(string:)) else { return }
+            image = await IconImages.shared.image(for: url)
+        }
     }
 
     private var placeholder: some View {
