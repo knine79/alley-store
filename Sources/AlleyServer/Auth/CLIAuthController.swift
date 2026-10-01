@@ -80,6 +80,12 @@ struct CLIAuthController: RouteCollection, Sendable {
         guard code.isUsable(at: now) else {
             throw Abort(.unauthorized, reason: "코드가 이미 사용되었거나 만료되었습니다.")
         }
+        // **스토어 앱이 받은 코드는 여기서 바꿔주지 않는다** (ADR-0068). 두 교환이 같은
+        // 표를 쓰므로, 막지 않으면 앱 콜백에서 가로챈 코드를 verifier 없이 이리 가져와
+        // 90일짜리 사람 토큰으로 바꿔갈 수 있다. CLI 는 verifier 를 보내지 않는다.
+        guard code.admits(verifier: nil) else {
+            throw Abort(.unauthorized, reason: "코드가 유효하지 않습니다.")
+        }
 
         // 먼저 소진 처리한다. 같은 코드로 두 번 받아가는 일을 막는다.
         code.consumedAt = now

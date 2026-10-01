@@ -8,6 +8,7 @@ import SwiftUI
 /// `@main` 을 여기 붙이지 않고 실행 타깃의 `main.swift` 가 이 타입을 띄운다.
 /// 앱 코드가 라이브러리에 있어야 테스트가 그대로 임포트할 수 있다.
 public struct AlleyStoreApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = StoreModel()
 
     public init() {}

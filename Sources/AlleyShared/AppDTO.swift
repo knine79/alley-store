@@ -403,9 +403,15 @@ public struct AddAppMemberRequest: Codable, Sendable {
 /// 그 코드를 이 요청으로 한 번 교환한다 (ADR-0008).
 public struct TokenExchangeRequest: Codable, Sendable {
     public var code: String
+    /// 로그인을 시작할 때 보낸 challenge 의 원래 값 (ADR-0068).
+    ///
+    /// 비어 있을 수 있다. challenge 없이 로그인하던 예전 앱이 아직 남아 있다.
+    /// 서버는 challenge 가 묶인 코드에만 이 값을 요구한다.
+    public var codeVerifier: String?
 
-    public init(code: String) {
+    public init(code: String, codeVerifier: String? = nil) {
         self.code = code
+        self.codeVerifier = codeVerifier
     }
 }
 

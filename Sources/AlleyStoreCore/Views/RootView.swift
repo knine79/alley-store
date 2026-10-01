@@ -113,6 +113,19 @@ struct SignInView: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
 
+            // 로그인은 브라우저에서 한다 (ADR-0068). 앱에 아무 표시가 없으면 브라우저를
+            // 닫은 사람이 무엇을 기다리는지 모른다. 버튼을 다시 누르면 처음부터 한다.
+            if model.isWaitingForBrowser {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("브라우저에서 로그인을 마치면 이 창으로 돌아옵니다.")
+                    Button("취소") { model.cancelSignIn() }
+                        .buttonStyle(.link)
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            }
+
             if !meta.allowedEmailDomains.isEmpty {
                 Text("로그인 가능한 도메인: \(meta.allowedEmailDomains.joined(separator: ", "))")
                     .font(.callout)
