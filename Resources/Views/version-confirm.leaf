@@ -64,7 +64,9 @@
 
         <label class="field">
             <span class="field-label">분류 <span class="field-optional">선택</span></span>
-            <input class="input" type="text" name="category" value="#(category)">
+            <select class="input" name="category">
+                #for(option in categoryOptions):<option value="#(option.value)"#if(option.selected): selected#endif>#(option.title)</option>#endfor
+            </select>
         </label>
 
         <label class="field">
