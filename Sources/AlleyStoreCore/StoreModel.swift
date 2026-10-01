@@ -180,13 +180,35 @@ final class StoreModel {
     /// 로그인한 지 오래되어 서버가 거절해도(403) 남은 수명 동안은 그대로 쓴다. 정말
     /// 만료되면 다음 요청이 401 을 받고 그때 로그인 화면으로 간다.
     private func renewSessionIfDue() async {
-        guard let client, let token = client.token, SessionRenewal.isDue(token) else { return }
-        guard let renewed = try? await client.renewSession() else { return }
+        guard let client, let token = client.token, token != unrenewableToken,
+              SessionRenewal.isDue(token)
+        else { return }
+
+        let renewed: TokenExchangeResponse
+        do {
+            renewed = try await client.renewSession()
+        } catch StoreClient.ClientError.server(let status, _) where status == 403 || status == 404 {
+            // 로그인한 지 오래됐거나(403) 갱신 경로가 없는 예전 서버다(404). 다시 물어도
+            // 답이 같으니 이 토큰으로는 그만 묻는다. 연결 실패는 다음에 다시 묻는다.
+            unrenewableToken = token
+            return
+        } catch {
+            return
+        }
+
         // 기다리는 동안 로그아웃했으면 새 토큰을 넣지 않는다. 넣으면 로그아웃이 되살아난다.
         guard self.client?.token == token else { return }
         credentials.setToken(renewed.token, for: client.server)
         self.client?.token = renewed.token
+        // 90일 끝에 닿으면 갱신해도 만료가 늘지 않는다. 그런 토큰으로는 다시 묻지 않는다.
+        // 묻지 않으면 수명의 절반 지점이 계속 당겨져 30분마다 헛되이 갱신한다.
+        if !SessionRenewal.extends(renewed.token, beyond: token) {
+            unrenewableToken = renewed.token
+        }
     }
+
+    /// 갱신해도 소용없는 것으로 확인된 토큰. 토큰이 바뀌면 저절로 풀린다.
+    private var unrenewableToken: String?
 
     // MARK: - 목록
 

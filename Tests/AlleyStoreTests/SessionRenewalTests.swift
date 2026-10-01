@@ -41,6 +41,19 @@ struct SessionRenewalTimingTests {
         #expect(abs(lifetime.issuedAt.timeIntervalSince1970 - (issued + 0.123456)) < 0.001)
     }
 
+    @Test("만료가 늘어났는지 본다")
+    func detectsExtension() {
+        let current = token(iat: issued, exp: issued + week)
+        let longer = token(iat: issued + week / 2, exp: issued + week * 1.5)
+        // 90일 끝에 닿으면 서버가 같은 시각에서 만료를 자른다.
+        let capped = token(iat: issued + week / 2, exp: issued + week)
+
+        #expect(SessionRenewal.extends(longer, beyond: current))
+        #expect(!SessionRenewal.extends(capped, beyond: current))
+        // 읽을 수 없으면 늘어난 것으로 본다. 갱신을 멈추는 쪽으로 틀리면 로그아웃된다.
+        #expect(SessionRenewal.extends("not-a-jwt", beyond: current))
+    }
+
     @Test("읽을 수 없는 토큰은 갱신하지 않는다", arguments: [
         "", "not-a-jwt", "a.b", "a.!!!.c", "a.e30.c",
     ])

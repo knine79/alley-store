@@ -21,6 +21,18 @@ enum SessionRenewal {
         return now >= halfway
     }
 
+    /// 새 토큰이 지금 토큰보다 늦게 만료되는지.
+    ///
+    /// 서버는 로그인한 지 90일에서 만료를 자른다. 거기 닿은 뒤로는 갱신해도 만료가 같다.
+    /// 읽을 수 없으면 늘어난 것으로 본다. 갱신을 멈추는 쪽으로 잘못 짚으면 일주일 뒤
+    /// 로그아웃되고, 반대로 짚으면 요청 몇 번이 헛돌 뿐이다.
+    static func extends(_ renewed: String, beyond current: String) -> Bool {
+        guard let new = lifetime(of: renewed)?.expiresAt,
+              let old = lifetime(of: current)?.expiresAt
+        else { return true }
+        return new > old
+    }
+
     /// 토큰의 발급 시각과 만료 시각.
     static func lifetime(of token: String) -> (issuedAt: Date, expiresAt: Date)? {
         let parts = token.split(separator: ".", omittingEmptySubsequences: false)

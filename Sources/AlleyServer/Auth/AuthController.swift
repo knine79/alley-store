@@ -276,18 +276,17 @@ public struct AuthController: RouteCollection, Sendable {
             throw Abort(.forbidden, reason: "로그인한 지 오래되어 갱신할 수 없습니다. 다시 로그인하세요.")
         }
 
-        let ttl = TimeInterval(request.application.alleyConfig.security.sessionTTL)
-        let token = try await request.jwt.sign(
-            SessionToken(
-                userID: try user.requireID(),
-                issuedAt: Date(),
-                ttl: ttl,
-                authenticatedAt: current.authenticationDate
-            )
+        let now = Date()
+        let payload = SessionToken(
+            userID: try user.requireID(),
+            issuedAt: now,
+            ttl: TimeInterval(request.application.alleyConfig.security.sessionTTL),
+            authenticatedAt: current.authenticationDate
         )
         return TokenExchangeResponse(
-            token: token,
-            expiresIn: request.application.alleyConfig.security.sessionTTL,
+            token: try await request.jwt.sign(payload),
+            // 90일에서 잘렸으면 `SESSION_TTL` 보다 짧다. 실제로 남은 시간을 준다.
+            expiresIn: Int(payload.expiration.value.timeIntervalSince(now)),
             user: try user.toDTO()
         )
     }
