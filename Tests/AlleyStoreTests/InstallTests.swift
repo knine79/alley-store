@@ -1,5 +1,6 @@
 import AlleyShared
 import CryptoKit
+import CoreGraphics
 import Foundation
 import Testing
 
@@ -417,6 +418,46 @@ struct JosaTests {
         #expect(Josa.direction("2.1") == "2.1로")
         #expect(Josa.direction("1.0") == "1.0으로")
         #expect(Josa.direction("서울") == "서울로")
+    }
+}
+
+@Suite("아이콘 여백")
+struct IconTrimTests {
+    /// 가운데에만 불투명한 사각형이 있고 둘레가 투명한 그림.
+    private func padded(canvas: Int, content: Int, shadowAlpha: CGFloat = 0) -> CGImage {
+        let context = CGContext(
+            data: nil, width: canvas, height: canvas, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        let inset = CGFloat(canvas - content) / 2
+        if shadowAlpha > 0 {
+            // 그림자처럼 반투명한 띠를 그림 바깥에 두른다.
+            context.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: shadowAlpha))
+            context.fill(CGRect(x: inset - 40, y: inset - 40, width: CGFloat(content) + 80, height: CGFloat(content) + 80))
+        }
+        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.fill(CGRect(x: inset, y: inset, width: CGFloat(content), height: CGFloat(content)))
+        return context.makeImage()!
+    }
+
+    @Test("둘레의 투명한 여백을 걷어낸다")
+    func trimsTransparentMargin() throws {
+        let bounds = try #require(IconImages.opaqueBounds(of: padded(canvas: 1024, content: 824)))
+        // 256 으로 줄여서 판단하므로 몇 픽셀 오차가 있다.
+        #expect(abs(bounds.width - 824) <= 8)
+        #expect(abs(bounds.minX - 100) <= 8)
+    }
+
+    @Test("반투명한 그림자는 여백으로 친다")
+    func ignoresShadow() throws {
+        let bounds = try #require(IconImages.opaqueBounds(of: padded(canvas: 1024, content: 824, shadowAlpha: 0.3)))
+        #expect(abs(bounds.width - 824) <= 8)
+    }
+
+    @Test("꽉 찬 그림은 그대로 둔다")
+    func keepsFullBleed() throws {
+        let bounds = try #require(IconImages.opaqueBounds(of: padded(canvas: 512, content: 512)))
+        #expect(bounds == CGRect(x: 0, y: 0, width: 512, height: 512))
     }
 }
 
