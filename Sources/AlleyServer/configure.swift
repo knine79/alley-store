@@ -190,6 +190,9 @@ private func configureMigrations(_ app: Application) {
 
     // 스토어 앱이 받는 코드에 PKCE challenge 를 묶는다 (ADR-0068).
     app.migrations.add(AddAuthCodeChallenge())
+
+    // 앱에 검색용 태그를 붙인다 (이슈 #43).
+    app.migrations.add(AddAppTags())
 }
 
 /// 미들웨어 스택.
