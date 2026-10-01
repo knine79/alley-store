@@ -159,7 +159,8 @@ struct AppPagesController: RouteCollection, Sendable {
                     name: values.name ?? "",
                     summary: values.summary,
                     description: values.description,
-                    category: values.category
+                    category: values.category,
+                    tags: values.tags.map(AppTags.split)
                 ),
                 owner: user,
                 settings: settings,
@@ -512,7 +513,8 @@ struct AppPagesController: RouteCollection, Sendable {
                 name: values.name,
                 summary: values.summary ?? "",
                 description: values.description ?? "",
-                category: values.category ?? ""
+                category: values.category ?? "",
+                tags: AppTags.split(values.tags ?? "")
             ),
             on: request.db
         )
@@ -1049,6 +1051,9 @@ struct AppRow: Encodable {
     var summary: String?
     var details: String?
     var category: String?
+    var tags: [String]
+    /// 편집 칸에 다시 채울 값. 쉼표로 잇는다.
+    var tagsText: String
     var ownerEmail: String
     var latestReleasedVersion: String?
     /// 별점 평균. 아무도 안 남겼으면 nil.
@@ -1077,6 +1082,8 @@ struct AppRow: Encodable {
         self.summary = app.summary
         self.details = app.details
         self.category = app.category
+        self.tags = app.tags
+        self.tagsText = app.tags.joined(separator: ", ")
         // 목록에서 소유자를 함께 읽어두므로 여기서 관계를 만지지 않는다.
         self.ownerEmail = app.$owner.value?.email ?? ""
         self.latestReleasedVersion = latestReleased?.shortVersion
@@ -1193,6 +1200,8 @@ struct AppFormValues: Codable {
     var summary: String?
     var description: String?
     var category: String?
+    /// 쉼표로 이어 적은 태그.
+    var tags: String?
 }
 
 /// 등록이 끝나지 않은 앱 한 줄. 올린 사람에게만 보인다.

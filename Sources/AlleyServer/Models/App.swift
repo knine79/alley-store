@@ -42,6 +42,10 @@ public final class App: Model, @unchecked Sendable {
     @OptionalField(key: "category")
     public var category: String?
 
+    /// 검색에 걸리고 싶은 낱말 (`AppTags`). 없으면 빈 배열이다.
+    @Field(key: "tags")
+    public var tags: [String]
+
     /// 번들 ID 가 아직 확정되지 않았다.
     ///
     /// dmg 로 올린 직후가 그렇다. `bundleID` 에는 임시값이 들어 있고, 워커가 번들에서
@@ -92,6 +96,7 @@ public final class App: Model, @unchecked Sendable {
         details: String? = nil,
         iconURL: String? = nil,
         category: String? = nil,
+        tags: [String] = [],
         ownerID: UUID,
         bundleIDPending: Bool = false,
         alerts: AlertDelivery = .people
@@ -103,10 +108,35 @@ public final class App: Model, @unchecked Sendable {
         self.details = details
         self.iconURL = iconURL
         self.category = category
+        self.tags = tags
         self.$owner.id = ownerID
         // 값을 넣지 않으면 저장할 때 죽는다. Fluent 의 `@Field` 는 기본값이 없다.
         self.bundleIDPending = bundleIDPending
         self.alertsRaw = alerts.rawValue
+    }
+}
+
+/// 앱에 태그를 붙인다 (이슈 #43).
+///
+/// 이미 있는 행은 빈 배열로 채운다. NULL 을 허용하면 읽는 곳마다 "없을 수도 있다" 를
+/// 다뤄야 하는데, 태그가 없는 것과 NULL 은 뜻이 같다.
+public struct AddAppTags: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+        try await sql.raw(
+            "ALTER TABLE apps ADD COLUMN IF NOT EXISTS tags text[] NOT NULL DEFAULT '{}'"
+        ).run()
+    }
+
+    public func revert(on database: any Database) async throws {
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+        try await sql.raw("ALTER TABLE apps DROP COLUMN IF EXISTS tags").run()
     }
 }
 
@@ -137,6 +167,7 @@ extension App {
             description: details,
             iconURL: Self.absolute(iconURL, base: baseURL),
             category: category,
+            tags: tags,
             ownerID: $owner.id,
             developerNames: developerNames,
             downloadCount: downloadCount,

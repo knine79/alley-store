@@ -62,6 +62,11 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
     public var description: String?
     public var iconURL: String?
     public var category: String?
+    /// 검색에 걸리고 싶은 낱말. 개발자가 붙인다 (`AppTags`).
+    ///
+    /// 분류(`category`)와 다르다. 분류는 앱마다 하나이고 목록을 거르는 데 쓰고, 태그는
+    /// 여러 개이고 검색어와 맞춰보는 데 쓴다. 이 값을 모르는 예전 서버에서는 nil 이다.
+    public var tags: [String]?
     public var ownerID: UUID
     /// 이 앱을 만드는 사람들의 이름. 소유자가 맨 앞이고 공동 관리자가 뒤따른다.
     ///
@@ -103,6 +108,7 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
         description: String? = nil,
         iconURL: String? = nil,
         category: String? = nil,
+        tags: [String]? = nil,
         ownerID: UUID,
         developerNames: [String]? = nil,
         downloadCount: Int? = nil,
@@ -120,6 +126,7 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
         self.description = description
         self.iconURL = iconURL
         self.category = category
+        self.tags = tags
         self.ownerID = ownerID
         self.developerNames = developerNames
         self.downloadCount = downloadCount
@@ -205,19 +212,23 @@ public struct CreateAppRequest: Codable, Sendable {
     public var summary: String?
     public var description: String?
     public var category: String?
+    /// 검색용 태그 (`AppTags`). 옵셔널이라 이 값을 모르는 예전 클라이언트도 그대로 된다.
+    public var tags: [String]?
 
     public init(
         bundleID: String? = nil,
         name: String,
         summary: String? = nil,
         description: String? = nil,
-        category: String? = nil
+        category: String? = nil,
+        tags: [String]? = nil
     ) {
         self.bundleID = bundleID
         self.name = name
         self.summary = summary
         self.description = description
         self.category = category
+        self.tags = tags
     }
 }
 
@@ -851,18 +862,22 @@ public struct UpdateAppRequest: Codable, Sendable {
     public var description: String?
     public var category: String?
     public var iconURL: String?
+    /// 보내면 통째로 바꾼다. 빈 배열이면 모두 뗀다. 안 보내면 그대로 둔다.
+    public var tags: [String]?
 
     public init(
         name: String? = nil,
         summary: String? = nil,
         description: String? = nil,
         category: String? = nil,
-        iconURL: String? = nil
+        iconURL: String? = nil,
+        tags: [String]? = nil
     ) {
         self.name = name
         self.summary = summary
         self.description = description
         self.category = category
         self.iconURL = iconURL
+        self.tags = tags
     }
 }
