@@ -35,7 +35,7 @@ struct CatalogView: View {
                     .tag(app.id)
             }
             .searchable(text: $search, prompt: "앱 검색")
-            .navigationSplitViewColumnWidth(min: 260, ideal: 300)
+            .navigationSplitViewColumnWidth(min: 280, ideal: 320)
             .overlay {
                 if model.catalog.isEmpty, !model.isLoading {
                     ContentUnavailableView(
@@ -124,27 +124,42 @@ struct AppRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AppIcon(app: app, size: 32)
-            VStack(alignment: .leading, spacing: 2) {
+            // 아이콘으로 앱을 알아보는 자리라 작게 두지 않는다. 32 에서는 아이콘의 그림이
+            // 뭉개져 이름을 읽어야 했다.
+            AppIcon(app: app, size: 44)
+            VStack(alignment: .leading, spacing: 3) {
                 Text(app.name)
                     .font(.body.weight(.medium))
+                    .lineLimit(1)
                 // 설치 상태는 적지 않는다. 오른쪽 버튼(설치·업데이트·열기)이 이미 말한다.
-                // 그 자리에는 누가 만들었는지를 둔다.
+                // 그 자리에는 누가 만들었고 얼마나 받아갔는지를 둔다. 폭이 모자라면 이름이
+                // 먼저 줄어들고 숫자는 남는다.
                 HStack(spacing: 6) {
                     if let developers = app.developerNames, !developers.isEmpty {
-                        Text(developers.joined(separator: ", ")).lineLimit(1)
+                        Text(developers.joined(separator: ", "))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .layoutPriority(-1)
+                    }
+                    if let count = app.downloadCount {
+                        // 그림을 글자 안에 넣는다. `Label` 은 그림과 숫자 사이를 넓게 벌려,
+                        // 좁은 행에서 개발자 이름이 먼저 잘려 나간다.
+                        Text("\(Image(systemName: "arrow.down.circle")) \(count.formatted())")
+                            .fixedSize()
+                            .accessibilityLabel("다운로드 \(count.formatted())회")
                     }
                     if let average = app.rating?.displayAverage {
-                        Text("★ \(average)")
+                        Text("★ \(average)").fixedSize()
                     }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
-            Spacer()
+            Spacer(minLength: 8)
             InstallButton(app: app)
+                .fixedSize()
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
     }
 }
 
@@ -339,8 +354,9 @@ struct AppDetailView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 16) {
-            AppIcon(app: app, size: 64)
+        // 아이콘이 커서 위쪽에 맞추면 이름이 아이콘 꼭대기에 붙어 보인다. 가운데로 맞춘다.
+        HStack(alignment: .center, spacing: 20) {
+            AppIcon(app: app, size: 96)
             VStack(alignment: .leading, spacing: 4) {
                 Text(app.name).font(.largeTitle.weight(.semibold))
                 // 누가 만들었고 얼마나 받아갔는지를 이름 바로 아래에 둔다. 받을지 말지를
