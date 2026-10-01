@@ -185,7 +185,7 @@ struct InstallButton: View {
             let state = model.state(of: app)
             Button(state.actionTitle) {
                 if state.opensInstalledApp {
-                    model.open(app)
+                    Task { await model.open(app) }
                 } else {
                     install(state)
                 }
