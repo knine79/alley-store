@@ -52,6 +52,10 @@ public struct AppController: RouteCollection, Sendable {
         // 어느 앱이 스토어 앱인지는 서버만 안다. 클라이언트가 번들 ID 로 견주면
         // 번들 ID 를 바꾼 뒤에 어긋난다 (`AppDTO.isStoreApp`).
         let storeAppID = try await request.storeAppSettings().$app.id
+        let downloads = try await DownloadStats.totals(
+            ofApps: apps.map { try $0.requireID() },
+            on: request.db
+        )
         let visibility = try await AppVisibility.of(user, on: request.db)
 
         return try apps.compactMap { app in
@@ -64,6 +68,7 @@ public struct AppController: RouteCollection, Sendable {
                 latestReleased: released,
                 rating: ratings[appID],
                 isStoreApp: appID == storeAppID,
+                downloadCount: downloads[appID] ?? 0,
                 baseURL: request.application.alleyConfig.publicBaseURL
             )
         }
@@ -121,7 +126,13 @@ public struct AppController: RouteCollection, Sendable {
         for member in app.members { try await member.$user.load(on: request.db) }
         let latest = try await App.latestReleasedVersion(ofApp: appID, on: request.db)
         let rating = try await Feedback.summary(ofApp: appID, on: request.db)
-        return try app.toDTO(latestReleased: latest, rating: rating, baseURL: request.application.alleyConfig.publicBaseURL)
+        let downloads = try await DownloadStats.summary(ofApp: appID, on: request.db).total
+        return try app.toDTO(
+            latestReleased: latest,
+            rating: rating,
+            downloadCount: downloads,
+            baseURL: request.application.alleyConfig.publicBaseURL
+        )
     }
 
     @Sendable

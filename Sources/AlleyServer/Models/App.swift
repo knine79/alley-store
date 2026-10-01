@@ -125,6 +125,7 @@ extension App {
         latestReleased: Version? = nil,
         rating: RatingSummary? = nil,
         isStoreApp: Bool = false,
+        downloadCount: Int? = nil,
         baseURL: String? = nil
     ) throws -> AppDTO {
         AppDTO(
@@ -138,6 +139,7 @@ extension App {
             category: category,
             ownerID: $owner.id,
             developerNames: developerNames,
+            downloadCount: downloadCount,
             latestReleasedVersion: try latestReleased?.toDTO(),
             rating: rating,
             isStoreApp: isStoreApp ? true : nil,

@@ -78,4 +78,42 @@ struct AppListAPITests {
             }
         }
     }
+
+    @Test("다운로드 수를 모든 버전에 걸쳐 센다")
+    func includesDownloadCount() async throws {
+        try await withMigratedApp { app in
+            let (record, session) = try await seed(on: app)
+            let owner = try #require(try await User.query(on: app.db).first())
+            let appID = try record.requireID()
+            let old = try await app.seedVersion(appID: appID, short: "1.0", build: 1, state: .released, by: owner)
+            let new = try await app.seedVersion(appID: appID, short: "1.1", build: 2, state: .released, by: owner)
+            // 같은 사람이 두 번 받아도 두 번이다. 익명(웹에서 받은 것)도 센다.
+            for version in [old, new, new] {
+                try await Download(userID: try owner.requireID(), versionID: try version.requireID()).save(on: app.db)
+            }
+            try await Download(userID: nil, versionID: try new.requireID()).save(on: app.db)
+
+            try await app.testing().test(.GET, APIPath.apps, headers: .sessionCookie(session)) { response in
+                let apps = try response.content.decode([AppDTO].self)
+                #expect(apps.first?.downloadCount == 4)
+            }
+            try await app.testing().test(
+                .GET, "\(APIPath.apps)/\(appID.uuidString)", headers: .sessionCookie(session)
+            ) { response in
+                let detail = try response.content.decode(AppDTO.self)
+                #expect(detail.downloadCount == 4)
+            }
+        }
+    }
+
+    @Test("받은 적이 없으면 0 이다")
+    func zeroDownloads() async throws {
+        try await withMigratedApp { app in
+            let (_, session) = try await seed(on: app)
+            try await app.testing().test(.GET, APIPath.apps, headers: .sessionCookie(session)) { response in
+                let apps = try response.content.decode([AppDTO].self)
+                #expect(apps.first?.downloadCount == 0)
+            }
+        }
+    }
 }
