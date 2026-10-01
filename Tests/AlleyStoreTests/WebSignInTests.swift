@@ -45,8 +45,9 @@ struct WebSignInTests {
         #expect(opened.path == APIPath.googleAuthorize)
         #expect(items.first { $0.name == APIPath.clientQueryItem }?.value == APIPath.appClient)
         let challenge = try #require(items.first { $0.name == APIPath.codeChallengeQueryItem }?.value)
+        let state = try #require(items.first { $0.name == APIPath.appStateQueryItem }?.value)
 
-        #expect(signIn.handle(url: URL(string: "alleystore://auth?code=abc123")!))
+        #expect(signIn.handle(url: URL(string: "alleystore://auth?code=abc123&state=\(state)")!))
         let (code, verifier) = try await started.value
         #expect(code == "abc123")
         // 주소에 실린 것은 해시뿐이다. 원래 값은 교환할 때만 나간다.
@@ -69,6 +70,37 @@ struct WebSignInTests {
 
         signIn.handle(url: URL(string: "alleystore://auth?code=second")!)
         #expect(try await second.value.code == "second")
+    }
+
+    /// 브라우저를 다시 켜면 복원된 예전 로그인 탭이 저절로 끝나 콜백을 보낸다.
+    @Test("다른 로그인의 콜백은 버리고 계속 기다린다")
+    func anotherAttemptsCallbackIsIgnored() async throws {
+        let opener = Opener()
+        let signIn = WebSignIn(open: opener.open)
+        let started = Task { try await signIn.authorize(server: Self.server, callbackScheme: Self.scheme) }
+        let opened = try await opener.next()
+        let state = try #require(
+            URLComponents(url: opened, resolvingAgainstBaseURL: false)?
+                .queryItems?.first { $0.name == APIPath.appStateQueryItem }?.value
+        )
+
+        #expect(signIn.handle(url: URL(string: "alleystore://auth?code=stale&state=someone-else")!))
+        #expect(signIn.isWaiting)
+
+        signIn.handle(url: URL(string: "alleystore://auth?code=fresh&state=\(state)")!)
+        #expect(try await started.value.code == "fresh")
+    }
+
+    /// 콜백에 값을 돌려주지 않는 예전 서버가 있다.
+    @Test("값을 돌려주지 않는 콜백도 받는다")
+    func aCallbackWithoutStateIsAccepted() async throws {
+        let opener = Opener()
+        let signIn = WebSignIn(open: opener.open)
+        let started = Task { try await signIn.authorize(server: Self.server, callbackScheme: Self.scheme) }
+        _ = try await opener.next()
+
+        signIn.handle(url: URL(string: "alleystore://auth?code=legacy")!)
+        #expect(try await started.value.code == "legacy")
     }
 
     @Test("기다리지 않던 콜백은 버린다")

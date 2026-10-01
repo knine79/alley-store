@@ -60,6 +60,47 @@ struct AppSignInPKCETests {
         }
     }
 
+    /// 앱은 지금 기다리는 로그인의 값과 맞지 않는 콜백을 버린다. 브라우저가 복원한
+    /// 예전 로그인 탭의 콜백이 지금 로그인을 가로채지 않게 한다.
+    @Test("앱이 보낸 로그인별 값을 state 에 싣고 콜백에 돌려준다")
+    func theAppStateRoundTrips() async throws {
+        let appState = "attempt-0123456789abcdef"
+        try await withConfiguredApp { app in
+            let state = try await Self.state(
+                from: try await app.testing().sendRequest(
+                    .GET, Self.authorizePath(challenge: Self.rfcChallenge, appState: appState)
+                ),
+                on: app
+            )
+            #expect(state.appState == appState)
+        }
+
+        let callback = try #require(URLComponents(string: AuthController.appCallbackURL(
+            scheme: "alleystore", code: "abc", appState: appState
+        )))
+        #expect(callback.scheme == "alleystore")
+        #expect(callback.host == "auth")
+        #expect(callback.queryItems?.first { $0.name == "code" }?.value == "abc")
+        #expect(callback.queryItems?.first { $0.name == APIPath.appCallbackStateQueryItem }?.value == appState)
+
+        // 값을 보내지 않던 예전 앱에는 예전 모양 그대로 돌려준다.
+        #expect(AuthController.appCallbackURL(scheme: "alleystore", code: "abc", appState: nil)
+            == "alleystore://auth?code=abc")
+    }
+
+    /// 콜백 URL 에 그대로 실려 나가는 값이다.
+    @Test("모양이 틀린 로그인별 값으로는 로그인을 시작하지 않는다")
+    func aMalformedAppStateIsRefused() async throws {
+        try await withConfiguredApp { app in
+            for bad in ["short", "has space and more chars", "slash/0123456789abcdef", String(repeating: "a", count: 129)] {
+                let response = try await app.testing().sendRequest(
+                    .GET, Self.authorizePath(challenge: Self.rfcChallenge, appState: bad)
+                )
+                #expect(response.status == .badRequest, "\(bad)")
+            }
+        }
+    }
+
     @Test("challenge 없이 시작해도 예전처럼 로그인을 보낸다")
     func authorizeWithoutAChallengeStillWorks() async throws {
         try await withConfiguredApp { app in
@@ -149,7 +190,7 @@ struct AppSignInPKCETests {
 
     // MARK: - 보조
 
-    private static func authorizePath(challenge: String?) -> String {
+    private static func authorizePath(challenge: String?, appState: String? = nil) -> String {
         var components = URLComponents()
         components.path = APIPath.googleAuthorize
         components.queryItems = [URLQueryItem(name: APIPath.clientQueryItem, value: APIPath.appClient)]
@@ -157,6 +198,9 @@ struct AppSignInPKCETests {
             components.queryItems?.append(
                 URLQueryItem(name: APIPath.codeChallengeQueryItem, value: challenge)
             )
+        }
+        if let appState {
+            components.queryItems?.append(URLQueryItem(name: APIPath.appStateQueryItem, value: appState))
         }
         return components.string!
     }
