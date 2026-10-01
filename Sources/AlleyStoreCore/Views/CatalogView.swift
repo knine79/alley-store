@@ -148,8 +148,12 @@ struct AppRow: View {
                             .fixedSize()
                             .accessibilityLabel("다운로드 \(count.formatted())회")
                     }
-                    if let average = app.rating?.displayAverage {
-                        Text("★ \(average)").fixedSize()
+                    if let rating = app.rating, let average = rating.displayAverage {
+                        // 개수를 함께 보인다. 한 명이 준 5.0 과 서른 명이 준 4.6 이 같아
+                        // 보이면 별점을 믿을 수 없다. 개발자 이름보다 먼저 잘리지 않게 고정한다.
+                        Text("★ \(average) (\(rating.count.formatted()))")
+                            .fixedSize()
+                            .accessibilityLabel("별점 \(average), \(rating.count.formatted())명")
                     }
                 }
                 .font(.caption)

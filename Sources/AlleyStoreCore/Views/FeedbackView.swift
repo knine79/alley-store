@@ -69,8 +69,7 @@ struct FeedbackForm: View {
             HStack(spacing: 6) {
                 ForEach(1...5, id: \.self) { score in
                     Button {
-                        // 같은 별을 다시 누르면 별점을 뺀다. 글만 남기고 싶을 수 있다.
-                        rating = (rating == score) ? nil : score
+                        rating = score
                     } label: {
                         Image(systemName: (rating ?? 0) >= score ? "star.fill" : "star")
                             .foregroundStyle((rating ?? 0) >= score ? .yellow : .secondary)
@@ -78,10 +77,10 @@ struct FeedbackForm: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("별 \(score)개")
                 }
-                if rating != nil {
-                    Button("지우기") { rating = nil }
-                        .buttonStyle(.link)
+                if rating == nil {
+                    Text("별점을 골라야 남길 수 있습니다")
                         .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -118,9 +117,9 @@ struct FeedbackForm: View {
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
     }
 
-    /// 별점이든 글이든 하나는 있어야 한다. 서버도 같은 규칙이다.
+    /// 별점은 있어야 하고 글은 없어도 된다. 서버도 같은 규칙이다.
     private var canSubmit: Bool {
-        rating != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        rating != nil
     }
 
     private func submit() {

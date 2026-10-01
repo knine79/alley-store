@@ -337,8 +337,9 @@ struct RatingSummaryTests {
         }
     }
 
-    @Test("글만 남긴 것은 별점으로 세지 않는다")
-    func bodyOnlyIsNotRated() async throws {
+    /// 예전에는 받았다. 별점 개수와 리뷰 개수가 어긋나서 막았다.
+    @Test("글만 남기는 것은 거절한다")
+    func rejectsBodyOnly() async throws {
         try await withMigratedApp { app in
             let setup = try await seedReleasedVersion(on: app)
 
@@ -347,7 +348,21 @@ struct RatingSummaryTests {
                 beforeRequest: { request in
                     try request.content.encode(SubmitFeedbackRequest(body: "버그가 있습니다."))
                 }
-            ) { #expect($0.status == .created) }
+            ) { #expect($0.status == .badRequest) }
+        }
+    }
+
+    @Test("예전에 글만 남긴 것은 별점으로 세지 않는다")
+    func legacyBodyOnlyIsNotRated() async throws {
+        try await withMigratedApp { app in
+            let setup = try await seedReleasedVersion(on: app)
+            let reader = try #require(try await User.query(on: app.db)
+                .filter(\.$email == "user@example.com").first())
+            let entry = Feedback(
+                appID: setup.appID, versionID: setup.versionID, userID: try reader.requireID()
+            )
+            entry.body = "버그가 있습니다."
+            try await entry.save(on: app.db)
 
             let summary = try await Feedback.summary(ofApp: setup.appID, on: app.db)
             #expect(summary.count == 0)
@@ -427,7 +442,7 @@ struct FeedbackPageTests {
                 headers: .form(cookie: setup.readerToken),
                 beforeRequest: { request in
                     try request.content.encode(
-                        SubmitFeedbackRequest(body: "느립니다.", isAnonymous: true)
+                        SubmitFeedbackRequest(rating: 2, body: "느립니다.", isAnonymous: true)
                     )
                 }
             ) { #expect($0.status == .created) }

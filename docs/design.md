@@ -316,7 +316,7 @@ Google 에서는 `hd`(hosted domain) claim 까지 함께 봅니다. 그 claim �
 | `deploy_tokens`  | app_id, 이름, 토큰 해시 (CI 업로드용, ADR-0015)                     |
 | `feed_tokens`    | app_id, 이름, 토큰 해시 (Sparkle 피드용, ADR-0017)                 |
 | `user_tokens`    | user_id, 이름, 토큰 해시, 만료 (에이전트용, [ADR-0060](adr/0060-mcp-connects-as-a-person.md)) |
-| `feedback`       | app_id, version_id, user_id, 별점, 글, 스크린샷, 익명 여부             |
+| `feedback`       | app_id, version_id, user_id, 별점(새로 남길 때 필수), 글, 스크린샷, 익명 여부 |
 | `notification_targets` | app_id(nullable), 종류, 이름, 엔드포인트                     |
 
 
