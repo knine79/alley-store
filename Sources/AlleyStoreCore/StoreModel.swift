@@ -402,19 +402,23 @@ final class StoreModel {
     /// 번들 ID 로 찾지 않고 스캔한 자리를 연다. 같은 앱이 두 곳에 있으면 번들 ID
     /// 로는 Launch Services 가 고른 쪽이 뜨는데, 이 화면이 "설치된 위치" 로 보여주는
     /// 것은 스캔한 쪽이다. 보여준 것과 다른 것을 열면 안 된다.
-    func open(_ app: AppDTO) {
+    ///
+    /// completion handler 판을 쓰지 않는다. AppKit 이 그 클로저를 Launch Services
+    /// 큐에서 부르는데, SDK 가 클로저를 `@Sendable` 로 들여오지 않으면 메인 액터
+    /// 격리를 물려받아 입구에서 트랩이 난다. macOS 15 SDK 로 빌드한 배포본이
+    /// 그렇게 죽었다 (#37).
+    func open(_ app: AppDTO) async {
         guard let location = installed[app.bundleID]?.location else { return }
         statusDismissal?.cancel()
         statusMessage = nil
         errorMessage = nil
-        NSWorkspace.shared.openApplication(
-            at: location,
-            configuration: NSWorkspace.OpenConfiguration()
-        ) { [weak self] _, error in
-            guard let error else { return }
-            Task { @MainActor in
-                self?.errorMessage = "\(app.name) 을(를) 열지 못했습니다.\n\(error.localizedDescription)"
-            }
+        do {
+            _ = try await NSWorkspace.shared.openApplication(
+                at: location,
+                configuration: NSWorkspace.OpenConfiguration()
+            )
+        } catch {
+            errorMessage = "\(app.name) 을(를) 열지 못했습니다.\n\(error.localizedDescription)"
         }
     }
 
