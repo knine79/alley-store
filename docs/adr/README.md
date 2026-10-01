@@ -76,6 +76,7 @@
 | [0066](0066-compare-installed-apps-by-bundle-version.md) | 설치된 앱은 번들의 CFBundleVersion 으로 견준다 | 수락됨 | 2026-09-30 |
 | [0067](0067-worker-extracts-the-app-icon.md) | 앱 아이콘은 워커가 번들에서 뽑는다 | 수락됨 | 2026-10-01 |
 | [0068](0068-store-app-signs-in-through-the-default-browser.md) | 스토어 앱은 기본 브라우저로 로그인하고 PKCE 로 코드를 지킨다 | 수락됨 | 2026-10-01 |
+| [0069](0069-store-app-renews-its-session-token.md) | 스토어 앱은 세션 토큰 수명의 절반이 지나면 새 토큰으로 바꾼다 | 수락됨 | 2026-10-01 |
 
 ## 언제 쓰나
 
