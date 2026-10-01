@@ -437,11 +437,6 @@ struct AppDetailView: View {
     }
 }
 
-/// 앱 아이콘.
-///
-/// **아이콘이 없으면 목록이 글자만 남는다.** 그러면 찾는 앱을 이름으로 읽어야 하고,
-/// 아이콘으로 알아보던 습관이 통하지 않는다. 그래서 없을 때도 빈자리를 두지 않고
-/// 이름 첫 글자로 자리를 채운다. 회색 상자 하나보다 앱마다 달라 보이는 편이 낫다.
 /// 앱 상세의 스크린샷 줄. 가로로 넘겨 본다.
 ///
 /// 그림은 로그인한 요청으로만 받는다 (`StoreModel.screenshot`). 받기 전과 실패했을
@@ -478,12 +473,16 @@ private struct Screenshot: View {
                     .onTapGesture { isEnlarged = true }
                     .help("눌러서 크게 보기")
                     .sheet(isPresented: $isEnlarged) {
-                        Image(nsImage: image)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(minWidth: 640, minHeight: 400)
-                            .padding()
-                            .onTapGesture { isEnlarged = false }
+                        VStack(alignment: .trailing, spacing: 12) {
+                            Image(nsImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(minWidth: 640, minHeight: 400)
+                            // Esc 로도 닫힌다. 시트를 닫는 길이 그림 클릭뿐이면 찾지 못한다.
+                            Button("닫기") { isEnlarged = false }
+                                .keyboardShortcut(.cancelAction)
+                        }
+                        .padding()
                     }
             } else {
                 RoundedRectangle(cornerRadius: 6)
@@ -499,6 +498,11 @@ private struct Screenshot: View {
     }
 }
 
+/// 앱 아이콘.
+///
+/// **아이콘이 없으면 목록이 글자만 남는다.** 그러면 찾는 앱을 이름으로 읽어야 하고,
+/// 아이콘으로 알아보던 습관이 통하지 않는다. 그래서 없을 때도 빈자리를 두지 않고
+/// 이름 첫 글자로 자리를 채운다. 회색 상자 하나보다 앱마다 달라 보이는 편이 낫다.
 struct AppIcon: View {
     let app: AppDTO
     let size: CGFloat

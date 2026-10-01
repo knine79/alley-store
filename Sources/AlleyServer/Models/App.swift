@@ -365,8 +365,6 @@ extension App {
         return [owner.name] + others
     }
 
-    /// `/` 로 시작하는 주소에만 서버 주소를 붙인다. 예전처럼 사람이 적어 넣은 외부 주소는
-    /// 이미 절대 주소라 그대로 둔다.
     /// 스크린샷 주소. 올린 순서대로다.
     func screenshotURLs(baseURL: String?) throws -> [String] {
         let appID = try requireID()
@@ -377,6 +375,8 @@ extension App {
         }
     }
 
+    /// `/` 로 시작하는 주소에만 서버 주소를 붙인다. 예전처럼 사람이 적어 넣은 외부 주소는
+    /// 이미 절대 주소라 그대로 둔다.
     static func absolute(_ path: String?, base: String?) -> String? {
         guard let path, let base, path.hasPrefix("/"), !path.hasPrefix("//") else { return path }
         return base.trimmingSuffix("/") + path

@@ -1,6 +1,7 @@
 import AlleyShared
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 /// 앱 스크린샷의 규칙 (이슈 #40).
@@ -118,13 +119,25 @@ struct AppScreenshotController: RouteCollection, Sendable {
             AppScreenshots.key(appID: appID, id: UUID(), format: format)
         )
         try await request.artifactStorage.put(data, to: key, contentType: format.contentType)
-        app.screenshotKeys.append(key)
+
+        // **배열을 읽어 고쳐 쓰지 않고 데이터베이스에서 한 번에 덧붙인다.** 읽고 쓰면 두
+        // 장을 동시에 올릴 때 나중에 저장한 쪽이 앞의 것을 덮고, 덮인 키의 오브젝트는
+        // 아무도 가리키지 않은 채 남는다. 상한도 같은 문장에서 본다. 위의 검사는 그
+        // 전에 사람에게 빨리 알려주려는 것이고, 막는 것은 여기다.
+        let appended: Bool
         do {
-            try await app.save(on: request.db)
+            appended = try await Self.append(key, to: appID, on: request.db)
         } catch {
             // 행에 적지 못한 오브젝트는 아무도 가리키지 않는다. 남기지 않는다.
             try? await request.artifactStorage.delete(key: key)
             throw error
+        }
+        guard appended else {
+            try? await request.artifactStorage.delete(key: key)
+            throw Abort(
+                .badRequest,
+                reason: "스크린샷은 \(AppScreenshots.maximumCount)장까지입니다. 하나를 지우고 올리세요."
+            )
         }
 
         request.logger.notice("앱 스크린샷을 받았습니다 [\(app.bundleID), 올린 사람: \(user.email)]")
@@ -142,8 +155,10 @@ struct AppScreenshotController: RouteCollection, Sendable {
 
         // 행을 먼저 고친다. 오브젝트를 먼저 지우고 행 저장이 실패하면 화면에 깨진
         // 그림이 남는다. 반대로 실패하면 아무도 가리키지 않는 오브젝트만 남는다.
-        app.screenshotKeys.removeAll { $0 == key }
-        try await app.save(on: request.db)
+        // 올리기와 같은 까닭으로 데이터베이스에서 한 번에 뺀다.
+        try await Self.sql(request.db)
+            .raw("UPDATE apps SET screenshot_keys = array_remove(screenshot_keys, \(bind: key)) WHERE id = \(bind: try app.requireID())")
+            .run()
         do {
             try await request.artifactStorage.delete(key: key)
         } catch {
@@ -156,7 +171,15 @@ struct AppScreenshotController: RouteCollection, Sendable {
 
     @Sendable
     func serve(request: Request) async throws -> Response {
+        let user = try request.requireUser()
         let app = try await request.findApp()
+        // 출시 전인 앱은 손댈 수 있는 사람에게만 보인다 (ADR-0051). 목록에서 감춘 앱의
+        // 화면이 주소만 알면 열려서는 안 된다.
+        if try await App.latestReleasedVersion(ofApp: app.requireID(), on: request.db) == nil {
+            guard try await AppVisibility.of(user, on: request.db).canTouch(app) else {
+                throw Abort(.notFound, reason: "스크린샷을 찾을 수 없습니다.")
+            }
+        }
         let key = try Self.key(in: app, on: request)
 
         // 키에 UUID 가 들어 있어 내용이 바뀌면 주소도 바뀐다. 키가 그대로 ETag 다.
@@ -179,6 +202,23 @@ struct AppScreenshotController: RouteCollection, Sendable {
         response.headers.replaceOrAdd(name: .cacheControl, value: "private, max-age=300")
         response.body = .init(data: data)
         return response
+    }
+
+    /// 상한 안이면 키를 덧붙이고 true. 이미 가득 찼으면 아무것도 바꾸지 않고 false.
+    private static func append(_ key: String, to appID: UUID, on database: any Database) async throws -> Bool {
+        let rows = try await sql(database).raw(
+            """
+            UPDATE apps SET screenshot_keys = array_append(screenshot_keys, \(bind: key))
+            WHERE id = \(bind: appID) AND cardinality(screenshot_keys) < \(bind: AppScreenshots.maximumCount)
+            RETURNING id
+            """
+        ).all()
+        return !rows.isEmpty
+    }
+
+    private static func sql(_ database: any Database) throws -> any SQLDatabase {
+        guard let sql = database as? any SQLDatabase else { throw MigrationError.needsSQLDatabase }
+        return sql
     }
 
     /// 주소의 ID 가 가리키는 이 앱의 키. 없으면 404.

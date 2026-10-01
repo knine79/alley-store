@@ -52,6 +52,16 @@ struct AppScreenshotTests {
                 #expect($0.status == .unauthorized)
             }
             let (_, readerToken) = try await app.makeUser(email: "user@example.com", role: .user)
+            // 출시 전에는 손댈 수 있는 사람에게만 보인다 (ADR-0051).
+            try await app.testing().test(.GET, address, headers: .bearer(readerToken)) {
+                #expect($0.status == .notFound)
+            }
+            try await app.testing().test(.GET, address, headers: .sessionCookie(token)) {
+                #expect($0.status == .ok)
+            }
+
+            let owner = try #require(try await User.query(on: app.db).filter(\.$email == "dev@example.com").first())
+            _ = try await app.seedVersion(appID: appID, short: "1.0", build: 1, state: .released, by: owner)
             try await app.testing().test(.GET, address, headers: .bearer(readerToken)) { response in
                 #expect(response.status == .ok)
                 #expect(response.headers.first(name: .contentType) == "image/png")
@@ -122,6 +132,26 @@ struct AppScreenshotTests {
                 PNGFixture.png(width: 100, height: 100), to: try seeded.requireID(), token: otherToken, on: app
             )
             #expect(status == .forbidden)
+        }
+    }
+
+    @Test("가득 찬 앱에 덧붙이는 것은 데이터베이스가 막는다")
+    func appendRespectsLimitAtomically() async throws {
+        try await withMigratedApp { app in
+            let (seeded, token) = try await seed(app)
+            let appID = try seeded.requireID()
+            let png = PNGFixture.png(width: 100, height: 100)
+
+            // 동시에 여섯 장. 읽고 고쳐 쓰면 여럿이 검사를 함께 지나 다섯을 넘긴다.
+            let statuses = try await withThrowingTaskGroup(of: HTTPStatus.self) { group in
+                for _ in 0...AppScreenshots.maximumCount {
+                    group.addTask { try await upload(png, to: appID, token: token, on: app) }
+                }
+                return try await group.reduce(into: []) { $0.append($1) }
+            }
+            #expect(statuses.filter { $0 == .seeOther }.count == AppScreenshots.maximumCount)
+            let stored = try #require(try await App.find(appID, on: app.db))
+            #expect(stored.screenshotKeys.count == AppScreenshots.maximumCount)
         }
     }
 
