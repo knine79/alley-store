@@ -30,6 +30,11 @@ final class StoreModel {
     private(set) var apps: [AppDTO] = []
     private(set) var installed: [String: InstalledApp] = [:]
     private(set) var isLoading = false
+    /// 브라우저에서 로그인이 끝나기를 기다리는 중인지.
+    ///
+    /// 로그인은 앱 밖에서 일어난다. 이것이 없으면 브라우저를 닫아버린 사람이 앱에서
+    /// 아무 표시도 보지 못하고, 무엇을 다시 눌러야 하는지도 모른다.
+    private(set) var isWaitingForBrowser = false
     /// 앱별 진행 상황. 목록에서 여러 개를 동시에 받을 수 있다.
     private(set) var progress: [UUID: Progress] = [:]
 
@@ -110,12 +115,15 @@ final class StoreModel {
     func signIn() async {
         guard let client, case .signedOut(let meta) = phase else { return }
 
+        isWaitingForBrowser = true
+        defer { isWaitingForBrowser = WebSignIn.shared.isWaiting }
+
         do {
-            let code = try await WebSignIn().authorize(
+            let (code, verifier) = try await WebSignIn.shared.authorize(
                 server: client.server,
                 callbackScheme: meta.callbackURLScheme
             )
-            let exchanged = try await client.exchange(code: code)
+            let exchanged = try await client.exchange(code: code, verifier: verifier)
             credentials.setToken(exchanged.token, for: client.server)
             self.client?.token = exchanged.token
 
@@ -126,6 +134,11 @@ final class StoreModel {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// 브라우저에서 하던 로그인을 그만둔다.
+    func cancelSignIn() {
+        WebSignIn.shared.cancel()
     }
 
     func signOut() {

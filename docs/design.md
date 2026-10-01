@@ -248,8 +248,10 @@ Microsoft Entra ID, Okta, Keycloak 이 같은 길로 지나갑니다. 비워두�
 Google 에서는 `hd`(hosted domain) claim 까지 함께 봅니다. 그 claim 은 Google 고유라
 다른 공급자에서는 이메일 도메인만 남습니다
 - 사용자 식별자는 `issuer` + `sub` 입니다. `sub` 는 공급자 안에서만 유일합니다
-- 스토어 앱은 `ASWebAuthenticationSession`으로 같은 서버 플로우를 태웁니다
-(커스텀 URL 스킴 콜백)
+- 스토어 앱은 기본 브라우저로 같은 서버 플로우를 태우고, 커스텀 URL 스킴으로 돌아오는
+일회용 코드를 Apple Event 로 받습니다 ([ADR-0068](adr/0068-store-app-signs-in-through-the-default-browser.md)).
+그 URL 은 같은 스킴을 등록한 다른 앱도 받을 수 있어서 PKCE(S256)로 코드를 로그인을
+시작한 앱에 묶습니다
 - 역할: `admin` / `developer` / `user`
   - 최초 로그인 시 기본 `user`
   - 서버 설정의 초기 관리자 목록에 있으면 `admin`
