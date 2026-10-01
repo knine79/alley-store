@@ -52,6 +52,14 @@ struct StoreClient: Sendable {
         )
     }
 
+    /// 지금 토큰을 새 토큰으로 바꾼다 (ADR-0069).
+    func renewSession() async throws -> TokenExchangeResponse {
+        var request = URLRequest(url: server.appendingPathComponent(APIPath.tokenRenewal))
+        request.httpMethod = "POST"
+        authorize(&request)
+        return try await send(request, as: TokenExchangeResponse.self)
+    }
+
     // MARK: - 카탈로그
 
     func apps() async throws -> [AppDTO] {

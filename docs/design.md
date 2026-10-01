@@ -252,6 +252,9 @@ Google 에서는 `hd`(hosted domain) claim 까지 함께 봅니다. 그 claim �
 일회용 코드를 Apple Event 로 받습니다 ([ADR-0068](adr/0068-store-app-signs-in-through-the-default-browser.md)).
 그 URL 은 같은 스킴을 등록한 다른 앱도 받을 수 있어서 PKCE(S256)로 코드를 로그인을
 시작한 앱에 묶습니다
+- 스토어 앱은 세션 토큰 수명의 절반이 지나면 `POST /api/v1/auth/token/renew` 로 새 토큰을
+받습니다. 갱신한 토큰도 처음 로그인한 때(`auth_time`)로부터 90일을 넘겨 살지 않습니다.
+웹 콘솔 쿠키는 갱신하지 않습니다 ([ADR-0069](adr/0069-store-app-renews-its-session-token.md))
 - 역할: `admin` / `developer` / `user`
   - 최초 로그인 시 기본 `user`
   - 서버 설정의 초기 관리자 목록에 있으면 `admin`
