@@ -118,7 +118,12 @@ public enum PKCE {
 
     /// RFC 7636 이 정한 길이(43~128자)와 문자.
     public static func isWellFormed(verifier: String) -> Bool {
-        (43...128).contains(verifier.count) && verifier.unicodeScalars.allSatisfy(isUnreserved)
+        (43...128).contains(verifier.count) && isUnreservedOnly(verifier)
+    }
+
+    /// RFC 3986 의 unreserved 문자(영숫자와 `-._~`)만 들어 있는지. URL 에 그대로 실을 수 있다.
+    public static func isUnreservedOnly(_ value: String) -> Bool {
+        value.unicodeScalars.allSatisfy(isUnreserved)
     }
 
     private static func isUnreserved(_ scalar: Unicode.Scalar) -> Bool {

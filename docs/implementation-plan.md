@@ -782,9 +782,11 @@ dmg, CLI, 버전 화면으로 올린 앱과 `Assets.car` 에만 아이콘이 든
 - [x] 로그인 주소를 `NSWorkspace` 로 열고 콜백을 GetURL Apple Event 로 받는다
 - [x] PKCE(S256). challenge 를 state 에 실어 코드에 묶고, 교환 때 verifier 를 본다
 - [x] 앱이 받은 코드는 CLI 교환에서 바꿔주지 않는다
+- [x] 로그인별 값(`app_state`)을 콜백에 돌려받아, 브라우저가 복원한 예전 탭의 콜백을 버린다
 - [x] 다시 누르면 앞 시도를 접고, 10분 뒤 그만둔다. 기다리는 동안 화면에 알린다
 - [x] 로그인 경로 로그 (`category == "sign-in"`)
-- [ ] Chrome·Safari·Arc 를 기본 브라우저로 두고 실기기에서 로그인
+- [x] Arc·Chrome 을 기본 브라우저로 두고 로컬 서버(Keycloak)에 로그인
+- [ ] Safari 로 로그인, 운영 서버에 배포해 Chrome 사용자 맥에서 로그인
 - [ ] 스토어 앱이 모두 이 버전 이상이 되면 challenge 를 필수로 올린다
 
 ---

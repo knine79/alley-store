@@ -53,6 +53,8 @@ final class WebSignIn {
 
     private struct Pending {
         let scheme: String
+        /// 이번 로그인에 붙인 무작위 값. 서버가 콜백에 그대로 돌려준다.
+        let state: String
         let continuation: CheckedContinuation<String, any Error>
         let timeout: Task<Void, Never>
     }
@@ -81,6 +83,8 @@ final class WebSignIn {
         finish(with: .failure(SignInError.cancelled))
 
         let verifier = Self.makeVerifier()
+        // verifier 와 같은 방법으로 만들지만 따로 둔다. 이 값은 주소에 그대로 실린다.
+        let state = Self.makeVerifier()
         var components = URLComponents(
             url: server.appendingPathComponent(APIPath.googleAuthorize),
             resolvingAgainstBaseURL: false
@@ -89,6 +93,7 @@ final class WebSignIn {
             // 이 항목이 있어야 서버가 웹이 아니라 앱으로 돌려보낸다.
             URLQueryItem(name: APIPath.clientQueryItem, value: APIPath.appClient),
             URLQueryItem(name: APIPath.codeChallengeQueryItem, value: Self.challenge(for: verifier)),
+            URLQueryItem(name: APIPath.appStateQueryItem, value: state),
         ]
         guard let url = components?.url else {
             throw SignInError.failed("서버 주소가 올바르지 않습니다.")
@@ -101,7 +106,12 @@ final class WebSignIn {
                 Self.log.notice("브라우저 로그인을 기다리다 시간이 다 됐습니다")
                 self?.finish(with: .failure(SignInError.timedOut))
             }
-            pending = Pending(scheme: callbackScheme, continuation: continuation, timeout: timeout)
+            pending = Pending(
+                scheme: callbackScheme,
+                state: state,
+                continuation: continuation,
+                timeout: timeout
+            )
 
             Self.log.notice("브라우저로 로그인을 엽니다 [콜백 스킴: \(callbackScheme, privacy: .public)]")
             guard open(url) else {
@@ -117,6 +127,12 @@ final class WebSignIn {
     /// 기다리는 로그인이 없을 때 온 콜백은 버린다. 누가 보냈는지 모르는 코드를 교환하면
     /// 남의 계정으로 로그인될 수 있다. PKCE 가 그것도 막지만, 기다리지 않던 것을 받을
     /// 이유가 없다.
+    ///
+    /// **다른 로그인의 콜백도 버리고 계속 기다린다.** 브라우저를 다시 켜면 복원된 예전
+    /// 로그인 탭이 공급자 세션으로 저절로 끝나 콜백을 보낸다. 그것을 받으면 verifier 가
+    /// 맞지 않아 교환이 거절되고, 사람은 방금 시작한 로그인이 실패한 것으로 본다.
+    /// Chrome 을 다시 켜고 시험하다 복원된 탭 둘이 한꺼번에 콜백을 보내 그렇게 됐다.
+    /// 값이 아예 없는 콜백은 받는다. 이 값을 돌려주지 않는 예전 서버가 있다.
     @discardableResult
     func handle(url: URL) -> Bool {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
@@ -125,6 +141,12 @@ final class WebSignIn {
 
         guard let pending, components.scheme?.lowercased() == pending.scheme.lowercased() else {
             Self.log.notice("기다리지 않던 로그인 콜백을 버립니다")
+            return true
+        }
+        let returnedState = components.queryItems?
+            .first(where: { $0.name == APIPath.appCallbackStateQueryItem })?.value
+        if let returnedState, returnedState != pending.state {
+            Self.log.notice("다른 로그인의 콜백을 버리고 계속 기다립니다")
             return true
         }
 

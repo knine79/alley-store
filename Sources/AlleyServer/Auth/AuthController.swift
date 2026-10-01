@@ -45,8 +45,16 @@ public struct AuthController: RouteCollection, Sendable {
         let codeChallenge = target == .app
             ? try Self.codeChallenge(in: request)
             : nil
+        let appState = target == .app
+            ? try Self.appState(in: request)
+            : nil
         let state = try await request.jwt.sign(
-            OAuthStateToken(target: target, returnPath: returnPath, codeChallenge: codeChallenge)
+            OAuthStateToken(
+                target: target,
+                returnPath: returnPath,
+                codeChallenge: codeChallenge,
+                appState: appState
+            )
         )
         let metadata = try await request.application.oidcDirectory.metadata(
             using: request.client, logger: request.logger
@@ -173,12 +181,29 @@ public struct AuthController: RouteCollection, Sendable {
                 codeChallenge: state.codeChallenge
             )
             try await model.save(on: request.db)
-            var components = URLComponents()
-            components.scheme = config.store.callbackURLScheme
-            components.host = "auth"
-            components.queryItems = [.init(name: "code", value: plaintext)]
-            return request.redirect(to: components.url!.absoluteString)
+            return request.redirect(to: Self.appCallbackURL(
+                scheme: config.store.callbackURLScheme,
+                code: plaintext,
+                appState: state.appState
+            ))
         }
+    }
+
+    /// 스토어 앱으로 돌아가는 주소.
+    ///
+    /// 앱이 보낸 무작위 값을 함께 돌려준다 (ADR-0068). 앱은 지금 기다리는 로그인의
+    /// 값과 맞지 않는 콜백을 버린다.
+    static func appCallbackURL(scheme: String, code: String, appState: String?) -> String {
+        var components = URLComponents()
+        components.scheme = scheme
+        components.host = "auth"
+        components.queryItems = [.init(name: "code", value: code)]
+        if let appState {
+            components.queryItems?.append(
+                .init(name: APIPath.appCallbackStateQueryItem, value: appState)
+            )
+        }
+        return components.url!.absoluteString
     }
 
     // MARK: - 앱 토큰 교환
@@ -242,6 +267,20 @@ public struct AuthController: RouteCollection, Sendable {
             return nil
         }
         guard PKCE.isWellFormed(challenge: raw) else {
+            throw Abort(.badRequest, reason: "로그인 요청이 올바르지 않습니다. 스토어 앱에서 다시 시도해주세요.")
+        }
+        return raw
+    }
+
+    /// 스토어 앱이 보낸 로그인별 무작위 값. 없으면 nil.
+    ///
+    /// 그대로 콜백 URL 에 실려 나가므로 URL 에 그대로 넣을 수 있는 문자만 받는다.
+    /// 없는 것은 받는다. 이 값을 보내지 않던 예전 앱이 있다.
+    static func appState(in request: Request) throws -> String? {
+        guard let raw = request.query[String.self, at: APIPath.appStateQueryItem] else {
+            return nil
+        }
+        guard (16...128).contains(raw.count), PKCE.isUnreservedOnly(raw) else {
             throw Abort(.badRequest, reason: "로그인 요청이 올바르지 않습니다. 스토어 앱에서 다시 시도해주세요.")
         }
         return raw
