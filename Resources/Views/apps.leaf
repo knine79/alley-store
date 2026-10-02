@@ -33,9 +33,10 @@
 </p>
 #endif
 
-<!-- 검색·정렬·분류 (이슈 #56). 서버가 거르고 늘어놓는 GET 폼이라 스크립트 없이
-     되고, 조건이 주소에 남아 새로 고치거나 공유해도 같은 목록이 나온다. 규칙은
-     스토어 앱과 같은 함수다 (`CatalogFilter`). -->
+<!-- 검색·정렬·분류 (이슈 #56). 서버가 거르고 늘어놓는 GET 폼이라 조건이 주소에
+     남아 새로 고치거나 공유해도 같은 목록이 나온다. 규칙은 스토어 앱과 같은 함수다
+     (`CatalogFilter`). 고르는 즉시 반영하는 것은 `list-filter.js` 가 하고, 스크립트가
+     없으면 보기 버튼으로 제출한다. -->
 #if(totalCount > 0):
 <form class="form-inline list-filter" method="get" action="/apps" role="search">
     <label class="field">
@@ -62,13 +63,16 @@
             #endfor
         </select>
     </label>
-    <button class="button" type="submit">보기</button>
-    #if(isNarrowed):
-    <a class="button button-quiet" href="/apps">조건 지우기</a>
-    #endif
+    <noscript><button class="button" type="submit">보기</button></noscript>
+    <!-- 스크립트가 목록과 함께 갈아끼우는 자리. 조건을 지우면 링크도 사라져야 한다. -->
+    <span class="list-filter-clear" id="list-filter-clear">
+        #if(isNarrowed):<a class="button button-quiet" href="/apps">조건 지우기</a>#endif
+    </span>
 </form>
+<script src="/list-filter.js?v=#(page.assetVersion)" defer></script>
 #endif
 
+<div id="app-list">
 #if(totalCount == 0):
 <div class="empty">
     <p>아직 등록된 앱이 없습니다.</p>
@@ -124,5 +128,6 @@
     #endfor
 </ul>
 #endif
+</div>
 #endexport
 #endextend

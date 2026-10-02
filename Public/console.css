@@ -1893,6 +1893,24 @@ textarea.input {
     margin: var(--space-4) 0 var(--space-4);
 }
 
+/* 검색 칸은 글줄 높이 때문에 42px, select 는 38px 로 그려져 라벨 줄이 어긋났다.
+   한 줄에 나란히 서므로 높이를 못 박는다. */
+.list-filter .input {
+    height: 40px;
+    min-height: 40px;
+}
+
+/* 비어 있을 때 flex 의 gap 을 차지하지 않게 상자를 만들지 않는다. */
+.list-filter-clear {
+    display: contents;
+}
+
+/* 갈아끼우는 동안 이전 목록이 그대로 진하게 남으면 결과로 읽힌다. */
+#app-list[aria-busy="true"] {
+    opacity: 0.6;
+    transition: opacity var(--ease);
+}
+
 /* ── 제목 + 오른쪽 버튼 (구역 안) ────────────────────────── */
 
 .section-head {
