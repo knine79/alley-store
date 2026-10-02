@@ -24,20 +24,14 @@ struct CatalogView: View {
         _selection = State(initialValue: selection)
     }
 
+    /// 웹 콘솔 목록과 같은 함수를 부른다. 조건이 같으면 순서도 같아야 한다 (이슈 #56).
     private var visible: [AppDTO] {
-        // 고른 분류의 앱이 목록에서 사라지면 거르기 칸도 사라진다. 그때 빈 목록에
-        // 갇히지 않게 거르지 않는다.
-        let active = categoryFilter.flatMap { availableCategories.contains($0) ? $0 : nil }
-        let inCategory = active.map { category in
-            model.catalog.filter { AppCategory(stored: $0.category) == category }
-        } ?? model.catalog
-        return CatalogSearch.filter(sort.sorted(inCategory), query: search)
+        CatalogFilter.apply(model.catalog, category: categoryFilter, sort: sort, query: search)
     }
 
     /// 목록에 실제로 있는 분류만 고르게 한다. 고르면 빈 목록이 되는 칸은 내지 않는다.
     private var availableCategories: [AppCategory] {
-        let present = Set(model.catalog.compactMap { AppCategory(stored: $0.category) })
-        return AppCategory.allCases.filter(present.contains)
+        CatalogFilter.categories(in: model.catalog)
     }
 
     var body: some View {
