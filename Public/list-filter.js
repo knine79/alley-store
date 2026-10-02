@@ -43,6 +43,9 @@
 
         fetch(url, { credentials: "same-origin", headers: { Accept: "text/html" } })
             .then(function (response) {
+                // 그새 더 최근 요청이 나갔으면 이 응답은 버린다. 늦게 실패한 옛 요청이
+                // 옛 주소로 페이지를 옮겨 검색 칸을 되돌리면 안 된다.
+                if (ticket !== latest) return null;
                 // 세션이 끊겼거나 서버가 실패했다. 갈아끼울 것이 없으니 그 주소로 간다.
                 // 로그인 화면이든 오류 화면이든 사람이 이유를 본다.
                 if (!response.ok || response.redirected) {
