@@ -2,8 +2,6 @@ import AlleyShared
 import Foundation
 import Testing
 
-@testable import AlleyStoreCore
-
 @Suite("앱 검색")
 struct CatalogSearchTests {
     private func app(

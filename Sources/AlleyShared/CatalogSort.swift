@@ -1,10 +1,10 @@
-import AlleyShared
 import Foundation
 
-/// 앱 목록을 늘어놓는 순서.
+/// 앱 목록을 늘어놓는 순서. 스토어 앱과 웹 콘솔이 같은 것을 쓴다 (이슈 #56).
 ///
-/// `rawValue` 는 사람이 고른 것을 저장하는 데 쓴다. 이름을 바꾸면 저장된 선택이 풀린다.
-enum CatalogSort: String, CaseIterable, Identifiable, Sendable {
+/// `rawValue` 는 스토어 앱이 고른 것을 저장하고 웹 콘솔이 주소(`sort=`)에 싣는 데 쓴다.
+/// 이름을 바꾸면 저장된 선택과 공유한 주소가 풀린다.
+public enum CatalogSort: String, CaseIterable, Identifiable, Sendable {
     case name
     case rating
     case reviewCount
@@ -13,9 +13,9 @@ enum CatalogSort: String, CaseIterable, Identifiable, Sendable {
     /// 가장 최근에 새 버전이 나온 순서. 업데이트가 나온 앱을 찾을 때 쓴다.
     case recentlyUpdated
 
-    var id: Self { self }
+    public var id: Self { self }
 
-    var title: String {
+    public var title: String {
         switch self {
         case .name: "이름순"
         case .rating: "별점순"
@@ -32,7 +32,7 @@ enum CatalogSort: String, CaseIterable, Identifiable, Sendable {
     ///
     /// 별점이 없는 앱은 별점순과 리뷰 많은 순에서 맨 뒤로 보낸다. 0점으로 치면 별점 1점을
     /// 받은 앱보다도 뒤라는 뜻이 되는데, 받은 적이 없는 것과 나쁜 평을 받은 것은 다르다.
-    func sorted(_ apps: [AppDTO]) -> [AppDTO] {
+    public func sorted(_ apps: [AppDTO]) -> [AppDTO] {
         apps.sorted { lhs, rhs in
             switch compare(lhs, rhs) {
             case .orderedAscending: true
