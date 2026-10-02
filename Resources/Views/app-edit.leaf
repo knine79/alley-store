@@ -4,43 +4,103 @@
 <h1 class="page-title">앱 정보 고치기</h1>
 <p class="page-lead">스토어 앱의 목록과 앱 상세에 보이는 내용입니다. 번들 ID 는 바꿀 수 없습니다.</p>
 
-#if(error):
-<p class="notice notice-error">#(error)</p>
+#if(canManage):
+<section class="section">
+    <h2 class="section-title">기본 정보</h2>
+
+    #if(error):
+    <p class="notice notice-error">#(error)</p>
+    #endif
+
+    <form class="form" method="post" action="/apps/#(appID)/edit">
+        <label class="field">
+            <span class="field-label">이름</span>
+            <input class="input" type="text" name="name" required value="#(values.name)">
+        </label>
+
+        <label class="field">
+            <span class="field-label">한 줄 소개 <span class="field-optional">선택</span></span>
+            <input class="input" type="text" name="summary" value="#(values.summary)">
+        </label>
+
+        <label class="field">
+            <span class="field-label">설명 <span class="field-optional">선택</span></span>
+            <textarea class="input" name="description" rows="6">#(values.description)</textarea>
+        </label>
+
+        <div class="form-group form-grid">
+            <label class="field">
+                <span class="field-label">분류 <span class="field-optional">선택</span></span>
+                <select class="input" name="category">
+                    #for(option in categoryOptions):<option value="#(option.value)"#if(option.selected): selected#endif>#(option.title)</option>#endfor
+                </select>
+            </label>
+
+            <label class="field">
+                <span class="field-label">태그 <span class="field-optional">선택</span></span>
+                <input class="input" type="text" name="tags" value="#(values.tags)" placeholder="\#번역 \#일정 \#git">
+            </label>
+
+            <p class="field-note field-wide">태그는 검색어입니다. 이 낱말로 검색하면 이 앱이 나옵니다. <code>\#</code> 으로 나눠 10개까지, 하나에 20자까지 적습니다.</p>
+        </div>
+
+        <div class="form-actions">
+            <a class="button" href="/apps/#(appID)">취소</a>
+            <button class="button button-primary" type="submit">저장</button>
+        </div>
+    </form>
+</section>
 #endif
 
-<form class="form" method="post" action="/apps/#(appID)/edit">
-    <label class="field">
-        <span class="field-label">이름</span>
-        <input class="input" type="text" name="name" required value="#(values.name)">
-    </label>
+<section class="section" id="screenshots">
+    <h2 class="section-title">스크린샷</h2>
+    <p class="page-lead">
+        스토어 앱의 앱 상세에 이 순서대로 보입니다. 받기 전에 무엇을 하는 앱인지 알 수 있게 합니다.
+    </p>
 
-    <label class="field">
-        <span class="field-label">한 줄 소개 <span class="field-optional">선택</span></span>
-        <input class="input" type="text" name="summary" value="#(values.summary)">
-    </label>
+    #if(screenshotError):
+    <p class="notice notice-error">#(screenshotError)</p>
+    #endif
 
-    <label class="field">
-        <span class="field-label">설명 <span class="field-optional">선택</span></span>
-        <textarea class="input" name="description" rows="6">#(values.description)</textarea>
-    </label>
-
-    <label class="field">
-        <span class="field-label">분류 <span class="field-optional">선택</span></span>
-        <select class="input" name="category">
-            #for(option in categoryOptions):<option value="#(option.value)"#if(option.selected): selected#endif>#(option.title)</option>#endfor
-        </select>
-    </label>
-
-    <label class="field">
-        <span class="field-label">태그 <span class="field-optional">선택</span></span>
-        <input class="input" type="text" name="tags" value="#(values.tags)" placeholder="예: 번역, 일정, git">
-        <span class="field-note">이 낱말로 검색하면 이 앱이 나옵니다. 쉼표로 나눠 10개까지, 하나에 20자까지 적습니다.</span>
-    </label>
-
-    <div class="form-actions">
-        <a class="button" href="/apps/#(appID)">취소</a>
-        <button class="button button-primary" type="submit">저장</button>
+    #if(count(screenshots) > 0):
+    <div class="screenshot-grid">
+        #for(shot in screenshots):
+        <figure class="screenshot">
+            <a href="#(shot.url)" target="_blank" rel="noopener"><img src="#(shot.url)" alt="스크린샷" loading="lazy"></a>
+            <form method="post" action="/apps/#(appID)/screenshots/#(shot.id)/delete">
+                <button class="button button-small" type="submit">지우기</button>
+            </form>
+        </figure>
+        #endfor
     </div>
-</form>
+    #endif
+
+    #if(count(screenshots) < screenshotLimit):
+    <!-- 스크립트가 없어도 된다. 고르거나 끌어다 놓은 뒤 "올리기" 를 누르면 그대로 간다.
+         스크립트가 있으면 놓자마자 올린다 (`screenshot-drop.js`). -->
+    <form class="screenshot-upload" method="post" action="/apps/#(appID)/screenshots"
+          enctype="multipart/form-data" data-screenshot-upload>
+        <div class="dropzone">
+            <input class="dropzone-input" type="file" name="images[]" multiple
+                   accept="image/png,image/jpeg" required aria-label="스크린샷 고르기">
+            <span class="dropzone-title">스크린샷을 끌어다 놓거나 눌러서 고르세요</span>
+            <span class="dropzone-note">PNG 나 JPEG, 여러 장을 한 번에. #(screenshotLimit)장까지, 한 장에 5MB 까지입니다.</span>
+        </div>
+        <div class="form-actions">
+            <button class="button" type="submit">올리기</button>
+        </div>
+    </form>
+    #else:
+    <p class="field-note">#(screenshotLimit)장을 다 채웠습니다. 바꾸려면 하나를 지우고 올리세요.</p>
+    #endif
+
+    #if(!canManage):
+    <div class="form-actions">
+        <a class="button" href="/apps/#(appID)">앱으로 돌아가기</a>
+    </div>
+    #endif
+</section>
+
+<script src="/screenshot-drop.js?v=#(page.assetVersion)" defer></script>
 #endexport
 #endextend

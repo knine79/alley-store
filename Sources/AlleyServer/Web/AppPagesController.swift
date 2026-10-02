@@ -523,50 +523,59 @@ struct AppPagesController: RouteCollection, Sendable {
             )
         } catch let abort as any AbortError where abort.status.code < 500 {
             // 오류 화면으로 보내지 않는다. 적은 것을 그대로 둔 채 무엇이 틀렸는지 말한다.
-            let view = try await renderEdit(app: app, values: values, error: abort.reason, on: request)
+            let view = try await Self.renderEdit(
+                app: app, user: user, values: values, error: abort.reason, on: request
+            )
             return htmlResponse(view, status: abort.status)
         }
         return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
     }
 
-    /// 앱 정보를 고치는 화면.
+    /// 앱 정보와 스크린샷을 고치는 화면.
     ///
     /// 앱 상세에 폼을 펼쳐 두지 않고 따로 연다. 고치는 일은 드물고, 펼쳐 두면 소개와
     /// 통계 사이에 큰 상자가 끼어 앱을 훑어보기 어렵다.
+    ///
+    /// **올릴 권한만 있어도 연다.** 스크린샷은 함께 맡은 사람도 올린다. 그 사람에게는
+    /// 이름·설명 칸을 보이지 않는다. 그것을 고치는 것은 소유자와 관리자다.
     @Sendable
     func editForm(request: Request) async throws -> View {
         let user = try request.requireUser()
         let app = try await request.findApp()
-        try app.requireManageAccess(for: user)
-        return try await renderEdit(
-            app: app,
-            values: AppFormValues(
-                name: app.name,
-                summary: app.summary,
-                description: app.details,
-                category: app.category,
-                tags: app.tags.joined(separator: ", ")
-            ),
-            error: nil,
-            on: request
-        )
+        try await app.requireUploadAccess(for: user, on: request.db)
+        return try await Self.renderEdit(app: app, user: user, values: nil, on: request)
     }
 
-    private func renderEdit(
+    /// 고치는 화면을 그린다. `values` 가 nil 이면 저장된 값으로 채운다.
+    static func renderEdit(
         app: App,
-        values: AppFormValues,
-        error: String?,
+        user: User,
+        values: AppFormValues?,
+        error: String? = nil,
+        screenshotError: String? = nil,
         on request: Request
     ) async throws -> View {
-        try await request.view.render(
+        let values = values ?? AppFormValues(
+            name: app.name,
+            summary: app.summary,
+            description: app.details,
+            category: app.category,
+            tags: app.tags.map { "#\($0)" }.joined(separator: " ")
+        )
+        let row = try AppRow(app: app, latestReleased: nil)
+        return try await request.view.render(
             "app-edit",
             AppEditContext(
                 page: try await request.pageContext(title: "앱 정보 고치기"),
-                appID: try app.requireID().uuidString,
+                appID: row.id,
                 appName: app.name,
+                canManage: (try? app.requireManageAccess(for: user)) != nil,
                 values: values,
                 categoryOptions: CategoryOption.options(selected: values.category),
-                error: error
+                error: error,
+                screenshots: row.screenshots,
+                screenshotLimit: AppScreenshots.maximumCount,
+                screenshotError: screenshotError
             )
         ).get()
     }
@@ -1305,9 +1314,14 @@ struct AppEditContext: Encodable {
     var appID: String
     /// 지금 저장된 이름. 고치는 중인 값이 아니라 돌아갈 화면의 이름이다.
     var appName: String
+    /// 이름·설명·분류·태그를 고칠 수 있나. 아니면 스크린샷만 보인다.
+    var canManage: Bool
     var values: AppFormValues
     var categoryOptions: [CategoryOption]
     var error: String?
+    var screenshots: [ScreenshotRow]
+    var screenshotLimit: Int
+    var screenshotError: String?
 }
 
 /// 앱 상세에 그리는 스크린샷 한 장.

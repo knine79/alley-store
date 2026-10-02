@@ -58,7 +58,7 @@ struct VersionPagesController: RouteCollection, Sendable {
                 description: app.details ?? "",
                 category: app.category ?? "",
                 categoryOptions: CategoryOption.options(selected: app.category),
-                tags: app.tags.joined(separator: ", "),
+                tags: app.tags.map { "#\($0)" }.joined(separator: " "),
                 versionID: try version.requireID().uuidString,
                 versionPath: APIPath.version(try version.requireID())
             )
