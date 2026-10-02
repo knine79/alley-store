@@ -1,0 +1,79 @@
+#extend("layout"):
+#export("head"):
+<!-- 공유 주소가 검색에 걸릴 이유가 없다. 스토어를 바깥에 연 조직도 있다. -->
+<meta name="robots" content="noindex">
+#if(app):
+<!-- 슬랙 같은 메신저가 붙여넣은 주소를 카드로 펼칠 때 읽는다. 그쪽 서버가 이 페이지를
+     읽을 수 있어야 하므로, 사내망에만 열린 스토어에서는 펼쳐지지 않는다 (ADR-0072). -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="#(page.store.name)">
+<meta property="og:title" content="#(app.name)">
+<meta property="og:url" content="#(app.shareURL)">
+#if(app.summary):
+<meta property="og:description" content="#(app.summary)">
+<meta name="description" content="#(app.summary)">
+#endif
+#if(app.absoluteIconURL):
+<meta property="og:image" content="#(app.absoluteIconURL)">
+#endif
+<!-- 아이콘이 정사각형이라 큰 그림 카드로 펼치면 잘린다. 작은 카드로 둔다. -->
+<meta name="twitter:card" content="summary">
+#endif
+#endexport
+#export("content"):
+<!-- 로그인 없이 보는 화면이다 (ADR-0072). 링크를 받은 사람이 하려는 일은 그 앱을
+     받는 것 하나라 다른 길을 늘어놓지 않는다. -->
+<section class="hero">
+    #if(app):
+    #if(app.iconURL):
+    <img class="hero-logo" src="#(app.iconURL)" alt="">
+    #endif
+    <h1 class="hero-title">#(app.name)</h1>
+    #if(app.summary):
+    <p class="hero-lead">#(app.summary)</p>
+    #endif
+
+    <!-- 처음에는 버튼 없이 안내만 보이고, 스크립트가 바로 스토어 앱을 부른다
+         (`app-link.js`). 2초 뒤에도 이 페이지가 포커스를 쥐고 있거나 다른 곳에
+         갔다가 포커스가 돌아오면 버튼 둘을 꺼낸다. 브라우저는 앱이 깔려 있는지
+         알려주지 않아서, 스토어 앱이 열렸는지는 포커스로만 짐작한다. 짐작이 틀려도
+         버튼이 나타날 뿐 이미 보이던 것이 바뀌지는 않는다. -->
+    <div data-app-link>
+        <p class="hero-lead" data-app-link-opening>
+            <strong>#(app.storeAppName)</strong>에서 여는 중입니다…
+        </p>
+
+        <!-- 스크립트가 없으면 처음부터 보인다. 아래 `noscript` 가 `hidden` 을 덮는다. -->
+        <div class="app-link-actions" data-app-link-actions hidden>
+            #if(app.openURL):
+            <a class="button button-primary button-large" href="#(app.openURL)" data-app-link-open>
+                #(app.storeAppName)에서 보기
+            </a>
+            #endif
+            <a class="button button-large" href="#(app.getPath)">
+                #(app.storeAppName) 다운로드
+            </a>
+            <!-- 처음 받는 사람이 어디서 이어가는지 여기서 말한다. 받은 뒤 이 탭으로
+                 돌아오면 같은 버튼이 그대로 있다. -->
+            <p class="hero-note">
+                열리지 않았다면 아직 설치하지 않은 것일 수 있습니다. 다운로드해 설치한 뒤 이 페이지로 돌아와 <strong>#(app.storeAppName)에서 보기</strong>를
+                누르세요. 처음 열면 #(page.store.name) 계정으로 로그인하고, 로그인을 마치면 이 앱으로
+                바로 이어집니다.
+            </p>
+        </div>
+        <noscript>
+            <style>[data-app-link-actions] { display: flex !important; } [data-app-link-opening] { display: none; }</style>
+        </noscript>
+    </div>
+    #else:
+    <h1 class="hero-title">앱을 찾을 수 없습니다</h1>
+    <!-- 출시 전인 앱과 없는 앱을 같은 말로 답한다. 둘을 구별하면 주소로 출시 전 앱이
+         있는지 떠볼 수 있다 (ADR-0051). -->
+    <p class="hero-lead">
+        아직 출시되지 않았거나 내려간 앱입니다. 링크를 보낸 사람에게 확인해 주세요.
+    </p>
+    #endif
+</section>
+<script src="/app-link.js?v=#(page.assetVersion)" defer></script>
+#endexport
+#endextend
