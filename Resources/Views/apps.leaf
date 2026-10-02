@@ -33,12 +33,56 @@
 </p>
 #endif
 
-#if(count(apps) == 0):
+<!-- 검색·정렬·분류 (이슈 #56). 서버가 거르고 늘어놓는 GET 폼이라 스크립트 없이
+     되고, 조건이 주소에 남아 새로 고치거나 공유해도 같은 목록이 나온다. 규칙은
+     스토어 앱과 같은 함수다 (`CatalogFilter`). -->
+#if(totalCount > 0):
+<form class="form-inline list-filter" method="get" action="/apps" role="search">
+    <label class="field">
+        <span class="field-label">검색</span>
+        <input class="input" type="search" name="q" value="#(query)"
+               placeholder="이름, 번들 ID, 태그, 개발자, 설명" autocomplete="off">
+    </label>
+    #if(count(categoryOptions) > 0):
+    <label class="field field-compact">
+        <span class="field-label">분류</span>
+        <select class="input" name="category">
+            <option value="">모든 분류</option>
+            #for(option in categoryOptions):
+            <option value="#(option.value)"#if(option.selected): selected#endif>#(option.title)</option>
+            #endfor
+        </select>
+    </label>
+    #endif
+    <label class="field field-compact">
+        <span class="field-label">정렬</span>
+        <select class="input" name="sort">
+            #for(option in sortOptions):
+            <option value="#(option.value)"#if(option.selected): selected#endif>#(option.title)</option>
+            #endfor
+        </select>
+    </label>
+    <button class="button" type="submit">보기</button>
+    #if(isNarrowed):
+    <a class="button button-quiet" href="/apps">조건 지우기</a>
+    #endif
+</form>
+#endif
+
+#if(totalCount == 0):
 <div class="empty">
     <p>아직 등록된 앱이 없습니다.</p>
     #if(canRegister):
     <p class="empty-note">첫 앱을 등록하면 여기에 표시됩니다.</p>
     #endif
+</div>
+#elseif(count(apps) == 0):
+<!-- 무엇으로 찾았는지를 그대로 말한다. 어디까지 찾는지도 알려야 오타인지 범위
+     밖인지 가늠할 수 있다. -->
+<div class="empty">
+    <p>#(noMatch)</p>
+    <p class="empty-note">이름, 번들 ID, 태그, 개발자 이름, 소개와 설명에서 찾습니다.
+        <a href="/apps">조건 지우기</a></p>
 </div>
 #else:
 <ul class="card-list">

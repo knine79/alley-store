@@ -1883,6 +1883,16 @@ textarea.input {
     margin: 0;
 }
 
+/* 고르기 칸은 글자 길이만큼만. 검색 칸과 같이 늘어나면 줄을 나눠 먹어 검색 칸이 좁아진다. */
+.form-inline .field-compact {
+    flex: 0 0 auto;
+}
+
+/* 앱 목록 위 검색·정렬·분류. 위 안내와 붙지 않게, 목록과는 가깝게 둔다. */
+.list-filter {
+    margin: var(--space-4) 0 var(--space-4);
+}
+
 /* ── 제목 + 오른쪽 버튼 (구역 안) ────────────────────────── */
 
 .section-head {
