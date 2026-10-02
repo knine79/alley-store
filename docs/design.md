@@ -191,7 +191,7 @@ SMTP, Slack Webhook URL. 전부 환경변수 주입
 alley-store/
 ├── Package.swift
 ├── Sources/
-│   ├── AlleyShared/       # DTO, API 경로 (서버·워커·앱 공유, 외부 의존 없음)
+│   ├── AlleyShared/       # DTO, API 경로, 앱 목록 규칙 (서버·워커·앱 공유, 외부 의존 없음)
 │   ├── AlleyProcess/      # 외부 명령 실행 (워커·앱이 codesign 등을 부른다)
 │   ├── AlleyServer/       # Vapor API 서버 + 웹 콘솔
 │   ├── AlleyWorkerCore/   # 서명 워커의 동작
@@ -434,6 +434,10 @@ Framework가 있는데 이 권한이 없으면 서명하기 전에 실패시킵�
   ([ADR-0044](adr/0044-store-app-knows-its-server.md))
 - 주소 없이 만든 빌드만 주소를 입력받습니다. 개발과 셀프호스팅 시연이 그 빌드를 씁니다
 - 로그인 → 앱 목록/검색/상세 → presigned URL 다운로드 → 설치
+- 목록의 검색·정렬·분류 거르기는 웹 콘솔 `/apps` 와 **같은 코드**입니다
+  (`AlleyShared` 의 `CatalogFilter`). 조건이 같으면 두 곳의 순서가 같습니다. 웹은
+  서버가 거르고 늘어놓는 GET 폼이라 조건이 주소(`?q=&sort=&category=`)에 남고,
+  쿠키로 따로 기억하지 않습니다. 스토어 앱은 고른 정렬을 기기에 기억합니다
 - 스토어 앱 자체의 첫 배포는 웹에서 직접 다운로드합니다 (부트스트랩). 자리가 둘입니다
   ([ADR-0049](adr/0049-public-store-app-download-page.md))
   - `/get` — 로그인 없이 받는 공개 페이지. 받는 사람에게 알려줄 주소입니다
