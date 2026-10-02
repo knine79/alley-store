@@ -442,6 +442,12 @@ Framework가 있는데 이 권한이 없으면 서명하기 전에 실패시킵�
   ([ADR-0049](adr/0049-public-store-app-download-page.md))
   - `/get` — 로그인 없이 받는 공개 페이지. 받는 사람에게 알려줄 주소입니다
   - `/apps` 맨 위 안내 줄 — 앱을 올리는 사람이 콘솔 안에서 보는 자리입니다
+- **앱마다 공유 주소 `/a/<앱 ID>` 가 있습니다**
+  ([ADR-0072](adr/0072-share-apps-through-a-web-page-and-the-custom-scheme.md)).
+  로그인 없이 열리는 웹 페이지이고, 출시된 앱만 이름·소개·아이콘을 보여줍니다. 페이지가
+  커스텀 스킴 `<scheme>://apps/<앱 ID>` 로 스토어 앱을 부르고, 스토어 앱은 그 앱 상세를
+  엽니다. 로그인 전에 받은 링크는 로그인한 뒤에 엽니다. 스토어 앱이 없으면 페이지가
+  `/get` 을 앞세웁니다. 유니버설 링크는 프로비저닝 프로필이 있어야 해서 쓰지 않습니다
 - **스토어 앱만 dmg 로도 나갑니다** ([ADR-0050](adr/0050-store-app-ships-as-a-disk-image.md)).
   사람이 손으로 옮기는 것은 이것뿐이고, dmg 안의 Applications 별칭이 그 일을 드래그
   한 번으로 만듭니다. 다른 앱은 스토어 앱이 `/Applications` 에 직접 넣으므로 필요
@@ -595,6 +601,7 @@ Sparkle은 내려받은 파일에 EdDSA 서명이 붙어 있어야 설치합니�
 ```
 GET   /health                          # 헬스체크
 GET   /api/v1/meta                     # 브랜딩·인증 설정 (비인증)
+GET   /a/:id                           # 앱 공유 페이지 (비인증, 출시된 앱만, ADR-0072)
 GET   /auth/google, /auth/google/callback
 POST  /api/v1/auth/token               # 앱용 토큰 교환
 GET   /api/v1/me

@@ -43,6 +43,8 @@ func routes(_ app: Application) throws {
     // 요구하지 않는다. 콘솔(`/apps`)보다 먼저 등록해서 경로가 갈리는 자리를
     // 남기지 않는다.
     try app.register(collection: StoreAppGetController())
+    // 앱 공유 페이지 (ADR-0072). 같은 이유로 로그인 없이 열린다.
+    try app.register(collection: AppLinkController())
 
     // 웹 콘솔. JSON API 보다 뒤에 등록해서 경로가 겹칠 때 API 가 이긴다.
     try app.register(collection: WebController())
