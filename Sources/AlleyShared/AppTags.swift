@@ -25,9 +25,12 @@ public enum AppTags {
         }
     }
 
-    /// 쉼표로 이어 적은 것을 태그로 나눈다. 콘솔 입력칸이 이 형태로 보낸다.
+    /// 입력칸에 적은 것을 태그로 나눈다.
+    ///
+    /// `#번역 #일정` 처럼 `#` 으로 적어도, `번역, 일정` 처럼 쉼표로 적어도 된다. 띄어쓰기는
+    /// 나누는 자리가 아니다. `#일정 관리 #번역` 은 "일정 관리" 와 "번역" 이다.
     public static func split(_ text: String) -> [String] {
-        text.split(separator: ",").map(String.init)
+        text.split(whereSeparator: { $0 == "," || $0 == "#" }).map(String.init)
     }
 
     /// 저장할 형태로 다듬는다.
@@ -41,7 +44,10 @@ public enum AppTags {
         var seen = Set<String>()
         var tags: [String] = []
         for value in raw {
+            // `#` 은 태그임을 보이는 표시일 뿐 이름의 일부가 아니다. 저장하지 않는다.
             let tag = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                .drop { $0 == "#" }
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             guard !tag.isEmpty else { continue }
             guard tag.count <= maximumLength else { throw ValidationError.tooLong(tag) }
             guard seen.insert(tag.lowercased()).inserted else { continue }

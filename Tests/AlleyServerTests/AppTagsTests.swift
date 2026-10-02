@@ -85,7 +85,12 @@ struct AppTagsTests {
                 .GET, "/apps/\(appID.uuidString)/edit", headers: .sessionCookie(token)
             ) { response in
                 #expect(response.status == .ok)
-                #expect(response.body.string.contains("일정, 번역"))
+                #expect(response.body.string.contains("#일정 #번역"))
+            }
+            try await app.testing().test(
+                .GET, "/apps/\(appID.uuidString)", headers: .sessionCookie(token)
+            ) { response in
+                #expect(response.body.string.contains(#"<span class="badge">#일정</span>"#))
             }
         }
     }
