@@ -1,0 +1,46 @@
+#extend("layout"):
+#export("content"):
+<nav class="breadcrumb"><a href="/apps">#(page.appsLabel)</a> · <a href="/apps/#(appID)">#(appName)</a></nav>
+<h1 class="page-title">앱 정보 고치기</h1>
+<p class="page-lead">스토어 앱의 목록과 앱 상세에 보이는 내용입니다. 번들 ID 는 바꿀 수 없습니다.</p>
+
+#if(error):
+<p class="notice notice-error">#(error)</p>
+#endif
+
+<form class="form" method="post" action="/apps/#(appID)/edit">
+    <label class="field">
+        <span class="field-label">이름</span>
+        <input class="input" type="text" name="name" required value="#(values.name)">
+    </label>
+
+    <label class="field">
+        <span class="field-label">한 줄 소개 <span class="field-optional">선택</span></span>
+        <input class="input" type="text" name="summary" value="#(values.summary)">
+    </label>
+
+    <label class="field">
+        <span class="field-label">설명 <span class="field-optional">선택</span></span>
+        <textarea class="input" name="description" rows="6">#(values.description)</textarea>
+    </label>
+
+    <label class="field">
+        <span class="field-label">분류 <span class="field-optional">선택</span></span>
+        <select class="input" name="category">
+            #for(option in categoryOptions):<option value="#(option.value)"#if(option.selected): selected#endif>#(option.title)</option>#endfor
+        </select>
+    </label>
+
+    <label class="field">
+        <span class="field-label">태그 <span class="field-optional">선택</span></span>
+        <input class="input" type="text" name="tags" value="#(values.tags)" placeholder="예: 번역, 일정, git">
+        <span class="field-note">이 낱말로 검색하면 이 앱이 나옵니다. 쉼표로 나눠 10개까지, 하나에 20자까지 적습니다.</span>
+    </label>
+
+    <div class="form-actions">
+        <a class="button" href="/apps/#(appID)">취소</a>
+        <button class="button button-primary" type="submit">저장</button>
+    </div>
+</form>
+#endexport
+#endextend

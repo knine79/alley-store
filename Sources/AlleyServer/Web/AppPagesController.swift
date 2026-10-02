@@ -23,6 +23,7 @@ struct AppPagesController: RouteCollection, Sendable {
         pages.get("new", use: newForm)
         pages.post("new", use: submitNew)
         pages.get(":appID", use: detail)
+        pages.get(":appID", "edit", use: editForm)
         pages.post(":appID", "edit", use: submitEdit)
         pages.post(":appID", "delete", use: deleteApp)
         pages.post(":appID", "portal-app-id", use: registerPortalAppID)
@@ -508,18 +509,66 @@ struct AppPagesController: RouteCollection, Sendable {
         try app.requireManageAccess(for: user)
 
         let values = try request.content.decode(AppFormValues.self)
-        try await AppRegistration.update(
-            app,
-            with: UpdateAppRequest(
-                name: values.name,
-                summary: values.summary ?? "",
-                description: values.description ?? "",
-                category: values.category ?? "",
-                tags: AppTags.split(values.tags ?? "")
-            ),
-            on: request.db
-        )
+        do {
+            try await AppRegistration.update(
+                app,
+                with: UpdateAppRequest(
+                    name: values.name,
+                    summary: values.summary ?? "",
+                    description: values.description ?? "",
+                    category: values.category ?? "",
+                    tags: AppTags.split(values.tags ?? "")
+                ),
+                on: request.db
+            )
+        } catch let abort as any AbortError where abort.status.code < 500 {
+            // 오류 화면으로 보내지 않는다. 적은 것을 그대로 둔 채 무엇이 틀렸는지 말한다.
+            let view = try await renderEdit(app: app, values: values, error: abort.reason, on: request)
+            return htmlResponse(view, status: abort.status)
+        }
         return request.redirect(to: "/apps/\(try app.requireID().uuidString)")
+    }
+
+    /// 앱 정보를 고치는 화면.
+    ///
+    /// 앱 상세에 폼을 펼쳐 두지 않고 따로 연다. 고치는 일은 드물고, 펼쳐 두면 소개와
+    /// 통계 사이에 큰 상자가 끼어 앱을 훑어보기 어렵다.
+    @Sendable
+    func editForm(request: Request) async throws -> View {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        try app.requireManageAccess(for: user)
+        return try await renderEdit(
+            app: app,
+            values: AppFormValues(
+                name: app.name,
+                summary: app.summary,
+                description: app.details,
+                category: app.category,
+                tags: app.tags.joined(separator: ", ")
+            ),
+            error: nil,
+            on: request
+        )
+    }
+
+    private func renderEdit(
+        app: App,
+        values: AppFormValues,
+        error: String?,
+        on request: Request
+    ) async throws -> View {
+        try await request.view.render(
+            "app-edit",
+            AppEditContext(
+                page: try await request.pageContext(title: "앱 정보 고치기"),
+                appID: try app.requireID().uuidString,
+                appName: app.name,
+                values: values,
+                categoryOptions: CategoryOption.options(selected: values.category),
+                error: error
+            )
+        ).get()
     }
 
     // MARK: - 포털 App ID
@@ -1053,11 +1102,8 @@ struct AppRow: Encodable {
     var details: String?
     /// 화면에 쓰는 분류 이름. 미분류거나 목록에 없는 예전 값이면 nil.
     var category: String?
-    var categoryOptions: [CategoryOption]
     var tags: [String]
     var screenshots: [ScreenshotRow]
-    /// 편집 칸에 다시 채울 값. 쉼표로 잇는다.
-    var tagsText: String
     var ownerEmail: String
     var latestReleasedVersion: String?
     /// 별점 평균. 아무도 안 남겼으면 nil.
@@ -1086,7 +1132,6 @@ struct AppRow: Encodable {
         self.summary = app.summary
         self.details = app.details
         self.category = AppCategory(stored: app.category)?.title
-        self.categoryOptions = CategoryOption.options(selected: app.category)
         self.tags = app.tags
         let appID = try app.requireID()
         self.screenshots = app.screenshotKeys.compactMap { key in
@@ -1097,7 +1142,6 @@ struct AppRow: Encodable {
                 )
             }
         }
-        self.tagsText = app.tags.joined(separator: ", ")
         // 목록에서 소유자를 함께 읽어두므로 여기서 관계를 만지지 않는다.
         self.ownerEmail = app.$owner.value?.email ?? ""
         self.latestReleasedVersion = latestReleased?.shortVersion
@@ -1254,6 +1298,16 @@ struct AppFormContext: Encodable {
     /// 이 사람이 걸어둔 확인 중인 등록. 같은 앱을 또 만들지 않게 보여준다 (ADR-0039).
     var pendingApps: [PendingAppRow]
     var categoryOptions: [CategoryOption]
+}
+
+struct AppEditContext: Encodable {
+    var page: PageContext
+    var appID: String
+    /// 지금 저장된 이름. 고치는 중인 값이 아니라 돌아갈 화면의 이름이다.
+    var appName: String
+    var values: AppFormValues
+    var categoryOptions: [CategoryOption]
+    var error: String?
 }
 
 /// 앱 상세에 그리는 스크린샷 한 장.
