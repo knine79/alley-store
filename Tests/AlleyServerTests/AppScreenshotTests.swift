@@ -10,17 +10,26 @@ import VaporTesting
 @Suite("앱 스크린샷")
 struct AppScreenshotTests {
     private struct Upload: Content {
-        var image: File
+        var images: [File]
     }
 
     private func upload(
         _ data: Data, filename: String = "shot.png", to appID: UUID, token: String, on app: Application
     ) async throws -> HTTPStatus {
+        try await upload([(data, filename)], to: appID, token: token, on: app)
+    }
+
+    private func upload(
+        _ files: [(Data, String)], to appID: UUID, token: String, on app: Application
+    ) async throws -> HTTPStatus {
         var status = HTTPStatus.ok
         try await app.testing().test(
             .POST, "/apps/\(appID.uuidString)/screenshots", headers: .form(cookie: token),
             beforeRequest: { request in
-                try request.content.encode(Upload(image: File(data: .init(data: data), filename: filename)), as: .formData)
+                try request.content.encode(
+                    Upload(images: files.map { File(data: .init(data: $0.0), filename: $0.1) }),
+                    as: .formData
+                )
             }
         ) { status = $0.status }
         return status
@@ -84,6 +93,44 @@ struct AppScreenshotTests {
             let stored = try #require(try await App.find(appID, on: app.db))
             #expect(stored.screenshotKeys.count == 1)
             #expect(stored.screenshotKeys[0].hasSuffix(".jpg"))
+        }
+    }
+
+    @Test("여러 장을 한 번에 올리고, 하나라도 틀리면 아무것도 올리지 않는다")
+    func uploadsSeveralAtOnce() async throws {
+        try await withMigratedApp { app in
+            let (seeded, token) = try await seed(app)
+            let appID = try seeded.requireID()
+            let png = PNGFixture.png(width: 100, height: 100)
+
+            let mixed = [(png, "a.png"), (Data("text".utf8), "b.png")]
+            #expect(try await upload(mixed, to: appID, token: token, on: app) == .badRequest)
+            #expect(try await App.find(appID, on: app.db)?.screenshotKeys.isEmpty == true)
+
+            #expect(try await upload([(png, "a.png"), (png, "b.png"), (png, "c.png")], to: appID, token: token, on: app) == .seeOther)
+            #expect(try await App.find(appID, on: app.db)?.screenshotKeys.count == 3)
+
+            // 자리는 둘 남았는데 셋을 올리면 앞의 둘만 들어가고 그 사실을 알린다.
+            #expect(try await upload([(png, "d.png"), (png, "e.png"), (png, "f.png")], to: appID, token: token, on: app) == .badRequest)
+            #expect(try await App.find(appID, on: app.db)?.screenshotKeys.count == AppScreenshots.maximumCount)
+        }
+    }
+
+    @Test("공동 담당자는 고치는 화면에서 스크린샷만 다룬다")
+    func memberSeesScreenshotsOnly() async throws {
+        try await withMigratedApp { app in
+            let (seeded, _) = try await seed(app)
+            let (member, memberToken) = try await app.makeUser(email: "member@example.com", role: .developer)
+            try await AppMember(appID: seeded.requireID(), userID: member.requireID()).save(on: app.db)
+
+            try await app.testing().test(
+                .GET, "/apps/\(try seeded.requireID().uuidString)/edit", headers: .sessionCookie(memberToken)
+            ) { response in
+                #expect(response.status == .ok)
+                let html = response.body.string
+                #expect(html.contains(#"id="screenshots""#))
+                #expect(!html.contains(#"name="summary""#))
+            }
         }
     }
 

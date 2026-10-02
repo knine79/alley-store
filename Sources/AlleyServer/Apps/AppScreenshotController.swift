@@ -77,71 +77,104 @@ struct AppScreenshotController: RouteCollection, Sendable {
             .grouped("apps", ":appID", "screenshots")
         pages.on(
             .POST,
-            // multipart 경계와 다른 칸이 붙으므로 한 장 크기보다 조금 넉넉히 받는다.
-            body: .collect(maxSize: .init(value: AppScreenshots.maximumSize + 64 * 1024)),
+            // 여러 장을 한 번에 받는다. multipart 경계와 다른 칸이 붙으므로 조금 넉넉히 받는다.
+            body: .collect(maxSize: .init(
+                value: AppScreenshots.maximumSize * AppScreenshots.maximumCount + 256 * 1024
+            )),
             use: upload
         )
         pages.post(":screenshotID", "delete", use: delete)
     }
 
     struct UploadForm: Content {
-        var image: File?
+        /// 폼의 `images[]`. 여러 장을 고르거나 끌어다 놓으면 함께 온다.
+        var images: [File]?
     }
 
     // MARK: - 받기
 
+    /// 고른 그림을 모두 받는다.
+    ///
+    /// **하나라도 형식이나 크기가 틀리면 아무것도 올리지 않는다.** 일부만 올라가면 어느
+    /// 것이 빠졌는지 화면을 보고 맞춰봐야 한다. 자리가 모자라면 앞에서부터 들어가는 만큼만
+    /// 넣고, 몇 장이 빠졌는지 말한다.
     @Sendable
     func upload(request: Request) async throws -> Response {
         let user = try request.requireUser()
         let app = try await request.findApp()
         try await app.requireUploadAccess(for: user, on: request.db)
+        let appID = try app.requireID()
 
-        let form = try request.content.decode(UploadForm.self)
-        guard let file = form.image, file.data.readableBytes > 0 else {
-            throw Abort(.badRequest, reason: "올릴 이미지를 고르세요.")
+        let files = (try request.content.decode(UploadForm.self).images ?? [])
+            .filter { $0.data.readableBytes > 0 }
+        let images: [(Data, AppScreenshots.Format)]
+        do {
+            images = try files.map(Self.checked)
+            guard !images.isEmpty else {
+                throw Abort(.badRequest, reason: "올릴 이미지를 고르세요.")
+            }
+        } catch let abort as any AbortError {
+            return try await reject(abort, app: app, user: user, on: request)
         }
+
+        var added = 0
+        for (data, format) in images {
+            let key = request.artifactStorage.newKey(
+                AppScreenshots.key(appID: appID, id: UUID(), format: format)
+            )
+            try await request.artifactStorage.put(data, to: key, contentType: format.contentType)
+
+            // **배열을 읽어 고쳐 쓰지 않고 데이터베이스에서 한 번에 덧붙인다.** 읽고 쓰면 두
+            // 장을 동시에 올릴 때 나중에 저장한 쪽이 앞의 것을 덮고, 덮인 키의 오브젝트는
+            // 아무도 가리키지 않은 채 남는다. 상한도 같은 문장에서 본다.
+            let appended: Bool
+            do {
+                appended = try await Self.append(key, to: appID, on: request.db)
+            } catch {
+                // 행에 적지 못한 오브젝트는 아무도 가리키지 않는다. 남기지 않는다.
+                try? await request.artifactStorage.delete(key: key)
+                throw error
+            }
+            guard appended else {
+                try? await request.artifactStorage.delete(key: key)
+                break
+            }
+            added += 1
+        }
+
+        request.logger.notice(
+            "앱 스크린샷을 받았습니다 [\(app.bundleID), \(added)장, 올린 사람: \(user.email)]"
+        )
+        guard added == images.count else {
+            let skipped = images.count - added
+            let reason = "스크린샷은 \(AppScreenshots.maximumCount)장까지라 \(skipped)장은 올리지 못했습니다. 하나를 지우고 올리세요."
+            return try await reject(Abort(.badRequest, reason: reason), app: app, user: user, on: request)
+        }
+        return request.redirect(to: "/apps/\(appID.uuidString)/edit#screenshots")
+    }
+
+    /// 한 장의 형식과 크기를 본다. 파일 이름이나 브라우저가 붙인 형식은 믿지 않는다.
+    private static func checked(_ file: File) throws -> (Data, AppScreenshots.Format) {
         guard file.data.readableBytes <= AppScreenshots.maximumSize else {
-            throw Abort(.payloadTooLarge, reason: "스크린샷은 한 장에 5MB 까지입니다.")
+            throw Abort(.payloadTooLarge, reason: "\(file.filename) 이 5MB 를 넘습니다.")
         }
         let data = Data(buffer: file.data)
         guard let format = AppScreenshots.format(of: data) else {
-            throw Abort(.badRequest, reason: "PNG 나 JPEG 만 올릴 수 있습니다.")
+            throw Abort(.badRequest, reason: "\(file.filename) 은 PNG 나 JPEG 가 아닙니다.")
         }
-        guard app.screenshotKeys.count < AppScreenshots.maximumCount else {
-            throw Abort(
-                .badRequest,
-                reason: "스크린샷은 \(AppScreenshots.maximumCount)장까지입니다. 하나를 지우고 올리세요."
-            )
-        }
+        return (data, format)
+    }
 
-        let appID = try app.requireID()
-        let key = request.artifactStorage.newKey(
-            AppScreenshots.key(appID: appID, id: UUID(), format: format)
+    /// 고치는 화면에 머문 채 무엇이 틀렸는지 말한다. 오류 화면으로 보내면 돌아오는 길을
+    /// 찾아야 한다.
+    private func reject(
+        _ abort: any AbortError, app: App, user: User, on request: Request
+    ) async throws -> Response {
+        let fresh = try await App.find(app.requireID(), on: request.db) ?? app
+        let view = try await AppPagesController.renderEdit(
+            app: fresh, user: user, values: nil, screenshotError: abort.reason, on: request
         )
-        try await request.artifactStorage.put(data, to: key, contentType: format.contentType)
-
-        // **배열을 읽어 고쳐 쓰지 않고 데이터베이스에서 한 번에 덧붙인다.** 읽고 쓰면 두
-        // 장을 동시에 올릴 때 나중에 저장한 쪽이 앞의 것을 덮고, 덮인 키의 오브젝트는
-        // 아무도 가리키지 않은 채 남는다. 상한도 같은 문장에서 본다. 위의 검사는 그
-        // 전에 사람에게 빨리 알려주려는 것이고, 막는 것은 여기다.
-        let appended: Bool
-        do {
-            appended = try await Self.append(key, to: appID, on: request.db)
-        } catch {
-            // 행에 적지 못한 오브젝트는 아무도 가리키지 않는다. 남기지 않는다.
-            try? await request.artifactStorage.delete(key: key)
-            throw error
-        }
-        guard appended else {
-            try? await request.artifactStorage.delete(key: key)
-            throw Abort(
-                .badRequest,
-                reason: "스크린샷은 \(AppScreenshots.maximumCount)장까지입니다. 하나를 지우고 올리세요."
-            )
-        }
-
-        request.logger.notice("앱 스크린샷을 받았습니다 [\(app.bundleID), 올린 사람: \(user.email)]")
-        return request.redirect(to: "/apps/\(appID.uuidString)#screenshots")
+        return htmlResponse(view, status: abort.status)
     }
 
     // MARK: - 지우기
@@ -164,7 +197,7 @@ struct AppScreenshotController: RouteCollection, Sendable {
         } catch {
             request.logger.warning("앱 스크린샷 오브젝트를 지우지 못했습니다 [키: \(key), 오류: \(error)]")
         }
-        return request.redirect(to: "/apps/\(try app.requireID().uuidString)#screenshots")
+        return request.redirect(to: "/apps/\(try app.requireID().uuidString)/edit#screenshots")
     }
 
     // MARK: - 내주기

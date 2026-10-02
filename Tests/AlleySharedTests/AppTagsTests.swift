@@ -33,8 +33,10 @@ struct AppTagsRuleTests {
         #expect(try AppTags.normalize([String(repeating: "가", count: AppTags.maximumLength)]).count == 1)
     }
 
-    @Test("쉼표로 나눈다")
-    func splits() {
+    @Test("쉼표나 #으로 나누고, 띄어쓰기는 태그 안에 남긴다")
+    func splits() throws {
         #expect(AppTags.split("a, b,,c") == ["a", " b", "c"])
+        #expect(try AppTags.normalize(AppTags.split("#일정 관리 #번역")) == ["일정 관리", "번역"])
+        #expect(try AppTags.normalize(AppTags.split("#git, #Git ##메모")) == ["git", "메모"])
     }
 }

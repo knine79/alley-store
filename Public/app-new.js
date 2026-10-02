@@ -485,8 +485,8 @@
             summary: emptyToNull(form.elements.summary.value),
             description: emptyToNull(form.elements.description.value),
             category: emptyToNull(form.elements.category.value),
-            // 쉼표로 이어 적은 것을 나눈다. 다듬기와 검사는 서버가 한다.
-            tags: form.elements.tags.value.split(",")
+            // `#` 이나 쉼표로 나눈다 (`AppTags.split` 과 같은 규칙). 다듬기와 검사는 서버가 한다.
+            tags: form.elements.tags.value.split(/[#,]/)
         });
     }
 
