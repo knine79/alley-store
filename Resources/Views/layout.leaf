@@ -12,6 +12,8 @@
     #if(page.store.accentColor):
     <style>:root { --accent: #(page.store.accentColor); }</style>
     #endif
+    <!-- 화면마다 머리에 더할 것. 공유 페이지의 미리보기 태그가 쓴다 (ADR-0072). -->
+    #import("head")
 </head>
 <body>
     <header class="chrome">

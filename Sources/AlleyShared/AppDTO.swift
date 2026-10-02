@@ -101,6 +101,12 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
     /// 옵셔널이라 이 필드를 모르는 예전 서버에도 그대로 붙는다. 그때는 클라이언트가
     /// 번들 ID 로 견준다.
     public var isStoreApp: Bool?
+    /// 사람에게 건넬 이 앱의 주소 (ADR-0072). 스토어 앱의 공유 버튼이 이 값을 쓴다.
+    ///
+    /// **출시된 앱에만 있다.** 출시 전 앱의 공유 페이지는 앱 정보를 보여주지 않으므로
+    /// 건넬 주소도 없다. 서버의 공개 주소를 아는 쪽이 서버라서 서버가 만들어 준다.
+    /// 이 값을 모르는 예전 서버에서는 nil 이고, 그때는 공유 버튼을 그리지 않는다.
+    public var shareURL: String?
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -121,6 +127,7 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
         latestReleasedVersion: VersionDTO? = nil,
         rating: RatingSummary? = nil,
         isStoreApp: Bool? = nil,
+        shareURL: String? = nil,
         createdAt: Date,
         updatedAt: Date
     ) {
@@ -140,6 +147,7 @@ public struct AppDTO: Codable, Sendable, Identifiable, Equatable {
         self.latestReleasedVersion = latestReleasedVersion
         self.rating = rating
         self.isStoreApp = isStoreApp
+        self.shareURL = shareURL
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
