@@ -50,7 +50,12 @@ struct AppPagesController: RouteCollection, Sendable {
     @Sendable
     func list(request: Request) async throws -> View {
         let user = try request.requireUser()
-        let apps = try await App.query(on: request.db).with(\.$owner).sort(\.$name).all()
+        // 검색은 개발자 이름도 본다 (`CatalogSearch`). 멤버를 앱마다 따로 읽으면 N+1 이다.
+        let apps = try await App.query(on: request.db)
+            .with(\.$owner)
+            .with(\.$members) { $0.with(\.$user) }
+            .sort(\.$name)
+            .all()
         let latest = try await App.latestReleasedVersions(on: request.db)
 
         // 일반 사용자에게는 출시본이 있는 앱만 보인다. 받을 수 없는 앱이 목록에 뜨면
@@ -80,15 +85,33 @@ struct AppPagesController: RouteCollection, Sendable {
         let storeAppID = try await request.storeAppSettings().$app.id
         let visibility = try await AppVisibility.of(user, on: request.db)
 
-        let rows: [AppRow] = try settled.compactMap { app in
+        let listed: [(row: AppRow, dto: AppDTO)] = try settled.compactMap { app in
             let appID = try app.requireID()
             guard appID != storeAppID else { return nil }
             // **손댈 수 있는 앱만 보인다** (ADR-0051). 여기는 앱을 올리는 사람의
             // 화면이라 남의 앱은 등록·업로드·토큰·통계 어느 것도 할 수 없으면서 줄만
             // 차지한다. 받을 수도 없다 (이슈 #17). 카탈로그는 스토어 앱이 그린다.
             guard try visibility.canTouch(app) else { return nil }
-            return try AppRow(app: app, latestReleased: latest[appID], rating: ratings[appID])
+            return (
+                try AppRow(app: app, latestReleased: latest[appID], rating: ratings[appID]),
+                try app.toDTO(latestReleased: latest[appID], rating: ratings[appID])
+            )
         }
+
+        // **거르고 늘어놓는 것은 스토어 앱과 같은 함수다** (이슈 #56). 조건이 같으면
+        // 순서도 같아야 한다. 조건은 주소에만 둔다. 쿠키로 기억하면 공유한 주소가 받는
+        // 사람의 쿠키에 따라 다른 목록이 된다.
+        let conditions = try request.query.decode(AppListQuery.self)
+        let dtos = listed.map(\.dto)
+        let sort = conditions.sort.flatMap(CatalogSort.init(rawValue:)) ?? .name
+        let category = CatalogFilter.effectiveCategory(
+            AppCategory(stored: conditions.category),
+            in: dtos
+        )
+        let query = conditions.q?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let rowsByID = Dictionary(uniqueKeysWithValues: listed.map { ($0.dto.id, $0.row) })
+        let rows = CatalogFilter.apply(dtos, category: category, sort: sort, query: query)
+            .compactMap { rowsByID[$0.id] }
 
         // 스토어 앱이 없는 사람에게는 이것이 유일한 입구다 (이슈 #17). 목록에서
         // 뺐다고 받을 길까지 없애면 아무도 시작할 수 없다.
@@ -126,6 +149,18 @@ struct AppPagesController: RouteCollection, Sendable {
             AppListContext(
                 page: try await request.pageContext(title: PageContext.appsLabel(for: user.role)),
                 apps: rows,
+                totalCount: listed.count,
+                query: query,
+                sortOptions: CatalogSort.allCases.map {
+                    ListOption(value: $0.rawValue, title: $0.title, selected: $0 == sort)
+                },
+                categoryOptions: CatalogFilter.categories(in: dtos).map {
+                    ListOption(value: $0.rawValue, title: $0.title, selected: $0 == category)
+                },
+                isNarrowed: !query.isEmpty || category != nil,
+                noMatch: rows.isEmpty
+                    ? AppListContext.noMatchMessage(query: query, category: category)
+                    : nil,
                 canRegister: user.role.canPublish,
                 pendingApps: mine,
                 storeApp: bootstrap
@@ -1277,13 +1312,58 @@ struct PendingAppRow: Encodable {
     var name: String
 }
 
+/// 앱 목록 주소에 실리는 조건 (`/apps?q=&sort=&category=`).
+///
+/// 모르는 값은 버린다. 손으로 고친 주소나 예전에 공유한 주소로 오류 화면을 보일
+/// 이유가 없다.
+struct AppListQuery: Decodable {
+    var q: String?
+    var sort: String?
+    var category: String?
+}
+
+/// 고르기 칸의 한 줄.
+struct ListOption: Encodable {
+    var value: String
+    var title: String
+    var selected: Bool
+}
+
 struct AppListContext: Encodable {
     var page: PageContext
+    /// 조건에 맞는 앱. 고른 순서대로다.
     var apps: [AppRow]
+    /// 조건을 걸기 전 이 사람에게 보이는 앱 수. 0 이면 거르기 칸을 내지 않는다.
+    var totalCount: Int
+    /// 방금 친 검색어. 다시 그릴 때 칸에 그대로 남긴다.
+    var query: String
+    var sortOptions: [ListOption]
+    /// 목록에 실제로 있는 분류만. 비어 있으면 칸을 내지 않는다.
+    var categoryOptions: [ListOption]
+    /// 검색어나 분류로 좁혔나. 그러면 조건을 지우는 길을 낸다.
+    var isNarrowed: Bool
+    /// 조건에 맞는 앱이 없을 때 보일 말.
+    var noMatch: String?
     var canRegister: Bool
     var pendingApps: [PendingAppRow] = []
     /// 스토어 앱을 받는 자리. 출시본이 없으면 nil 이다.
     var storeApp: StoreAppBootstrapRow?
+}
+
+extension AppListContext {
+    /// 무엇으로 찾았는데 없었는지를 그대로 말한다. "결과 없음" 만 띄우면 오타인지
+    /// 분류를 잘못 골랐는지 알 수 없다.
+    ///
+    /// 분류만 고르고 없는 경우는 없다. 목록에 있는 분류만 고를 수 있다
+    /// (`CatalogFilter.effectiveCategory`).
+    static func noMatchMessage(query: String, category: AppCategory?) -> String {
+        switch (query.isEmpty, category) {
+        case (false, let category?): "\(category.title) 분류에서 '\(query)' 로 찾은 앱이 없습니다."
+        case (false, nil): "'\(query)' 로 찾은 앱이 없습니다."
+        case (true, let category?): "\(category.title) 분류에 속한 앱이 없습니다."
+        case (true, nil): "조건에 맞는 앱이 없습니다."
+        }
+    }
 }
 
 /// 목록 맨 위에 두는 스토어 앱 안내.
