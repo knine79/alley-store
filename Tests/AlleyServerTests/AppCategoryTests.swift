@@ -65,11 +65,14 @@ struct AppCategoryStorageTests {
             ) { #expect($0.status == .seeOther) }
 
             try await app.testing().test(
+                .GET, "/apps/\(appID.uuidString)/edit", headers: .sessionCookie(token)
+            ) { response in
+                #expect(response.body.string.contains(#"<option value="productivity" selected>생산성</option>"#))
+            }
+            try await app.testing().test(
                 .GET, "/apps/\(appID.uuidString)", headers: .sessionCookie(token)
             ) { response in
-                let html = response.body.string
-                #expect(html.contains(#"<option value="productivity" selected>생산성</option>"#))
-                #expect(html.contains(#"<span class="badge">생산성</span>"#))
+                #expect(response.body.string.contains(#"<span class="badge">생산성</span>"#))
             }
         }
     }

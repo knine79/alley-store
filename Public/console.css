@@ -360,6 +360,11 @@ code {
     min-width: 0;
 }
 
+.identity-action {
+    flex: 0 0 auto;
+    align-self: flex-start;
+}
+
 .identity-body .page-title {
     margin-bottom: var(--space-1);
 }
