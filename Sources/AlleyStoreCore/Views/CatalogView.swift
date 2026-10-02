@@ -137,6 +137,7 @@ struct CatalogView: View {
             }
         }
         .onChange(of: model.apps) { _, _ in
+            openLinkedApp()
             // 목록이 있는데 오른쪽이 비어 있으면 화면이 절반만 채워진 것처럼 보인다.
             // 사용자가 고르기 전에도 볼 것이 있게 첫 앱을 미리 편다.
             //
@@ -145,6 +146,28 @@ struct CatalogView: View {
             if selection == nil {
                 selection = model.catalog.first?.id
             }
+        }
+        // 공유 링크로 들어온 앱을 연다 (ADR-0072). 로그인 전에 들어온 링크는 이 화면이
+        // 처음 뜰 때 연다. 목록을 다 읽기 전이면 위의 `apps` 변화에서 다시 본다.
+        .onChange(of: AppLinkInbox.shared.pending) { _, _ in openLinkedApp() }
+        .onChange(of: model.isLoading) { _, _ in openLinkedApp() }
+        .onAppear(perform: openLinkedApp)
+    }
+
+    private func openLinkedApp() {
+        switch AppLinkInbox.shared.resolve(
+            catalog: model.catalog.map(\.id),
+            isLoading: model.isLoading
+        ) {
+        case .select(let appID):
+            // 검색어나 분류에 걸려 왼쪽 목록에서 빠져 있으면 고른 줄이 안 보인다.
+            search = ""
+            categoryFilter = nil
+            selection = appID
+        case .notFound:
+            model.errorMessage = "링크의 앱을 찾을 수 없습니다. 아직 출시되지 않았거나 내려간 앱입니다."
+        case .wait, nil:
+            break
         }
     }
 }
@@ -421,6 +444,9 @@ struct AppDetailView: View {
                 }
             }
             Spacer()
+            if let shareURL = app.shareURL.flatMap(URL.init(string:)) {
+                ShareButton(appName: app.name, url: shareURL)
+            }
             if app.latestReleasedVersion == nil {
                 Text("출시본 없음").foregroundStyle(.secondary)
             } else {
@@ -428,6 +454,36 @@ struct AppDetailView: View {
                     .controlSize(.large)
             }
         }
+    }
+}
+
+/// 앱 공유 주소를 건네는 버튼 (ADR-0072).
+///
+/// 누르면 macOS 공유 메뉴가 뜬다. 슬랙·메시지·메일로 보내는 길은 거기 있다. **링크 복사를
+/// 따로 둔다.** 공유 메뉴의 복사 항목은 macOS 버전마다 있기도 하고 없기도 한데, 이 버튼을
+/// 누르는 사람 대부분이 하려는 일은 슬랙 입력칸에 붙여넣는 것이다.
+private struct ShareButton: View {
+    @Environment(StoreModel.self) private var model
+    let appName: String
+    let url: URL
+
+    var body: some View {
+        Menu {
+            Button("링크 복사") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                model.announce("\(appName) 링크를 복사했습니다.")
+            }
+            ShareLink(item: url, subject: Text(appName)) {
+                Text("공유…")
+            }
+        } label: {
+            Label("공유", systemImage: "square.and.arrow.up")
+        }
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .controlSize(.large)
+        .help("이 앱의 링크를 보낸다")
     }
 }
 

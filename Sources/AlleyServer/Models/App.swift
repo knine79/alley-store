@@ -225,6 +225,11 @@ extension App {
             latestReleasedVersion: try latestReleased?.toDTO(),
             rating: rating,
             isStoreApp: isStoreApp ? true : nil,
+            // 출시 전 앱의 공유 페이지는 앱 정보를 보여주지 않는다 (ADR-0072). 스토어 앱
+            // 자신은 목록에 없어서 그 링크로 열 상세가 없다. 사람에게는 `/get` 을 건넨다.
+            shareURL: latestReleased != nil && !isStoreApp
+                ? Self.absolute(AppLink.webPath(appID: try requireID()), base: baseURL)
+                : nil,
             createdAt: createdAt ?? Date(),
             updatedAt: updatedAt ?? createdAt ?? Date()
         )

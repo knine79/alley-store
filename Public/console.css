@@ -477,6 +477,25 @@ a.tab:hover {
     color: var(--text-muted);
 }
 
+/* 공유 페이지의 두 버튼 (ADR-0072). 위아래로 같은 폭으로 세운다. 나란히 두면
+ * 어느 쪽이 먼저인지가 흐려지고, 레이블 길이에 따라 폭이 달라 보인다. */
+.app-link-actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    max-width: 20rem;
+    margin: 0 auto;
+}
+
+/* `display: flex` 가 `hidden` 속성을 이긴다. 스크립트가 꺼내기 전에는 숨겨둔다. */
+.app-link-actions[hidden] {
+    display: none;
+}
+
+.app-link-actions .hero-note {
+    margin-top: var(--space-2);
+}
+
 .hero-note.warning {
     background: var(--warning-bg);
     border: 1px solid var(--warning-border);
