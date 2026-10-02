@@ -72,8 +72,8 @@
         <label class="field">
             <span class="field-label">태그 <span class="field-optional">선택</span></span>
             <input class="input" type="text" name="tags" value="#(tags)"
-                   placeholder="예: 번역, 일정, git">
-            <span class="field-note">이 낱말로 검색하면 이 앱이 나옵니다. 쉼표로 나눠 10개까지, 하나에 20자까지 적습니다.</span>
+                   placeholder="\#번역 \#일정 \#git">
+            <span class="field-note">태그는 검색어입니다. 이 낱말로 검색하면 이 앱이 나옵니다. <code>\#</code> 으로 나눠 10개까지, 하나에 20자까지 적습니다.</span>
         </label>
     </fieldset>
 

@@ -444,24 +444,32 @@ struct AppDetailView: View {
 struct ScreenshotStrip: View {
     let addresses: [String]
     static let height: CGFloat = 220
+    /// 크게 보고 있는 스크린샷의 자리. nil 이면 닫혀 있다.
+    @State private var enlarged: Int?
 
     var body: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 12) {
-                ForEach(addresses, id: \.self) { address in
-                    Screenshot(address: address)
+                ForEach(Array(addresses.enumerated()), id: \.element) { index, address in
+                    Screenshot(address: address) { enlarged = index }
                 }
             }
         }
         .frame(height: Self.height)
+        .sheet(isPresented: Binding(
+            get: { enlarged != nil },
+            set: { if !$0 { enlarged = nil } }
+        )) {
+            ScreenshotViewer(addresses: addresses, index: $enlarged)
+        }
     }
 }
 
 private struct Screenshot: View {
     @Environment(StoreModel.self) private var model
     let address: String
+    let open: () -> Void
     @State private var image: NSImage?
-    @State private var isEnlarged = false
 
     var body: some View {
         Group {
@@ -470,20 +478,8 @@ private struct Screenshot: View {
                     .resizable()
                     .interpolation(.high)
                     .scaledToFit()
-                    .onTapGesture { isEnlarged = true }
+                    .onTapGesture(perform: open)
                     .help("눌러서 크게 보기")
-                    .sheet(isPresented: $isEnlarged) {
-                        VStack(alignment: .trailing, spacing: 12) {
-                            Image(nsImage: image)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(minWidth: 640, minHeight: 400)
-                            // Esc 로도 닫힌다. 시트를 닫는 길이 그림 클릭뿐이면 찾지 못한다.
-                            Button("닫기") { isEnlarged = false }
-                                .keyboardShortcut(.cancelAction)
-                        }
-                        .padding()
-                    }
             } else {
                 RoundedRectangle(cornerRadius: 6)
                     .fill(.quaternary)
@@ -495,6 +491,62 @@ private struct Screenshot: View {
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
         .accessibilityLabel("스크린샷")
         .task(id: address) { image = await model.screenshot(address) }
+    }
+}
+
+/// 스크린샷을 크게 보며 앞뒤로 넘긴다.
+///
+/// 방향키로 넘긴다. 한 장씩 닫고 다시 여는 것은 여러 장을 훑는 사람에게 번거롭다.
+/// 끝에서 더 넘기면 멈춘다. 처음으로 돌아가면 몇 장째인지 놓친다.
+private struct ScreenshotViewer: View {
+    @Environment(StoreModel.self) private var model
+    let addresses: [String]
+    @Binding var index: Int?
+    @State private var image: NSImage?
+
+    private var current: Int { index ?? 0 }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Group {
+                if let image {
+                    Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
+                } else {
+                    ProgressView()
+                }
+            }
+            .frame(minWidth: 720, idealWidth: 960, minHeight: 450, idealHeight: 600)
+
+            HStack {
+                Button { move(-1) } label: { Image(systemName: "chevron.left") }
+                    .keyboardShortcut(.leftArrow, modifiers: [])
+                    .disabled(current == 0)
+                    .help("이전 (←)")
+                Text("\(current + 1) / \(addresses.count)")
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                Button { move(1) } label: { Image(systemName: "chevron.right") }
+                    .keyboardShortcut(.rightArrow, modifiers: [])
+                    .disabled(current >= addresses.count - 1)
+                    .help("다음 (→)")
+                Spacer()
+                // Esc 로도 닫힌다. 시트를 닫는 길이 그림 클릭뿐이면 찾지 못한다.
+                Button("닫기") { index = nil }
+                    .keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding()
+        .task(id: current) {
+            guard addresses.indices.contains(current) else { return }
+            image = await model.screenshot(addresses[current])
+        }
+    }
+
+    private func move(_ step: Int) {
+        let next = current + step
+        guard addresses.indices.contains(next) else { return }
+        image = nil
+        index = next
     }
 }
 

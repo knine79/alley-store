@@ -27,6 +27,12 @@
             #endif
         </p>
     </div>
+
+    <!-- 고치는 폼을 이 화면에 펼쳐 두지 않는다. 앱 정보를 고치는 일은 드물고, 펼쳐 두면
+         소개와 통계 사이에 큰 상자가 끼어 앱을 훑어보기 어렵다. -->
+    #if(canUpload):
+    <a class="button identity-action" href="/apps/#(app.id)/edit">앱 정보 고치기</a>
+    #endif
 </div>
 
 #if(app.isPending):
@@ -43,51 +49,14 @@
 <p class="body-text">#(app.details)</p>
 #endif
 #if(count(app.tags) > 0):
-<p class="tag-list">#for(tag in app.tags):<span class="badge">#(tag)</span> #endfor</p>
+<p class="tag-list">#for(tag in app.tags):<span class="badge">\##(tag)</span>#endfor</p>
 #endif
-
-<!-- 앱 정보는 버전을 올린 뒤 확인 화면에서만 고칠 수 있었다. 버전을 올리지 않고도
-     설명이나 태그를 고칠 수 있어야 한다. -->
-#if(canManage):
-<details class="disclosure">
-    <summary class="disclosure-summary">앱 정보 고치기</summary>
-    <div class="disclosure-body">
-        <form class="form" method="post" action="/apps/#(app.id)/edit">
-            <label class="field">
-                <span class="field-label">이름</span>
-                <input class="input" type="text" name="name" required value="#(app.name)">
-            </label>
-
-            <label class="field">
-                <span class="field-label">한 줄 소개 <span class="field-optional">선택</span></span>
-                <input class="input" type="text" name="summary" value="#(app.summary)">
-            </label>
-
-            <label class="field">
-                <span class="field-label">설명 <span class="field-optional">선택</span></span>
-                <textarea class="input" name="description" rows="4">#(app.details)</textarea>
-            </label>
-
-            <label class="field">
-                <span class="field-label">분류 <span class="field-optional">선택</span></span>
-                <select class="input" name="category">
-                    #for(option in app.categoryOptions):<option value="#(option.value)"#if(option.selected): selected#endif>#(option.title)</option>#endfor
-                </select>
-            </label>
-
-            <label class="field">
-                <span class="field-label">태그 <span class="field-optional">선택</span></span>
-                <input class="input" type="text" name="tags" value="#(app.tagsText)"
-                       placeholder="예: 번역, 일정, git">
-                <span class="field-note">이 낱말로 검색하면 이 앱이 나옵니다. 쉼표로 나눠 10개까지, 하나에 20자까지 적습니다.</span>
-            </label>
-
-            <div class="form-actions">
-                <button class="button button-primary" type="submit">저장</button>
-            </div>
-        </form>
-    </div>
-</details>
+#if(count(app.screenshots) > 0):
+<div class="screenshot-grid">
+    #for(shot in app.screenshots):
+    <a class="screenshot" href="#(shot.url)" target="_blank" rel="noopener"><img src="#(shot.url)" alt="스크린샷" loading="lazy"></a>
+    #endfor
+</div>
 #endif
 
 #if(downloads):
@@ -329,37 +298,6 @@
         서명 화면에 무엇을 채워야 하는지 적혀 있습니다. 그때까지는 Apple 화면에서
         직접 만들면 됩니다.
     </p>
-    #endif
-</section>
-#endif
-
-#if(canUpload):
-<section class="section" id="screenshots">
-    <h2 class="section-title">스크린샷</h2>
-    <p class="page-lead">
-        스토어 앱의 앱 상세에 보입니다. 받기 전에 무엇을 하는 앱인지 알 수 있게 합니다.
-        PNG 나 JPEG 로 #(screenshotLimit)장까지, 한 장에 5MB 까지 올립니다.
-    </p>
-
-    #if(count(app.screenshots) > 0):
-    <div class="screenshot-grid">
-        #for(shot in app.screenshots):
-        <figure class="screenshot">
-            <a href="#(shot.url)" target="_blank" rel="noopener"><img src="#(shot.url)" alt="스크린샷" loading="lazy"></a>
-            <form method="post" action="/apps/#(app.id)/screenshots/#(shot.id)/delete">
-                <button class="button button-small" type="submit">지우기</button>
-            </form>
-        </figure>
-        #endfor
-    </div>
-    #endif
-
-    #if(count(app.screenshots) < screenshotLimit):
-    <form class="form-inline" method="post" action="/apps/#(app.id)/screenshots"
-          enctype="multipart/form-data">
-        <input class="input" type="file" name="image" accept="image/png,image/jpeg" required>
-        <button class="button" type="submit">올리기</button>
-    </form>
     #endif
 </section>
 #endif
