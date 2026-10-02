@@ -2,8 +2,6 @@ import AlleyShared
 import Foundation
 import Testing
 
-@testable import AlleyStoreCore
-
 @Suite("앱 목록 정렬")
 struct CatalogSortTests {
     private let base = Date(timeIntervalSince1970: 1_790_000_000)
