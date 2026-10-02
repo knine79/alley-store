@@ -46,6 +46,115 @@ struct AppListPageTests {
         }
     }
 
+    // MARK: - 검색·정렬·분류 (이슈 #56)
+
+    /// 화면에 나온 번들 ID 를 나온 순서대로.
+    private func order(_ body: String, of bundleIDs: [String]) -> [String] {
+        bundleIDs
+            .compactMap { id in body.range(of: id).map { (id, $0.lowerBound) } }
+            .sorted { $0.1 < $1.1 }
+            .map(\.0)
+    }
+
+    private func seedCatalog(_ app: Application, owner: User) async throws {
+        let rows: [(String, String, AppCategory?, [String])] = [
+            ("com.example.notes", "메모", .productivity, ["git"]),
+            ("com.example.git", "Git 도우미", .developerTools, []),
+            ("com.example.paint", "그림판", .design, []),
+        ]
+        for (bundleID, name, category, tags) in rows {
+            let record = try await app.seedApp(bundleID: bundleID, name: name, owner: owner)
+            record.category = category?.rawValue
+            record.tags = tags
+            try await record.save(on: app.db)
+        }
+    }
+
+    @Test("검색어로 거르고, 이름에 걸린 앱이 태그에 걸린 앱보다 먼저 나온다")
+    func searchRanksLikeStoreApp() async throws {
+        try await withMigratedApp { app in
+            let (owner, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            try await seedCatalog(app, owner: owner)
+
+            try await app.testing().test(
+                .GET, "/apps?q=git", headers: .sessionCookie(token)
+            ) { response in
+                let body = response.body.string
+                #expect(!body.contains("com.example.paint"))
+                // 이름순으로는 어느 쪽이 앞이든 상관없이 이름에 걸린 쪽이 먼저다.
+                // 스토어 앱과 같은 규칙이다.
+                #expect(order(body, of: ["com.example.notes", "com.example.git"])
+                    == ["com.example.git", "com.example.notes"])
+                // 친 검색어가 칸에 남는다.
+                #expect(body.contains(#"name="q" value="git""#))
+            }
+        }
+    }
+
+    @Test("분류로 거르고, 칸에는 목록에 있는 분류만 나온다")
+    func filtersByCategory() async throws {
+        try await withMigratedApp { app in
+            let (owner, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            try await seedCatalog(app, owner: owner)
+
+            try await app.testing().test(
+                .GET, "/apps?category=design", headers: .sessionCookie(token)
+            ) { response in
+                let body = response.body.string
+                #expect(body.contains("com.example.paint"))
+                #expect(!body.contains("com.example.notes"))
+                #expect(body.contains(#"<option value="design" selected>"#))
+                // 고르면 빈 목록이 되는 칸은 내지 않는다.
+                #expect(!body.contains(#"value="business""#))
+                #expect(body.contains("조건 지우기"))
+            }
+        }
+    }
+
+    @Test("정렬은 주소로 고르고, 모르는 값이면 이름순이다")
+    func sortsFromQuery() async throws {
+        try await withMigratedApp { app in
+            let (owner, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            // 이름순으로 넣는다. 최신 등록순이면 그 반대로 나와야 한다.
+            for (bundleID, name) in [("com.example.a", "가"), ("com.example.b", "나"), ("com.example.c", "다")] {
+                try await app.seedApp(bundleID: bundleID, name: name, owner: owner)
+            }
+            let byName = ["com.example.a", "com.example.b", "com.example.c"]
+
+            try await app.testing().test(
+                .GET, "/apps?sort=newest", headers: .sessionCookie(token)
+            ) { response in
+                #expect(order(response.body.string, of: byName) == byName.reversed())
+                #expect(response.body.string.contains(#"<option value="newest" selected>"#))
+            }
+            // 손으로 고친 주소나 예전 주소로 오류 화면을 보일 이유가 없다.
+            try await app.testing().test(
+                .GET, "/apps?sort=nope&category=nope", headers: .sessionCookie(token)
+            ) { response in
+                #expect(response.status == .ok)
+                #expect(order(response.body.string, of: byName) == byName)
+                #expect(!response.body.string.contains("조건 지우기"))
+            }
+        }
+    }
+
+    @Test("맞는 앱이 없으면 무엇으로 찾았는지 말한다")
+    func explainsNoMatch() async throws {
+        try await withMigratedApp { app in
+            let (owner, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            try await seedCatalog(app, owner: owner)
+
+            try await app.testing().test(
+                .GET, "/apps?q=zzz&category=design", headers: .sessionCookie(token)
+            ) { response in
+                let body = response.body.string
+                #expect(body.contains("디자인 분류에서 &#39;zzz&#39; 로 찾은 앱이 없습니다."))
+                // 앱이 하나도 없을 때의 말과 섞이면 안 된다.
+                #expect(!body.contains("아직 등록된 앱이 없습니다"))
+            }
+        }
+    }
+
     @Test("로그인하지 않으면 로그인으로 보낸다")
     func requiresSignIn() async throws {
         try await withMigratedApp { app in
