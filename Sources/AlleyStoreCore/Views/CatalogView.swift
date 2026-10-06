@@ -25,6 +25,10 @@ struct CatalogView: View {
     }
 
     /// 웹 콘솔 목록과 같은 함수를 부른다. 조건이 같으면 순서도 같아야 한다 (이슈 #56).
+    private var selectedApp: AppDTO? {
+        model.apps.first(where: { $0.id == selection })
+    }
+
     private var visible: [AppDTO] {
         CatalogFilter.apply(model.catalog, category: categoryFilter, sort: sort, query: search)
     }
@@ -52,7 +56,7 @@ struct CatalogView: View {
                 }
             }
         } detail: {
-            if let selected = model.apps.first(where: { $0.id == selection }) {
+            if let selected = selectedApp {
                 AppDetailView(app: selected, meta: meta)
             } else {
                 ContentUnavailableView(
@@ -93,17 +97,25 @@ struct CatalogView: View {
                 .pickerStyle(.menu)
                 .help("목록 정렬")
             }
+            // 지금 보고 있는 앱의 링크를 건넨다 (ADR-0072). 상세 머리에 두면 설치 버튼과
+            // 나란히 서는데, 한쪽에만 아이콘이 있어 어울리지 않았다. 고른 앱에 줄 주소가
+            // 없으면(예전 서버) 누를 수 없게 둔다.
             ToolbarItem {
-                Button {
-                    Task { await model.refresh() }
-                } label: {
-                    Label("새로 고침", systemImage: "arrow.clockwise")
-                }
-                .disabled(model.isLoading)
+                ShareButton(
+                    appName: selectedApp?.name ?? "",
+                    url: selectedApp?.shareURL.flatMap(URL.init(string:))
+                )
             }
             ToolbarItem {
                 Menu {
                     Text(user.email)
+                    Divider()
+                    // 툴바의 새로 고침 자리를 공유에 내주고 여기로 옮겼다. 앱 메뉴의 같은
+                    // 항목과 같은 일을 하고, 바로 부를 때는 ⌘R 이 있다.
+                    Button("업데이트 확인") {
+                        Task { await model.checkForUpdatesNow() }
+                    }
+                    .disabled(model.isLoading)
                     Divider()
                     Button("로그아웃", action: model.signOut)
                 } label: {
@@ -229,6 +241,9 @@ struct AppRow: View {
 struct InstallButton: View {
     @Environment(StoreModel.self) private var model
     let app: AppDTO
+    /// 목록 줄에서는 작게, 상세 머리에서는 크게 둔다. 버튼 안에서 크기를 정하므로
+    /// 바깥에서 `.controlSize` 를 걸어도 먹지 않는다. 그래서 값으로 받는다.
+    var size: ControlSize = .small
     /// 띄울 확인. 있으면 창이 떠 있다.
     @State private var pendingWarning: ReinstallWarning?
 
@@ -253,7 +268,10 @@ struct InstallButton: View {
                 }
             }
             .buttonStyle(.bordered)
-            .controlSize(.small)
+            // 모양을 정해둔다. 맡겨두면 크기와 빌드한 SDK 마다 다르게 그려져(작으면 둥근
+            // 사각형, 크면 캡슐) 목록 줄과 상세 머리의 버튼이 서로 다른 버튼처럼 보였다.
+            .buttonBorderShape(.capsule)
+            .controlSize(size)
             // 깔린 것을 덮어쓰기 전에 한 번 묻는다. 개발자가 직접 넣은 빌드일 때가
             // 많고, 덮어쓰면 그 빌드는 스토어 어디에도 없다.
             .alert(
@@ -444,46 +462,101 @@ struct AppDetailView: View {
                 }
             }
             Spacer()
-            if let shareURL = app.shareURL.flatMap(URL.init(string:)) {
-                ShareButton(appName: app.name, url: shareURL)
-            }
             if app.latestReleasedVersion == nil {
                 Text("출시본 없음").foregroundStyle(.secondary)
             } else {
-                InstallButton(app: app)
-                    .controlSize(.large)
+                InstallButton(app: app, size: .large)
             }
         }
     }
 }
 
-/// 앱 공유 주소를 건네는 버튼 (ADR-0072).
+/// 앱 공유 주소를 건네는 툴바 버튼 (ADR-0072).
 ///
-/// 누르면 macOS 공유 메뉴가 뜬다. 슬랙·메시지·메일로 보내는 길은 거기 있다. **링크 복사를
-/// 따로 둔다.** 공유 메뉴의 복사 항목은 macOS 버전마다 있기도 하고 없기도 한데, 이 버튼을
-/// 누르는 사람 대부분이 하려는 일은 슬랙 입력칸에 붙여넣는 것이다.
+/// 누르면 버튼에 붙어 macOS 공유 창(`NSSharingServicePicker`)이 뜬다. 슬랙·메시지·메일로
+/// 보내는 길은 거기 있다.
+///
+/// **SwiftUI `ShareLink` 를 쓰지 않는다.** 처음에는 `Menu` 안에 넣었는데, 메뉴가 닫히면서
+/// 공유 창이 붙을 자리를 잃고 창 왼쪽 위에 떴다. 버튼 뷰를 직접 잡아 그 자리에 띄운다.
+///
+/// **링크 복사를 공유 창 맨 위에 넣는다.** macOS 공유 창에는 복사 항목이 없을 때가 있는데,
+/// 이 버튼을 누르는 사람 대부분이 하려는 일은 슬랙 입력칸에 붙여넣는 것이다. 메뉴를 하나
+/// 더 두지 않고 같은 창에서 고르게 한다.
 private struct ShareButton: View {
     @Environment(StoreModel.self) private var model
     let appName: String
-    let url: URL
+    let url: URL?
+    @State private var picker = LinkSharePicker()
 
     var body: some View {
-        Menu {
-            Button("링크 복사") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(url.absoluteString, forType: .string)
+        Button {
+            guard let url else { return }
+            picker.show(url: url) {
                 model.announce("\(appName) 링크를 복사했습니다.")
-            }
-            ShareLink(item: url, subject: Text(appName)) {
-                Text("공유…")
             }
         } label: {
             Label("공유", systemImage: "square.and.arrow.up")
         }
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .controlSize(.large)
+        .disabled(url == nil)
+        .background(ViewAnchor(picker: picker))
         .help("이 앱의 링크를 보낸다")
+    }
+}
+
+/// 공유 창을 띄울 버튼 뷰를 잡아둔다.
+private struct ViewAnchor: NSViewRepresentable {
+    let picker: LinkSharePicker
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        picker.anchor = view
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        picker.anchor = nsView
+    }
+}
+
+/// macOS 공유 창에 "링크 복사" 를 더해 띄운다.
+///
+/// 공유 창은 대리자를 약하게 잡으므로, 창이 떠 있는 동안 이 객체가 살아 있어야 한다.
+/// 버튼의 `@State` 가 잡고 있다.
+@MainActor
+private final class LinkSharePicker: NSObject, NSSharingServicePickerDelegate {
+    weak var anchor: NSView?
+    private var url: URL?
+    private var onCopy: (() -> Void)?
+
+    func show(url: URL, onCopy: @escaping () -> Void) {
+        guard let anchor else { return }
+        self.url = url
+        self.onCopy = onCopy
+        let picker = NSSharingServicePicker(items: [url])
+        picker.delegate = self
+        picker.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
+    }
+
+    nonisolated func sharingServicePicker(
+        _ sharingServicePicker: NSSharingServicePicker,
+        sharingServicesForItems items: [Any],
+        proposedSharingServices proposedServices: [NSSharingService]
+    ) -> [NSSharingService] {
+        let copy = NSSharingService(
+            title: "링크 복사",
+            image: NSImage(systemSymbolName: "link", accessibilityDescription: nil) ?? NSImage(),
+            alternateImage: nil
+        ) { [weak self] in
+            MainActor.assumeIsolated { self?.copyLink() }
+        }
+        return [copy] + proposedServices
+    }
+
+    private func copyLink() {
+        guard let url else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+        onCopy?()
     }
 }
 
