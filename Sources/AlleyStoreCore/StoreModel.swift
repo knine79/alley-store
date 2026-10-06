@@ -398,18 +398,20 @@ final class StoreModel {
     /// 창이 열려 있는 동안 주기적으로 목록을 다시 읽고, 자기 새 버전이 있으면 스스로
     /// 갈아끼운다.
     ///
-    /// **자기 업데이트는 묻지 않는다.** 스토어 앱이 낡으면 다른 앱을 받는 길 자체가
-    /// 낡는다. 받는 사람은 그 사실을 알 방법이 없고, 배너를 띄워둬도 "나중에" 가
-    /// 쌓인다. 다른 앱은 사람이 골라 받는 것이라 그대로 두고, 스토어 앱만 그렇게 한다.
+    /// **묻지 않고 업데이트한다** (ADR-0073). 스토어 앱 자신은 늘 그렇게 한다. 스토어 앱이
+    /// 낡으면 다른 앱을 받는 길 자체가 낡고, 배너를 띄워둬도 "나중에" 가 쌓인다. 다른 앱은
+    /// 계정 메뉴의 "앱 자동 업데이트" 가 켜져 있을 때, 실행 중이 아니고 덮어써도 되는 것만
+    /// 받는다 (`AutoUpdate`).
     ///
-    /// 다만 **다른 일이 돌고 있으면 건드리지 않는다.** 앱을 받는 중에 스토어가 스스로
-    /// 종료하면 받던 것이 사라진다. 그때는 다음 차례로 미룬다.
+    /// **다른 앱을 먼저 받고 스토어 앱을 나중에 갈아끼운다.** 스토어 앱은 갈아끼우면서
+    /// 종료하므로 먼저 하면 그 차례의 앱 업데이트가 사라진다. 사람이 받는 중이면 둘 다
+    /// 건드리지 않고 다음 차례로 미룬다.
     func watchForUpdates() async {
         while !Task.isCancelled {
             try? await Task.sleep(for: Self.refreshInterval)
             guard !Task.isCancelled else { return }
             await refresh()
-            await applySelfUpdateIfIdle()
+            await applyAutomaticUpdates()
         }
     }
 
@@ -419,7 +421,41 @@ final class StoreModel {
     /// 듣고 온 사람에게 "30분 뒤에 뜹니다" 는 답이 아니다.
     func checkForUpdatesNow() async {
         await refresh()
+        await applyAutomaticUpdates()
+    }
+
+    /// 자동 업데이트를 한다. 다른 앱 먼저, 스토어 앱 나중.
+    private func applyAutomaticUpdates() async {
+        await applyAppUpdatesIfIdle()
         await applySelfUpdateIfIdle()
+    }
+
+    /// 실행 중이 아니고 덮어써도 되는 앱을 차례로 받는다 (ADR-0073).
+    ///
+    /// 하나씩 받는다. 동시에 받으면 진행률이 목록 여기저기서 뛰고, 실패했을 때 무엇이
+    /// 실패했는지 알림이 겹친다. 끝나면 몇 개를 받았는지 한 줄로 알린다.
+    private func applyAppUpdatesIfIdle() async {
+        guard UpdatePreferences.autoUpdatesApps(), progress.isEmpty else { return }
+        let targets = AutoUpdate.candidates(
+            in: catalog,
+            state: state(of:),
+            isRunning: AutoUpdate.isRunning(bundleID:)
+        )
+        guard !targets.isEmpty else { return }
+
+        var updated: [String] = []
+        for app in targets {
+            // 받는 사이에 사람이 실행했을 수 있다. 바로 앞에서 다시 본다.
+            guard !AutoUpdate.isRunning(bundleID: app.bundleID) else { continue }
+            if await install(app, announcing: false) {
+                updated.append(app.name)
+            }
+        }
+        switch updated.count {
+        case 0: break
+        case 1: announce("\(Josa.object(updated[0])) 업데이트했습니다.")
+        default: announce("앱 \(updated.count)개를 업데이트했습니다.")
+        }
     }
 
     /// 지금 도는 번들을 제자리에서 갈아끼울 수 없는 까닭. 갈아끼울 수 있으면 nil.
@@ -510,14 +546,24 @@ final class StoreModel {
 
     /// 최신 출시본을 받아 설치한다.
     func install(_ app: AppDTO) async {
-        guard let client, let version = app.latestReleasedVersion else { return }
-        guard progress[app.id] == nil else { return }
+        await install(app, announcing: true)
+    }
+
+    /// 설치하고 성공했는지 돌려준다. 자동 업데이트는 앱마다 알리지 않고 끝에 한 번 알린다.
+    @discardableResult
+    private func install(_ app: AppDTO, announcing: Bool) async -> Bool {
+        guard let client, let version = app.latestReleasedVersion else { return false }
+        guard progress[app.id] == nil else { return false }
         // 끝난 뒤에는 새것이 깔려 있어서 무엇을 했는지(올렸나, 내렸나) 알 수 없다.
         let before = state(of: app)
 
-        statusDismissal?.cancel()
-        statusMessage = nil
-        errorMessage = nil
+        // 사람이 누른 설치만 떠 있던 알림을 걷는다. 자동 업데이트가 배경에서 걷으면 읽던
+        // 오류 창이 이유 없이 사라진다.
+        if announcing {
+            statusDismissal?.cancel()
+            statusMessage = nil
+            errorMessage = nil
+        }
         progress[app.id] = .downloading(0)
         defer { progress[app.id] = nil }
 
@@ -542,14 +588,18 @@ final class StoreModel {
             progress[app.id] = .installing
             installed = InstalledApps.scan()
             // 설치된 자리는 상세의 "설치된 위치" 가 말한다. 알림은 한눈에 읽히는 길이로 둔다.
-            announce(result.replacedExisting
-                ? before.replacedMessage(appName: app.name, version: version.shortVersion)
-                : "\(Josa.object(app.name)) 설치했습니다.")
+            if announcing {
+                announce(result.replacedExisting
+                    ? before.replacedMessage(appName: app.name, version: version.shortVersion)
+                    : "\(Josa.object(app.name)) 설치했습니다.")
+            }
+            return true
         } catch StoreClient.ClientError.unauthorized {
             signOut()
         } catch {
             errorMessage = error.localizedDescription
         }
+        return false
     }
 }
 
