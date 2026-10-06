@@ -64,6 +64,12 @@ struct AppPagesController: RouteCollection, Sendable {
             ofApps: apps.map { try $0.requireID() },
             on: request.db
         )
+        // 다운로드 많은 순으로 늘어놓을 때 쓴다. 스토어 앱 목록(API)과 같은 값이어야 두 곳의
+        // 순서가 같다. 앱마다 세면 N+1 이라 한 번에 모은다.
+        let downloads = try await DownloadStats.totals(
+            ofApps: apps.map { try $0.requireID() },
+            on: request.db
+        )
         // 등록이 끝나지 않은 앱은 목록에 넣지 않는다.
         //
         // 번들 ID 가 임시값이라 아직 어떤 앱인지 정해지지 않았다. 이름도 파일 이름에서
@@ -94,7 +100,11 @@ struct AppPagesController: RouteCollection, Sendable {
             guard try visibility.canTouch(app) else { return nil }
             return (
                 try AppRow(app: app, latestReleased: latest[appID], rating: ratings[appID]),
-                try app.toDTO(latestReleased: latest[appID], rating: ratings[appID])
+                try app.toDTO(
+                    latestReleased: latest[appID],
+                    rating: ratings[appID],
+                    downloadCount: downloads[appID] ?? 0
+                )
             )
         }
 
