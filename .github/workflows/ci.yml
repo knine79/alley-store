@@ -55,7 +55,9 @@ jobs:
   # 워커와 스토어 앱은 macOS 전용이다. 리눅스 잡은 이 둘을 빌드하지 못한다.
   build-macos:
     name: 워커·스토어 앱 (macOS)
-    runs-on: macos-15
+    # 릴리스의 베이스 번들과 같은 SDK 로 빌드한다. 다르면 여기서 통과한 코드가
+    # 내보낼 때 깨지거나 다르게 그려질 수 있다.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
 
@@ -63,8 +65,8 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .build
-          key: macos-spm-${{ hashFiles('Package.resolved') }}
-          restore-keys: macos-spm-
+          key: macos26-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: macos26-spm-
 
       - name: 워커 빌드
         run: swift build --product alley-worker
