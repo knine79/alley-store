@@ -25,7 +25,11 @@ jobs:
   # 금지한 "서명된 산출물" 이 아니다.
   store-app:
     name: 베이스 번들 빌드
-    runs-on: macos-15
+    # **macOS 26 SDK 로 빌드한다.** SwiftUI 컨트롤은 빌드한 SDK 에 따라 모양이 바뀐다.
+    # macos-15 에서 빌드하던 동안 운영 스토어 앱은 예전 모양이었고, 개발자 맥(Xcode 26)
+    # 에서 만든 것과 버튼 모양이 달라 화면 확인이 어긋났다. 배포 대상(LSMinimumSystemVersion)
+    # 은 그대로라 macOS 14 에서도 돈다.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
 
@@ -33,8 +37,8 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .build
-          key: macos-spm-${{ hashFiles('Package.resolved') }}
-          restore-keys: macos-spm-
+          key: macos26-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: macos26-spm-
 
       # 브랜딩 없는 재료라 붙을 주소를 박지 않는다. 서버가 조립할 때 자기
       # `PUBLIC_BASE_URL` 로 채운다 (ADR-0046). 이 표시가 없으면 스크립트가
