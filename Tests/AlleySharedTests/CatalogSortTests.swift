@@ -10,7 +10,8 @@ struct CatalogSortTests {
         _ name: String,
         rating: (average: Double, count: Int)? = nil,
         registeredDaysAgo: Double = 0,
-        releasedDaysAgo: Double? = nil
+        releasedDaysAgo: Double? = nil,
+        downloads: Int? = nil
     ) -> AppDTO {
         let id = UUID()
         let version = releasedDaysAgo.map { days in
@@ -22,6 +23,7 @@ struct CatalogSortTests {
         }
         return AppDTO(
             id: id, bundleID: "com.example.\(name)", name: name, ownerID: UUID(),
+            downloadCount: downloads,
             latestReleasedVersion: version,
             rating: rating.map { RatingSummary(count: $0.count, average: $0.average) },
             createdAt: base.addingTimeInterval(-registeredDaysAgo * 86_400),
@@ -61,6 +63,19 @@ struct CatalogSortTests {
         #expect(names(.reviewCount, apps) == ["많음", "적음", "빈 요약", "없음"])
     }
 
+    @Test("다운로드 많은 순은 횟수로, 모르는 앱만 맨 뒤")
+    func byDownloads() {
+        let apps = [
+            app("모름"),
+            app("없음", downloads: 0),
+            app("적음", downloads: 3),
+            app("많음", downloads: 120),
+        ]
+        // 0 은 "받아간 사람이 없다" 는 값이라 모르는 앱보다 앞이다.
+        #expect(names(.downloads, apps) == ["많음", "적음", "없음", "모름"])
+        #expect(names(.downloads, [app("다", downloads: 5), app("가", downloads: 5)]) == ["가", "다"])
+    }
+
     @Test("최신 등록순과 최근 업데이트순은 서로 다른 시각을 본다")
     func byDates() {
         // 오래전에 등록했지만 어제 업데이트한 앱과, 최근에 등록하고 그대로인 앱.
@@ -84,6 +99,6 @@ struct CatalogSortTests {
     func rawValuesAreStable() {
         // `@AppStorage` 에 이 값이 들어간다. 바뀌면 사람이 고른 정렬이 풀린다.
         #expect(CatalogSort.allCases.map(\.rawValue)
-            == ["name", "rating", "reviewCount", "newest", "recentlyUpdated"])
+            == ["name", "rating", "reviewCount", "downloads", "newest", "recentlyUpdated"])
     }
 }

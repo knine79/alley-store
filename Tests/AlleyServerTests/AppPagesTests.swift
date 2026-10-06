@@ -138,6 +138,35 @@ struct AppListPageTests {
         }
     }
 
+    /// 웹 콘솔은 목록을 그릴 때 다운로드 수를 따로 읽어야 한다. 빠뜨리면 모든 앱이 0 이라
+    /// 이름순과 같은 순서가 나오고, 스토어 앱의 같은 정렬과 어긋난다.
+    @Test("다운로드 많은 순은 받아간 횟수로 늘어놓는다")
+    func sortsByDownloads() async throws {
+        try await withMigratedApp { app in
+            let (owner, token) = try await app.makeUser(email: "dev@example.com", role: .developer)
+            for (bundleID, name, count) in [
+                ("com.example.a", "가", 1), ("com.example.b", "나", 0), ("com.example.c", "다", 3),
+            ] {
+                let record = try await app.seedApp(bundleID: bundleID, name: name, owner: owner)
+                let version = try await app.seedVersion(
+                    appID: try record.requireID(), short: "1.0", build: 1, state: .released, by: owner
+                )
+                for _ in 0..<count {
+                    try await Download(userID: try owner.requireID(), versionID: try version.requireID())
+                        .save(on: app.db)
+                }
+            }
+
+            try await app.testing().test(
+                .GET, "/apps?sort=downloads", headers: .sessionCookie(token)
+            ) { response in
+                #expect(order(response.body.string, of: ["com.example.a", "com.example.b", "com.example.c"])
+                    == ["com.example.c", "com.example.a", "com.example.b"])
+                #expect(response.body.string.contains(#"<option value="downloads" selected>"#))
+            }
+        }
+    }
+
     @Test("맞는 앱이 없으면 무엇으로 찾았는지 말한다")
     func explainsNoMatch() async throws {
         try await withMigratedApp { app in
