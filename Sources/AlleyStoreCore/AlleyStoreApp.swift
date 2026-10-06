@@ -30,6 +30,9 @@ public struct AlleyStoreApp: App {
                 Button("업데이트 확인") {
                     Task { await model.checkForUpdatesNow() }
                 }
+                // 툴바의 새로 고침 버튼을 공유에 내주고 계정 메뉴로 옮겼다. 한 번 더 눌러야
+                // 하는 자리라 바로 부르는 길을 남긴다. 맥 앱의 새로 고침은 ⌘R 이다.
+                .keyboardShortcut("r")
                 .disabled(model.isLoading)
             }
         }
