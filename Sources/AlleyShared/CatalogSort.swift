@@ -8,6 +8,8 @@ public enum CatalogSort: String, CaseIterable, Identifiable, Sendable {
     case name
     case rating
     case reviewCount
+    /// 받아간 횟수가 많은 순서. 많이 쓰이는 앱을 찾을 때 쓴다.
+    case downloads
     /// 스토어에 처음 등록된 순서. 새로 생긴 앱을 찾을 때 쓴다.
     case newest
     /// 가장 최근에 새 버전이 나온 순서. 업데이트가 나온 앱을 찾을 때 쓴다.
@@ -20,6 +22,7 @@ public enum CatalogSort: String, CaseIterable, Identifiable, Sendable {
         case .name: "이름순"
         case .rating: "별점순"
         case .reviewCount: "리뷰 많은 순"
+        case .downloads: "다운로드 많은 순"
         case .newest: "최신 등록순"
         case .recentlyUpdated: "최근 업데이트순"
         }
@@ -50,6 +53,10 @@ public enum CatalogSort: String, CaseIterable, Identifiable, Sendable {
             return Self.descending(lhs.rating?.average, rhs.rating?.average)
         case .reviewCount:
             return Self.descending(Self.ratedCount(lhs), Self.ratedCount(rhs))
+        case .downloads:
+            // 0 은 값이다. 받아간 사람이 없는 앱이고, 별점과 달리 "아직 모름" 이 아니다.
+            // 횟수를 모르는(예전 서버) 앱만 맨 뒤로 보낸다.
+            return Self.descending(lhs.downloadCount, rhs.downloadCount)
         case .newest:
             return Self.descending(lhs.createdAt, rhs.createdAt)
         case .recentlyUpdated:
