@@ -14,6 +14,8 @@ struct CatalogView: View {
     @State private var search = ""
     /// 고른 정렬. 다음에 켰을 때도 그대로 둔다. 매번 다시 고르게 하면 고르지 않는다.
     @AppStorage("catalogSort") private var sort: CatalogSort = .name
+    /// 계정 메뉴의 "앱 자동 업데이트". 이 맥에만 둔다 (ADR-0073).
+    @AppStorage(UpdatePreferences.appsKey) private var autoUpdatesApps = UpdatePreferences.defaultValue
     /// 거를 분류. nil 이면 전부 보인다.
     @State private var categoryFilter: AppCategory?
 
@@ -112,10 +114,23 @@ struct CatalogView: View {
                     Divider()
                     // 툴바의 새로 고침 자리를 공유에 내주고 여기로 옮겼다. 앱 메뉴의 같은
                     // 항목과 같은 일을 하고, 바로 부를 때는 ⌘R 이 있다.
-                    Button("업데이트 확인") {
+                    //
+                    // 아래 "앱 자동 업데이트" 와 이름이 비슷해서, 한 번 누르는 이쪽은 무엇을
+                    // 확인하는지 앞에 적고 둘 다 설명을 붙인다.
+                    //
+                    // **설명은 항목 아래 회색 줄로 따로 둔다.** 레이블에 두 번째 `Text` 를 넣으면
+                    // 메뉴 부제목이 될 줄 알았는데, 그려지지 않고 줄 높이만 늘었다. 체크 항목은
+                    // 체크 표시까지 사라졌다. 이메일 줄처럼 `Text` 만 두면 누를 수 없는 회색
+                    // 줄로 그려진다.
+                    Button("스토어 업데이트 확인") {
                         Task { await model.checkForUpdatesNow() }
                     }
                     .disabled(model.isLoading)
+                    Text("앱 목록과 스토어 앱 새 버전을 지금 확인합니다")
+                    Divider()
+                    // 켜두는 설정이라 체크로 보인다 (ADR-0073).
+                    Toggle("앱 자동 업데이트", isOn: $autoUpdatesApps)
+                    Text("실행 중이 아닌 앱을 자동으로 최신으로 받습니다")
                     Divider()
                     Button("로그아웃", action: model.signOut)
                 } label: {

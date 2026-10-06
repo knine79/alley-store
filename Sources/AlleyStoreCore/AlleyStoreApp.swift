@@ -27,7 +27,9 @@ public struct AlleyStoreApp: App {
             // 목록 위의 배너는 새 버전이 있을 때만 나오므로, 없을 때 "지금 최신인가"
             // 를 확인할 길이 그것 말고는 없었다.
             CommandGroup(after: .appInfo) {
-                Button("업데이트 확인") {
+                // 계정 메뉴의 같은 항목과 이름을 맞춘다. "앱 자동 업데이트" 와 헷갈리지 않게
+                // 무엇을 확인하는지 앞에 적는다.
+                Button("스토어 업데이트 확인") {
                     Task { await model.checkForUpdatesNow() }
                 }
                 // 툴바의 새로 고침 버튼을 공유에 내주고 계정 메뉴로 옮겼다. 한 번 더 눌러야
