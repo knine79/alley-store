@@ -179,6 +179,29 @@ struct CatalogView: View {
         .onChange(of: AppLinkInbox.shared.pending) { _, _ in openLinkedApp() }
         .onChange(of: model.isLoading) { _, _ in openLinkedApp() }
         .onAppear(perform: openLinkedApp)
+        // 실행 중인 앱의 업데이트를 묻는다 (ADR-0074). 스토어 앱이 뒤에 있을 때 찾은 것은
+        // 앞으로 나올 때 묻는다.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            model.presentRunningUpdatesIfActive()
+        }
+        .alert(
+            "실행 중인 앱에 업데이트가 있습니다",
+            isPresented: Binding(
+                get: { !model.runningUpdatePrompt.isEmpty },
+                // Esc 로 닫은 것은 "나중에" 와 같다. 버튼으로 닫았으면 이미 비어 있어 아무 일도 없다.
+                set: { if !$0 { model.declineRunningUpdates() } }
+            )
+        ) {
+            Button("나중에", role: .cancel) { model.declineRunningUpdates() }
+            Button("종료하고 업데이트") { model.acceptRunningUpdates() }
+                .keyboardShortcut(.defaultAction)
+        } message: {
+            Text("""
+                \(model.runningUpdatePrompt.map(\.name).joined(separator: ", "))
+                앱을 종료하고 업데이트한 뒤 다시 실행합니다.
+                저장하지 않은 작업이 있으면 앱이 먼저 물어봅니다.
+                """)
+        }
     }
 
     private func openLinkedApp() {
