@@ -618,7 +618,7 @@ GET   /api/v1/apps/:id,  PATCH /api/v1/apps/:id
 POST  /api/v1/apps/:id/versions        # 버전 생성 + 업로드 URL 발급
                                        # entitlements plist 를 함께 받는다 (ADR-0020)
 POST  /api/v1/versions/:id/complete    # 업로드 완료 통지 → 서명 잡 생성
-POST  /api/v1/versions/:id/release
+POST  /api/v1/versions/:id/release    # announce: true 면 출시 소식도 올린다 (ADR-0075)
 GET   /api/v1/versions/:id/download    # 인증 → 이력 기록 → presigned URL
 GET   /api/v1/apps/:id/feed/:token/appcast.xml   # Sparkle 피드 (ADR-0025)
 GET   /api/v1/apps/:id/appcast.xml?token=...     # 위의 옛 형식. 폐기 예정
@@ -658,7 +658,7 @@ GET   /api/v1/admin/portal/certificates      # 인증서 만료 현황 (ASC API)
 | `list_apps` | 나머지 도구에 넣을 앱 id 를 얻는 자리 |
 | `upload_version` | 올린다. **기다리지 않는다** ([ADR-0062](adr/0062-mcp-does-not-wait-and-answers-with-results.md)) |
 | `signing_status` | 실패 갈래와 무엇을 하면 되는지. 로그는 싣지 않는다 |
-| `list_versions` · `release_version` | 올린 것 중에 무엇을 내보낼지. 출시는 `ready` 에서만 |
+| `list_versions` · `release_version` | 올린 것 중에 무엇을 내보낼지. 출시는 `ready` 에서만. 출시 소식은 사람이 고른 경우에만 (`announce`, ADR-0075) |
 | `sparkle_feed` | `SUPublicEDKey` 와 지금 쓸 수 있는 상태인지 (ADR-0057). 피드 주소는 서버도 모른다 |
 | `app_feedback` | 그 앱에 들어온 별점과 피드백 |
 
@@ -680,6 +680,24 @@ GET   /api/v1/admin/portal/certificates      # 인증서 만료 현황 (ASC API)
 써서 서버와 타입이 어긋날 일이 없고, 이 레포에 Node 툴체인을 들이지 않아도 됩니다.
 
 ---
+
+### 5.8 출시 소식 알림
+
+새 버전이 나와도 스토어 앱을 열어보지 않으면 아무도 모릅니다. 그래서 출시할 때 앱의
+Slack 채널에 소식을 올립니다 ([ADR-0075](adr/0075-announce-releases-to-app-channels-through-the-bot.md)).
+
+- **채널은 앱 관리자가 앱 상세에서 등록합니다.** 피드백이나 서명 실패가 가는 알림
+  채널과는 따로입니다. 그쪽은 앱 관리자가 받는 것이고, 이쪽은 앱을 쓸 사람들이 보는 것입니다
+- **알릴지는 출시할 때마다 고릅니다.** 웹에서는 출시 팝업에서, API 와 MCP 에서는
+  `announce` 로 고릅니다. 고르지 않으면 알리지 않습니다
+- **스토어의 Slack 봇이 올립니다.** 웹훅이 아니라서 언제나 스토어 이름으로 보이고,
+  앱 관리자는 채널에 봇을 초대하기만 하면 됩니다. 봇 토큰이 없는 스토어에서는 쓸 수 없습니다
+- **출시는 한 곳을 지납니다** (`VersionRelease`). 웹과 API 가 함께 부르고, CLI 와 MCP 는
+  API 를 부르므로 네 길이 같은 규칙을 지납니다. 한 버전은 한 번만 알립니다
+- 스토어 앱은 알리지 않습니다
+
+스토어 전체 소식을 모아 공용 채널에 전하는 일은 관리자에게 주기 요약을 보내는 쪽으로
+따로 다룹니다 (이슈 #65).
 
 ## 6. 리스크와 대응
 

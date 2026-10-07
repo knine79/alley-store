@@ -304,7 +304,7 @@ curl -fsSL -o .env https://raw.githubusercontent.com/<소유자>/<레포>/main/.
 
 | 변수 | 값 |
 | --- | --- |
-| `SLACK_BOT_TOKEN` | 받는 사람이 정해지는 알림을 Slack DM 으로 보냅니다 (아래) |
+| `SLACK_BOT_TOKEN` | 받는 사람이 정해지는 알림을 Slack DM 으로 보내고, 출시 소식을 앱 채널에 올립니다 (아래) |
 | `SMTP_HOST`, `SMTP_FROM` | 같은 알림을 메일로 보냅니다 (아래) |
 
 ### 사람에게 알림을 보내려면
@@ -332,14 +332,18 @@ curl -fsSL -o .env https://raw.githubusercontent.com/<소유자>/<레포>/main/.
 1. Slack 워크스페이스에 앱을 하나 만듭니다 (<https://api.slack.com/apps>).
    `templates/ops/slack-app-manifest.yml` 을 **From an app manifest** 에 붙여넣으면
    권한까지 한 번에 들어갑니다
-2. 손으로 만든다면 **OAuth & Permissions** 에서 봇 권한 셋을 줍니다
+2. 손으로 만든다면 **OAuth & Permissions** 에서 봇 권한 다섯을 줍니다
    - `users:read.email` - 이메일로 사용자를 찾습니다
    - `users:read` - 위 권한이 기대는 것이라 함께 켭니다
-   - `chat:write` - 그 사용자에게 DM 을 씁니다
+   - `chat:write` - 그 사용자에게 DM 을 쓰고, 출시 소식을 채널에 씁니다
+   - `channels:read`, `groups:read` - 출시 소식 채널을 이름으로 찾고 봇이 들어가 있는지 봅니다
 3. 워크스페이스에 설치하고 **Bot User OAuth Token** (`xoxb-` 로 시작)을 받습니다
 4. `.env` 에 `SLACK_BOT_TOKEN=xoxb-...` 로 넣습니다
 
-채널에 초대할 필요는 없습니다. DM 만 보내는 앱이라 설치로 끝납니다.
+DM 은 설치로 끝납니다. **출시 소식**은 앱 관리자가 앱 상세의 **출시 소식 알림** 에서
+채널을 등록하고, 그 채널에 봇을 초대해야 올라갑니다 (ADR-0075). 이미 설치한 봇에
+`channels:read`, `groups:read` 가 없으면 권한을 더하고 워크스페이스에 다시 설치하세요.
+토큰은 그대로입니다.
 
 **스토어 계정과 Slack 계정의 이메일이 같아야 합니다.** 다르면 찾지 못하고, 내 알림
 화면이 그 자리에서 알려줍니다.
