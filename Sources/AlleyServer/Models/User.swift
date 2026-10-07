@@ -90,6 +90,13 @@ public final class User: Model, @unchecked Sendable {
     @Field(key: "notify_feedback")
     public var notifyFeedback: Bool
 
+    /// 스토어 주간 소식을 받을지 (이슈 #65, ADR-0076). **관리자에게만 뜻이 있다.**
+    ///
+    /// 기본은 켜짐이다. 기능이 있는 줄 모르면 아무도 켜지 않는다. 받기 싫은 관리자가
+    /// 내 알림에서 끈다.
+    @Field(key: "notify_weekly_digest")
+    public var notifyWeeklyDigest: Bool
+
     /// 나에게 오는 알림을 무엇으로 받을지. **여럿 고를 수 있다.**
     ///
     /// **개인이 정한다.** Slack 을 안 쓰는 사람이 있고, 봇 토큰을 받지 못한 스토어도
@@ -137,6 +144,7 @@ public final class User: Model, @unchecked Sendable {
         roleSetByAdmin: Bool = false,
         notifySigningFailure: Bool = true,
         notifyFeedback: Bool = true,
+        notifyWeeklyDigest: Bool = true,
         notifyVia: Set<NotificationChannelKind> = [.slackDirectMessage]
     ) {
         self.id = id
@@ -149,6 +157,7 @@ public final class User: Model, @unchecked Sendable {
         self.roleSetByAdmin = roleSetByAdmin
         self.notifySigningFailure = notifySigningFailure
         self.notifyFeedback = notifyFeedback
+        self.notifyWeeklyDigest = notifyWeeklyDigest
         self.notifyViaName = NotificationChannelKind.personal
             .filter(notifyVia.contains)
             .map(\.rawValue)
@@ -420,6 +429,23 @@ public struct AddUserDeactivatedAt: AsyncMigration {
     public func revert(on database: any Database) async throws {
         try await database.schema(User.schema)
             .deleteField("deactivated_at")
+            .update()
+    }
+}
+
+/// 스토어 주간 소식을 받을지 정하는 칸 (이슈 #65, ADR-0076). 기본은 켜짐이다.
+public struct AddWeeklyDigestPreferenceToUser: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        try await database.schema(User.schema)
+            .field("notify_weekly_digest", .bool, .required, .sql(.default(true)))
+            .update()
+    }
+
+    public func revert(on database: any Database) async throws {
+        try await database.schema(User.schema)
+            .deleteField("notify_weekly_digest")
             .update()
     }
 }
