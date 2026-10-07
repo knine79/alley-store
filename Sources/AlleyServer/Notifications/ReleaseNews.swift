@@ -228,9 +228,7 @@ enum ReleaseNews {
 
     /// Slack mrkdwn 에서 뜻을 갖는 세 글자를 바꾼다. 앱 이름에 `<` 가 있으면 링크로 읽힌다.
     static func escaped(_ text: String) -> String {
-        text.replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
+        NotificationMarkup.escapedForSlack(text)
     }
 }
 

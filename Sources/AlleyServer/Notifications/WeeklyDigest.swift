@@ -95,6 +95,14 @@ enum WeeklyDigest {
             }
             if reached { delivered += 1 }
         }
+        // **아무에게도 닿지 않았으면 보낸 것으로 치지 않는다.** Slack 이 잠깐 죽었을 수
+        // 있다. 내려놓으면 다음 시간에 다시 해본다(보낼 때부터 하루 안에서만). 한 사람에게라도
+        // 갔으면 그대로 둔다. 다시 보내면 받은 사람에게 두 번 간다.
+        if delivered == 0, !recipients.isEmpty {
+            logger.warning("주간 소식이 아무 관리자에게도 닿지 않았습니다. 다음 시간에 다시 보냅니다 [\(week.label)]")
+            await unclaim(week, on: database, logger: logger)
+            return
+        }
         logger.notice("스토어 주간 소식 [\(week.label), 받은 관리자 \(delivered)/\(recipients.count)명]")
     }
 
@@ -151,11 +159,14 @@ enum WeeklyDigest {
     /// 데이터베이스 오류는 "이미 보냄" 과 다르다. 로그에 남겨야 테이블이 없다는 것 같은
     /// 일을 알아챈다.
     private static func claim(_ week: Week, on database: any Database, logger: Logger) async -> Bool {
-        guard let sql = database as? any SQLDatabase else { return false }
+        guard let sql = database as? any SQLDatabase else {
+            logger.error("주간 소식은 SQL 데이터베이스가 있어야 보냅니다. 보내지 않습니다.")
+            return false
+        }
         do {
             let rows = try await sql.raw(
                 """
-                INSERT INTO \(ident: WeeklyDigestRun.schema) (week, sent_at)
+                INSERT INTO \(ident: CreateWeeklyDigestRun.schema) (week, sent_at)
                 VALUES (\(bind: week.key), now())
                 ON CONFLICT (week) DO NOTHING
                 RETURNING week
@@ -173,7 +184,7 @@ enum WeeklyDigest {
         guard let sql = database as? any SQLDatabase else { return }
         do {
             try await sql.raw(
-                "DELETE FROM \(ident: WeeklyDigestRun.schema) WHERE week = \(bind: week.key)"
+                "DELETE FROM \(ident: CreateWeeklyDigestRun.schema) WHERE week = \(bind: week.key)"
             ).run()
         } catch {
             logger.error("주간 소식 기록을 지우지 못했습니다. 이 주는 가지 않습니다 [\(week.key)]: \(error)")
@@ -372,16 +383,18 @@ enum WeeklyDigest {
             """
         ).first(decoding: CountRow.self)?.count ?? 0
 
-        // 평균은 누적이다. 한 주 별점만으로는 몇 명 되지 않는다. 다만 "별점이 높은 앱" 은
+        // 평균은 누적이다. 한 주 별점만으로는 몇 명 되지 않는다. 피드백은 버전마다
+        // 하나라 한 사람이 여러 번 남길 수 있다. "몇 명" 은 사람을 센다. 다만 "별점이 높은 앱" 은
         // 그 주에 별점이 새로 들어온 앱 가운데서 고른다. 아니면 같은 앱이 매주 나온다.
         struct RatingRow: Decodable { var app_id: UUID; var average: Double; var count: Int; var recent: Int }
         let ratings = try await sql.raw(
             """
-            SELECT app_id, AVG(rating)::float8 AS average, COUNT(rating) AS count,
+            SELECT app_id, AVG(rating)::float8 AS average,
+              COUNT(DISTINCT user_id) AS count,
               COUNT(rating) FILTER (WHERE created_at >= \(bind: week.start) AND created_at < \(bind: week.end)) AS recent
             FROM feedback
             WHERE rating IS NOT NULL GROUP BY app_id
-            HAVING COUNT(rating) >= \(bind: ratingMinimumCount)
+            HAVING COUNT(DISTINCT user_id) >= \(bind: ratingMinimumCount)
             """
         ).all(decoding: RatingRow.self)
         // 스토어 앱을 먼저 거른 뒤에 고른다. 거꾸로 하면 스토어 앱이 1위인 주에 아무것도 안 나온다.
@@ -397,23 +410,33 @@ enum WeeklyDigest {
         report.lowRated = Array(lowRated.prefix(listLimit))
         report.lowRatedOverflow = max(0, lowRated.count - listLimit)
 
-        // 서명 실패. 그 주에 끝난 잡 중 실패한 것을 갈래별로 센다.
+        // 서명 실패. 그 주에 실패로 끝난 버전을 갈래별로 센다. 한 버전을 세 번 다시 시도해
+        // 세 번 실패해도 고칠 것은 하나라 한 건이다.
         struct FailureRow: Decodable { var failure_code: String?; var count: Int }
         let failures = try await sql.raw(
             """
-            SELECT j.failure_code, COUNT(*) AS count FROM signing_jobs j
+            SELECT j.failure_code, COUNT(DISTINCT j.version_id) AS count FROM signing_jobs j
             JOIN versions v ON v.id = j.version_id
             WHERE j.state = 'failed' AND j.finished_at >= \(bind: week.start) AND j.finished_at < \(bind: week.end)
               AND (\(bind: storeAppID)::uuid IS NULL OR v.app_id <> \(bind: storeAppID))
             GROUP BY j.failure_code ORDER BY count DESC
             """
         ).all(decoding: FailureRow.self)
-        report.failureCount = failures.reduce(0) { $0 + $1.count }
+        struct VersionCount: Decodable { var count: Int }
+        report.failureCount = try await sql.raw(
+            """
+            SELECT COUNT(DISTINCT j.version_id) AS count FROM signing_jobs j
+            JOIN versions v ON v.id = j.version_id
+            WHERE j.state = 'failed' AND j.finished_at >= \(bind: week.start) AND j.finished_at < \(bind: week.end)
+              AND (\(bind: storeAppID)::uuid IS NULL OR v.app_id <> \(bind: storeAppID))
+            """
+        ).first(decoding: VersionCount.self)?.count ?? 0
         report.failuresByReason = failures.map { row in
             Report.ReasonCount(reason: Self.reasonName(row.failure_code), count: row.count)
         }
 
-        // 해결되지 않은 서명 실패: 지금도 실패 상태이고, 같은 앱에 더 높은 빌드가 없다.
+        // 해결되지 않은 서명 실패: 지금도 실패 상태이고, 같은 앱에 그 뒤로 서명까지 마친
+        // 빌드가 없다. 올리다 만 빌드나 아직 서명 중인 빌드는 해결로 치지 않는다.
         struct UnresolvedRow: Decodable {
             var app_id: UUID; var short_version: String; var build_number: Int; var failure_code: String?
         }
@@ -427,6 +450,7 @@ enum WeeklyDigest {
               AND NOT EXISTS (
                 SELECT 1 FROM versions newer
                 WHERE newer.app_id = v.app_id AND newer.build_number > v.build_number
+                  AND newer.state IN ('ready', 'released')
               )
             ORDER BY v.updated_at DESC
             """
@@ -484,7 +508,9 @@ enum WeeklyDigest {
     /// 보낼 두 통. 운영 지표는 실을 것이 없으면 nil 이다.
     static func compose(_ report: Report) -> (newsletter: NotificationMessage, operations: NotificationMessage?) {
         typealias M = NotificationMarkup
-        func link(_ app: Report.AppRef) -> String { M.link(app.link, app.name) }
+        // 사람이 쓴 글(이름, 소개, 버전, 이유)은 표시 문자를 지우고 넣는다.
+        func human(_ value: String) -> String { M.literal(value) }
+        func link(_ app: Report.AppRef) -> String { M.link(app.link, human(app.name)) }
         func delta(_ now: Int, _ before: Int) -> String {
             let change = now - before
             if change > 0 { return " ▲\(change)" }
@@ -492,7 +518,7 @@ enum WeeklyDigest {
             return ""
         }
 
-        let title = "📰 \(report.storeName) 주간 소식 (\(report.weekLabel))"
+        let title = "📰 \(human(report.storeName)) 주간 소식 (\(report.weekLabel))"
         var sections: [String] = []
         if report.isQuiet {
             sections.append("조용한 한 주였습니다. 새로 나온 앱도 받아간 사람도 없었습니다.")
@@ -504,13 +530,13 @@ enum WeeklyDigest {
             )
             if !report.newApps.isEmpty {
                 sections.append(M.strong("🎉 새로 나온 앱") + report.newApps.map { release in
-                    "\n• \(link(release.app)) \(release.version)" + (release.summary.map { " - \($0)" } ?? "")
+                    "\n• \(link(release.app)) \(human(release.version))" + (release.summary.map { " - \(human($0))" } ?? "")
                 }.joined())
             }
             if !report.updatedApps.isEmpty {
                 sections.append(
                     M.strong("✨ 업데이트된 앱") + "\n• "
-                        + report.updatedApps.map { "\(link($0.app)) \($0.version)" }.joined(separator: " · ")
+                        + report.updatedApps.map { "\(link($0.app)) \(human($0.version))" }.joined(separator: " · ")
                 )
             }
             if !report.top.isEmpty {
@@ -535,7 +561,7 @@ enum WeeklyDigest {
             }
             if !report.newcomers.isEmpty {
                 sections.append(M.strong("👋 처음 앱을 낸 개발자") + report.newcomers.map {
-                    "\n• \($0.name) - \(link($0.app))"
+                    "\n• \(human($0.name)) - \(link($0.app))"
                 }.joined())
             }
         }
@@ -550,7 +576,7 @@ enum WeeklyDigest {
             }
             if !report.unresolved.isEmpty {
                 text += "\n아직 해결되지 않은 것:" + report.unresolved.map {
-                    "\n• \(link($0.app)) \($0.version) - \($0.reason)"
+                    "\n• \(link($0.app)) \(human($0.version)) - \($0.reason)"
                 }.joined()
                 if report.unresolvedOverflow > 0 {
                     text += "\n외 \(report.unresolvedOverflow)건"
@@ -570,40 +596,30 @@ enum WeeklyDigest {
             }.joined() + overflow(report.idleOverflow))
         }
         let operations = NotificationMessage(
-            title: "🛠 \(report.storeName) 운영 지표 (\(report.weekLabel))",
+            title: "🛠 \(human(report.storeName)) 운영 지표 (\(report.weekLabel))",
             body: ops.joined(separator: "\n\n")
         )
         return (newsletter, operations)
     }
 }
 
-/// 주간 소식을 보낸 주. 한 주에 한 번만 보내려고 둔다 (ADR-0076).
+/// 주간 소식을 보낸 주를 적는 테이블 (ADR-0076). 한 주에 한 번만 보내려고 둔다.
 ///
 /// 서버가 여러 대여도 먼저 이 행을 넣은 쪽만 보낸다. 관리자마다 따로 적지 않는다. 한
-/// 사람이 못 받았다고 다시 보내면 받은 사람에게 두 번 간다.
-final class WeeklyDigestRun: Model, @unchecked Sendable {
+/// 사람이 못 받았다고 다시 보내면 받은 사람에게 두 번 간다. 모델 없이 SQL 로만 쓴다.
+public struct CreateWeeklyDigestRun: AsyncMigration {
     static let schema = "weekly_digests"
 
-    @ID(custom: "week", generatedBy: .user)
-    var id: String?
-
-    @OptionalField(key: "sent_at")
-    var sentAt: Date?
-
-    init() {}
-}
-
-public struct CreateWeeklyDigestRun: AsyncMigration {
     public init() {}
 
     public func prepare(on database: any Database) async throws {
-        try await database.schema(WeeklyDigestRun.schema)
+        try await database.schema(Self.schema)
             .field("week", .string, .identifier(auto: false))
             .field("sent_at", .datetime)
             .create()
     }
 
     public func revert(on database: any Database) async throws {
-        try await database.schema(WeeklyDigestRun.schema).delete()
+        try await database.schema(Self.schema).delete()
     }
 }

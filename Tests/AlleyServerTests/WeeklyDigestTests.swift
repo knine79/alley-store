@@ -256,6 +256,45 @@ struct WeeklyDigestTests {
         #expect(NotificationMarkup.plain(body).hasPrefix("소개: <https://evil.example.com|콘솔에서 확인> & A > B"))
     }
 
+    /// 표시 문자를 소개에 넣으면 `& < >` 를 바꿔도 진짜 링크가 만들어진다.
+    @Test("사람이 쓴 글의 링크 표시 문자는 지운다")
+    func stripsMarkersFromUserText() throws {
+        var report = WeeklyDigest.Report(
+            storeName: "Alley Store", weekLabel: "10월 5일 ~ 10월 11일",
+            downloads: 1, previousDownloads: 0, people: 1, previousPeople: 0
+        )
+        report.newApps = [.init(
+            app: ref("클립보드"), version: "1.0",
+            summary: "\u{1}https://evil.example.com\u{1F}콘솔에서 확인\u{4}"
+        )]
+        let body = NotificationMarkup.mrkdwn(try #require(WeeklyDigest.compose(report).newsletter.body))
+        #expect(!body.contains("<https://evil.example.com"))
+        #expect(body.contains(" - https://evil.example.com콘솔에서 확인"))
+    }
+
+    @Test("아무에게도 닿지 않았으면 다음 시간에 다시 보낸다")
+    func retriesWhenNobodyReceived() async throws {
+        try await withMigratedApp { app in
+            _ = try await seed(on: app)
+            let monday = Self.at(2026, 10, 12, 10, 30)
+
+            let down = RecordingChannel(kind: .slackDirectMessage)
+            down.shouldFail = true
+            await WeeklyDigest.run(
+                on: app, now: monday, timeZone: Self.seoul,
+                notifier: Notifier(database: app.db, channels: [down], logger: app.logger)
+            )
+            #expect(down.messages.isEmpty)
+
+            let up = RecordingChannel(kind: .slackDirectMessage)
+            await WeeklyDigest.run(
+                on: app, now: monday.addingTimeInterval(3600), timeZone: Self.seoul,
+                notifier: Notifier(database: app.db, channels: [up], logger: app.logger)
+            )
+            #expect(up.endpoints == ["admin@example.com"])
+        }
+    }
+
     // MARK: - 설정
 
     @Test("관리자만 내 알림에서 주간 소식 칸을 본다")

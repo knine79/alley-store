@@ -52,8 +52,20 @@ public enum NotificationMarkup {
         return String(linked.map { $0 == open || $0 == close ? "*" : $0 })
     }
 
+    /// 사람이 쓴 글을 본문에 넣을 때 감싼다. 표시 문자를 지운다.
+    ///
+    /// 앱 소개에 표시 문자를 넣어 두면 `& < >` 를 바꿔도 우리 링크 표시로 읽혀 진짜
+    /// 링크가 만들어진다. 이름, 소개, 버전처럼 사람이 쓴 것은 모두 이것을 지난다.
+    public static func literal(_ text: String) -> String {
+        text.filter { !markers.contains($0) }
+    }
+
+    private static let markers: Set<Character> = [open, close, linkOpen, linkSeparator, linkClose]
+
     /// Slack 이 뜻으로 읽는 세 글자를 바꾼다. 표시 문자는 건드리지 않는다.
-    private static func escapedForSlack(_ text: String) -> String {
+    ///
+    /// 제목처럼 본문 밖에서 Slack 에 그대로 실리는 글도 이것을 지난다.
+    public static func escapedForSlack(_ text: String) -> String {
         text.replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")

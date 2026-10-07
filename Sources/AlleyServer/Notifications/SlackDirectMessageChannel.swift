@@ -86,7 +86,8 @@ public struct SlackDirectMessageChannel: NotificationChannel, Sendable {
 
     private func post(_ message: NotificationMessage, to userID: String) async throws {
         // Slack 은 mrkdwn 을 쓴다. HTML 도 마크다운도 아니라서 링크 형식이 독특하다.
-        var text = "*\(NotificationMarkup.plain(message.title))*"
+        // 제목도 사람이 쓴 이름(앱, 스토어)을 담는다. 본문과 같이 `& < >` 를 바꾼다.
+        var text = "*\(NotificationMarkup.escapedForSlack(NotificationMarkup.plain(message.title)))*"
         if let body = message.body, !body.isEmpty {
             text += "\n\(NotificationMarkup.mrkdwn(body))"
         }
