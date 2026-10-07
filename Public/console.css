@@ -2638,3 +2638,34 @@ textarea.input {
     font-size: var(--font-sm);
     color: var(--danger);
 }
+
+/* ── 공유 링크 ───────────────────────────────────────────
+   주소와 복사 버튼을 한 줄에 둔다. 좁은 화면에서는 주소가 끊어 내려간다 (이슈 #64). */
+
+.share-box {
+    margin: 0 0 var(--space-5);
+}
+
+.share-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+/* 주소에는 띄어쓰기가 없어 `keep-all` 이면 끊을 데가 없다. 아무 데서나 끊게 푼다. */
+.share-row code {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+    /* 손으로 긁을 때도 한 번에 잡힌다. `.fact-value` 의 굵기와 고정폭 숫자는 주소에 맞지 않는다. */
+    user-select: all;
+    font-weight: normal;
+    font-variant-numeric: normal;
+}
+
+
+/* 출시 직후 상자 안에서는 주소가 남는 폭을 채우고 버튼이 옆에 선다. */
+.share-row .token-value {
+    flex: 1 1 18rem;
+}

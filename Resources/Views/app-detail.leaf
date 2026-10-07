@@ -35,6 +35,26 @@
     #endif
 </div>
 
+<!-- 방금 출시하고 돌아왔으면 공유 링크를 크게 건넨다 (이슈 #64). 출시하고 "팀에 어떻게
+     알리지" 를 고민하는 자리가 여기다. `notice-ok` 가 아니라 상자로 둔다. 그쪽은 몇 초
+     뒤 사라지는데, 이것은 복사할 것이 있어 남아야 한다. 주소의 표시는 `flash.js` 가
+     걷어내서 새로고침하면 사라진다. -->
+#if(justReleased):
+<div class="token-box share-box">
+    <p class="token-title">#(app.name) #(justReleased.versionName) 를 출시했습니다</p>
+    #if(justReleased.announcedTo):
+    <p class="token-note">#(justReleased.announcedTo) 에 출시 소식을 올렸습니다. 다른 곳에도 알리려면 아래 공유 링크를 건네세요.</p>
+    #else:
+    <p class="token-note">팀에 알리려면 아래 공유 링크를 건네세요.</p>
+    #endif
+    <div class="share-row">
+        <code class="token-value" id="share-url-released">#(justReleased.shareURL)</code>
+        <button class="button" type="button" data-copy="share-url-released">복사</button>
+    </div>
+    <p class="token-note">링크를 누르면 스토어 앱에서 이 앱 상세가 열립니다.</p>
+</div>
+#endif
+
 #if(app.isPending):
 <p class="notice notice-warn">
     <strong>아직 확인 중입니다.</strong> 올린 파일을 열어 번들 ID 를 읽으면 이 앱이
@@ -44,6 +64,17 @@
 
 #if(app.summary):
 <p class="lead-text">#(app.summary)</p>
+#endif
+<!-- 출시된 앱이면 언제든 복사할 수 있게 둔다 (이슈 #64). 링크는 스토어 앱 툴바에만
+     있어서, 웹 콘솔을 보는 개발자는 그런 것이 있는 줄 몰랐다. -->
+#if(shareURL):
+<p class="fact-line">
+    <span class="fact-label">공유 링크</span>
+    <span class="fact-value share-row">
+        <code id="share-url">#(shareURL)</code>
+        <button class="button" type="button" data-copy="share-url">복사</button>
+    </span>
+</p>
 #endif
 #if(app.details):
 <p class="body-text">#(app.details)</p>
@@ -836,6 +867,10 @@
 
 <script src="/release-confirm.js?v=#(page.assetVersion)" defer></script>
 #endif#endif
+
+#if(shareURL):
+<script src="/copy-button.js?v=#(page.assetVersion)" defer></script>
+#endif
 
 <!-- 되돌릴 수 없는 폼 앞에 세우는 팝업. `data-confirm` 이 붙은 폼이 쓴다. -->
 #if(canManage):

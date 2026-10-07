@@ -403,6 +403,47 @@ struct AppPagesController: RouteCollection, Sendable {
         // 이 앱이 스토어 앱인가. 스토어 앱만 웹에서 받을 수 있다 (이슈 #17).
         let isStoreApp = try await request.storeAppSettings().$app.id == app.requireID()
 
+        // 사람에게 건넬 공유 링크 (이슈 #64). 출시본이 있어야 공유 페이지가 앱 정보를
+        // 보여주고, 스토어 앱은 링크로 열 상세가 없다 (ADR-0072).
+        let shareURL = App.shareURL(
+            appID: try app.requireID(),
+            bundleIDPending: app.bundleIDPending,
+            isStoreApp: isStoreApp,
+            hasRelease: versions.contains(where: { $0.state == .released }),
+            base: request.application.alleyConfig.publicBaseURL
+        )
+
+        // 방금 출시하고 돌아왔나. 출시한 버전과 어디에 알렸는지가 주소로 온다.
+        //
+        // **주소를 그대로 믿지 않는다.** 이 앱의 출시된 버전이고 방금(10분 안) 출시한
+        // 것일 때만 보여준다. 그래야 남아 있던 옛 주소로 들어와도 지난 출시를 다시
+        // 알리지 않는다. 채널 이름도 이 앱에 등록된 것만 남긴다. 주소를 꾸며 "#전사공지
+        // 에 올렸습니다" 같은 거짓 문구를 띄우지 못하게 한다.
+        var justReleased: JustReleasedRow?
+        if canUpload, let shareURL,
+           let releasedID = request.query[UUID.self, at: "released"],
+           let version = versions.first(where: { $0.id == releasedID && $0.state == .released }),
+           let releasedAt = version.releasedAt,
+           Date().timeIntervalSince(releasedAt) < 600
+        {
+            let registered = Set(
+                try await ReleaseChannel.query(on: request.db)
+                    .filter(\.$app.$id == app.requireID())
+                    .all()
+                    .map(\.name)
+            )
+            let announced = (request.query[String.self, at: "announced"] ?? "")
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { registered.contains($0) }
+                .map { "#\($0)" }
+            justReleased = JustReleasedRow(
+                versionName: version.shortVersion,
+                shareURL: shareURL,
+                announcedTo: announced.isEmpty ? nil : announced.joined(separator: ", ")
+            )
+        }
+
         var releaseNews: ReleaseNewsContext?
         if canUpload {
             releaseNews = try await ReleaseNewsContext.make(
@@ -489,6 +530,8 @@ struct AppPagesController: RouteCollection, Sendable {
                 sparkle: sparkle,
                 alerts: alerts,
                 releaseNews: releaseNews,
+                shareURL: shareURL,
+                justReleased: justReleased,
                 feedback: feedback,
                 canUpload: canUpload,
                 canManage: canManage,
@@ -1458,6 +1501,14 @@ struct CategoryOption: Encodable {
     }
 }
 
+/// 출시 직후 앱 상세 맨 위에 한 번 보여줄 것.
+struct JustReleasedRow: Encodable {
+    var versionName: String
+    var shareURL: String
+    /// 출시 소식을 올린 채널들. `#a, #b` 처럼 이어 붙였다. 올리지 않았으면 nil.
+    var announcedTo: String?
+}
+
 struct AppDetailContext: Encodable {
     var page: PageContext
     var app: AppRow
@@ -1488,6 +1539,10 @@ struct AppDetailContext: Encodable {
     var alerts: AlertDeliveryContext?
     /// 출시 소식 알림. 올릴 권한이 없으면 nil (ADR-0075).
     var releaseNews: ReleaseNewsContext?
+    /// 사람에게 건넬 공유 링크. 출시 전 앱과 스토어 앱은 nil (이슈 #64).
+    var shareURL: String?
+    /// 방금 출시하고 돌아왔으면 그 버전. 한 번만 크게 보여준다 (이슈 #64).
+    var justReleased: JustReleasedRow?
     var feedback: [FeedbackRow]
     /// 지금 사람이 피드백을 남길 수 있는 버전들. 받아본 것만 들어온다.
     /// 익명 체크박스를 띄울지. 스토어 설정에서 온다.

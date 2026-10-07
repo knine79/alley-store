@@ -32,36 +32,38 @@ enum ReleaseNews {
     ///
     /// `isFirstRelease` 는 출시 **전에** 정해서 넘긴다. 출시한 뒤에 세면 방금 출시한
     /// 이 버전이 끼어서 언제나 업데이트가 된다.
+    /// 실제로 올린 채널 이름들(`#` 없이). 못 올렸거나 알리지 않았으면 비어 있다.
+    @discardableResult
     static func announce(
         _ version: Version,
         of app: App,
         isFirstRelease: Bool,
         on request: Request
-    ) async {
+    ) async -> [String] {
         let appID: UUID
         let versionID: UUID
         do {
             appID = try app.requireID()
             versionID = try version.requireID()
         } catch {
-            return
+            return []
         }
 
         guard let bot = request.application.slackBot else {
             request.logger.info("Slack 봇이 없어 출시 소식을 보내지 않습니다 [\(app.bundleID)]")
-            return
+            return []
         }
         let channels = (try? await ReleaseChannel.query(on: request.db)
             .filter(\.$app.$id == appID)
             .sort(\.$name)
             .all()) ?? []
-        guard !channels.isEmpty else { return }
+        guard !channels.isEmpty else { return [] }
 
         // **먼저 차지한 요청만 보낸다.** 출시 버튼을 두 번 누르거나 웹과 API 가 동시에
         // 출시해도 한 번만 올라간다. 읽고 나서 쓰면 그 사이에 둘 다 "아직 안 알렸다" 를 본다.
         guard await claim(versionID: versionID, on: request.db) else {
             request.logger.info("이미 알린 버전이라 출시 소식을 건너뜁니다 [\(app.bundleID) \(version.shortVersion)]")
-            return
+            return []
         }
 
         let settings = try? await request.storeSettings()
@@ -97,8 +99,8 @@ enum ReleaseNews {
             return collected
         }
 
-        var delivered = 0
-        for (index, failure) in outcomes {
+        var delivered: [String] = []
+        for (index, failure) in outcomes.sorted(by: { $0.0 < $1.0 }) {
             let channel = channels[index]
             if let failure {
                 channel.lastError = failure
@@ -106,7 +108,7 @@ enum ReleaseNews {
             } else {
                 channel.lastSentAt = Date()
                 channel.lastError = nil
-                delivered += 1
+                delivered.append(channel.name)
             }
             try? await channel.save(on: request.db)
         }
@@ -114,13 +116,14 @@ enum ReleaseNews {
         // **한 곳에도 못 보냈으면 알린 것으로 치지 않는다.** Slack 이 잠깐 죽었거나 봇
         // 토큰을 바꾸던 중이었을 수 있다. 적어둔 채로 두면 고친 뒤 철회했다 다시
         // 출시해도 다시 보낼 길이 없다.
-        guard delivered > 0 else {
+        guard !delivered.isEmpty else {
             await release(versionID: versionID, on: request.db)
-            return
+            return []
         }
         request.logger.notice(
-            "출시 소식 [\(app.bundleID) \(version.shortVersion), 채널 \(delivered)/\(channels.count)곳]"
+            "출시 소식 [\(app.bundleID) \(version.shortVersion), 채널 \(delivered.count)/\(channels.count)곳]"
         )
+        return delivered
     }
 
     /// 이 버전에 "알렸다" 를 적는다. 이미 적혀 있으면 false.

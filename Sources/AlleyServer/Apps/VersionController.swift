@@ -337,7 +337,11 @@ public struct VersionController: RouteCollection, Sendable {
         try await VersionRelease.release(
             version, announce: try Self.announce(in: request), on: request
         )
-        return try version.toDTO()
+        var dto = try version.toDTO()
+        // 출시는 이미 저장됐다. 링크를 못 구했다고 오류를 돌려주면 CI 는 실패로 알고
+        // 다시 출시하려다 409 를 받는다. 링크만 빼고 돌려준다.
+        dto.shareURL = (try? await version.app.shareURL(on: request)) ?? nil
+        return dto
     }
 
     /// 본문의 `announce`. 본문이 없으면 false.

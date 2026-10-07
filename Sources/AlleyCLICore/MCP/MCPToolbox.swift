@@ -112,7 +112,8 @@ enum MCPToolbox {
                 상태가 ready 인 버전을 출시한다. 이때부터 사람들이 받아간다. \
                 되돌릴 수 없으니 사람이 그러라고 했을 때만 부른다. \
                 announce 를 "true" 로 주면 앱의 출시 소식 Slack 채널에도 알린다. \
-                **알릴지는 사람에게 물어보고 정한다.** 안 주면 알리지 않는다.
+                **알릴지는 사람에게 물어보고 정한다.** 안 주면 알리지 않는다. \
+                결과의 shareURL 은 이 앱의 공유 링크다. 팀에 알릴 때 그대로 건네면 된다.
                 """,
             inputSchema: MCPTool.schema(
                 required: ["version": "버전 id"],

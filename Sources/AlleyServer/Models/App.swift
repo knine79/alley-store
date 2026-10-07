@@ -380,6 +380,36 @@ extension App {
         }
     }
 
+    /// 사람에게 건넬 공유 링크. 건넬 수 없는 앱이면 nil (ADR-0072).
+    ///
+    /// `toDTO` 와 같은 규칙이다. 출시본이 없으면 공유 페이지가 앱 정보를 보여주지 않고,
+    /// 스토어 앱은 링크로 열 상세가 없다. 번들 ID 가 확정되지 않은 앱은 출시할 수 없다.
+    func shareURL(on request: Request) async throws -> String? {
+        let appID = try requireID()
+        return try Self.shareURL(
+            appID: appID,
+            bundleIDPending: bundleIDPending,
+            isStoreApp: try await request.storeAppSettings().$app.id == appID,
+            hasRelease: try await Version.query(on: request.db)
+                .filter(\.$app.$id == appID)
+                .filter(\.$state == .released)
+                .count() > 0,
+            base: request.application.alleyConfig.publicBaseURL
+        )
+    }
+
+    /// 공유 링크를 건넬 수 있는가의 규칙. 화면과 API 가 같은 것을 쓴다.
+    static func shareURL(
+        appID: UUID,
+        bundleIDPending: Bool,
+        isStoreApp: Bool,
+        hasRelease: Bool,
+        base: String
+    ) -> String? {
+        guard !bundleIDPending, !isStoreApp, hasRelease else { return nil }
+        return absolute(AppLink.webPath(appID: appID), base: base)
+    }
+
     /// `/` 로 시작하는 주소에만 서버 주소를 붙인다. 예전처럼 사람이 적어 넣은 외부 주소는
     /// 이미 절대 주소라 그대로 둔다.
     static func absolute(_ path: String?, base: String?) -> String? {
