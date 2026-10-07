@@ -144,14 +144,12 @@ struct VersionPagesController: RouteCollection, Sendable {
             let announced = try await VersionRelease.release(version, announce: announce, on: request)
             var query = "released=\(try version.requireID().uuidString)"
             if !announced.isEmpty {
-                // 쿼리에서 뜻을 갖는 글자(&, +, =, 쉼표)는 퍼센트로 바꾼다. Slack 채널
-                // 이름에는 들어갈 수 없지만, 들어가면 주소가 끊긴다.
+                // 쉼표로 잇는다. Slack 채널 이름에는 쉼표가 들어갈 수 없다(소문자, 숫자,
+                // `-`, `_` 뿐이다). 쿼리에서 뜻을 갖는 `& + =` 만 퍼센트로 바꾼다.
                 var allowed = CharacterSet.urlQueryAllowed
-                allowed.remove(charactersIn: "&+=,")
-                let joined = announced
-                    .map { $0.addingPercentEncoding(withAllowedCharacters: allowed) ?? $0 }
-                    .joined(separator: ",")
-                query += "&announced=\(joined)"
+                allowed.remove(charactersIn: "&+=")
+                let joined = announced.joined(separator: ",")
+                query += "&announced=\(joined.addingPercentEncoding(withAllowedCharacters: allowed) ?? joined)"
             }
             return query
         }

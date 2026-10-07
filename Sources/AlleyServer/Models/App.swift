@@ -227,9 +227,13 @@ extension App {
             isStoreApp: isStoreApp ? true : nil,
             // 출시 전 앱의 공유 페이지는 앱 정보를 보여주지 않는다 (ADR-0072). 스토어 앱
             // 자신은 목록에 없어서 그 링크로 열 상세가 없다. 사람에게는 `/get` 을 건넨다.
-            shareURL: latestReleased != nil && !isStoreApp
-                ? Self.absolute(AppLink.webPath(appID: try requireID()), base: baseURL)
-                : nil,
+            shareURL: Self.shareURL(
+                appID: try requireID(),
+                bundleIDPending: bundleIDPending,
+                isStoreApp: isStoreApp,
+                hasRelease: latestReleased != nil,
+                base: baseURL
+            ),
             createdAt: createdAt ?? Date(),
             updatedAt: updatedAt ?? createdAt ?? Date()
         )
@@ -398,13 +402,14 @@ extension App {
         )
     }
 
-    /// 공유 링크를 건넬 수 있는가의 규칙. 화면과 API 가 같은 것을 쓴다.
+    /// 공유 링크를 건넬 수 있는가의 규칙. 화면, API, `toDTO` 가 모두 이것을 쓴다.
+    /// 한쪽에만 조건을 더하면 스토어 앱과 웹 콘솔이 링크 유무를 다르게 말한다.
     static func shareURL(
         appID: UUID,
         bundleIDPending: Bool,
         isStoreApp: Bool,
         hasRelease: Bool,
-        base: String
+        base: String?
     ) -> String? {
         guard !bundleIDPending, !isStoreApp, hasRelease else { return nil }
         return absolute(AppLink.webPath(appID: appID), base: base)

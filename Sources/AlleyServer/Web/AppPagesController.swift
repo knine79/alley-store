@@ -417,8 +417,8 @@ struct AppPagesController: RouteCollection, Sendable {
         //
         // **주소를 그대로 믿지 않는다.** 이 앱의 출시된 버전이고 방금(10분 안) 출시한
         // 것일 때만 보여준다. 그래야 남아 있던 옛 주소로 들어와도 지난 출시를 다시
-        // 알리지 않는다. 채널 이름도 이 앱에 등록된 것만 남긴다. 주소를 꾸며 "#전사공지
-        // 에 올렸습니다" 같은 거짓 문구를 띄우지 못하게 한다.
+        // 알리지 않는다. 채널도 이 앱에 등록돼 있고 그 출시 뒤에 실제로 보낸 것만
+        // 남긴다. 주소를 꾸며 "#전사공지 에 올렸습니다" 같은 거짓 문구를 띄우지 못하게 한다.
         var justReleased: JustReleasedRow?
         if canUpload, let shareURL,
            let releasedID = request.query[UUID.self, at: "released"],
@@ -426,17 +426,21 @@ struct AppPagesController: RouteCollection, Sendable {
            let releasedAt = version.releasedAt,
            Date().timeIntervalSince(releasedAt) < 600
         {
-            let registered = Set(
-                try await ReleaseChannel.query(on: request.db)
-                    .filter(\.$app.$id == app.requireID())
-                    .all()
-                    .map(\.name)
-            )
-            let announced = (request.query[String.self, at: "announced"] ?? "")
+            let claimed = (request.query[String.self, at: "announced"] ?? "")
                 .split(separator: ",")
                 .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { registered.contains($0) }
-                .map { "#\($0)" }
+            // 알리지 않은 출시가 대부분이다. 그때는 채널을 읽지 않는다.
+            var announced: [String] = []
+            if !claimed.isEmpty {
+                let delivered = Set(
+                    try await ReleaseChannel.query(on: request.db)
+                        .filter(\.$app.$id == app.requireID())
+                        .filter(\.$lastSentAt >= releasedAt)
+                        .all()
+                        .map(\.name)
+                )
+                announced = claimed.filter(delivered.contains).map { "#\($0)" }
+            }
             justReleased = JustReleasedRow(
                 versionName: version.shortVersion,
                 shareURL: shareURL,

@@ -61,11 +61,15 @@ struct ShareLinkGuideTests {
         try await version.save(on: app.db)
     }
 
-    private func addChannel(_ name: String, to fixture: Fixture, on app: Application) async throws {
-        try await ReleaseChannel(
+    private func addChannel(
+        _ name: String, to fixture: Fixture, sentAt: Date? = Date(), on app: Application
+    ) async throws {
+        let channel = ReleaseChannel(
             appID: fixture.appID, slackChannelID: "C\(UUID().uuidString.prefix(10).uppercased())",
             name: name, createdByID: nil
-        ).save(on: app.db)
+        )
+        channel.lastSentAt = sentAt
+        try await channel.save(on: app.db)
     }
 
     @Test("출시 소식을 올렸으면 어디에 올렸는지 함께 말한다")
@@ -81,6 +85,24 @@ struct ShareLinkGuideTests {
                 token: fixture.token, on: app
             )
             #expect(html.contains("#team-clip, #design 에 출시 소식을 올렸습니다."))
+        }
+    }
+
+    /// 등록만 돼 있고 이번 출시에 보내지 않은 채널은 올렸다고 말하지 않는다.
+    @Test("이번 출시에 실제로 보낸 채널만 말한다")
+    func onlyDeliveredChannels() async throws {
+        try await withMigratedApp { app in
+            let fixture = try await seed(on: app, state: .released)
+            try await markReleased(fixture, on: app)
+            try await addChannel("team-clip", to: fixture, on: app)
+            try await addChannel("stale", to: fixture, sentAt: Date().addingTimeInterval(-86400), on: app)
+
+            let html = try await detail(
+                "/apps/\(fixture.appID.uuidString)?released=\(fixture.versionID.uuidString)&announced=team-clip,stale",
+                token: fixture.token, on: app
+            )
+            #expect(html.contains("#team-clip 에 출시 소식을 올렸습니다."))
+            #expect(!html.contains("#stale"))
         }
     }
 

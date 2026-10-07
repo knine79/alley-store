@@ -7,7 +7,8 @@
  * **클립보드가 막혀 있으면 글을 골라 둔다.** 사내망의 http 주소처럼 보안 문맥이
  * 아니면 `navigator.clipboard` 가 없다. 그때는 글을 선택해 두고 ⌘C 를 누르라고 한다.
  *
- * 스크립트가 없으면 버튼은 아무 일도 하지 않고, 주소는 그대로 보이니 손으로 복사하면 된다.
+ * **버튼은 숨겨진 채로 온다.** 스크립트가 붙어야 드러낸다. 스크립트가 없거나 실패하면
+ * 눌러도 아무 일도 없는 버튼이 남는데, 그것보다 주소만 보이는 편이 낫다.
  */
 (function () {
     "use strict";
@@ -18,6 +19,7 @@
     Array.prototype.forEach.call(document.querySelectorAll("[data-copy]"), function (button) {
         var source = document.getElementById(button.dataset.copy);
         if (!source) return;
+        button.hidden = false;
         var label = button.textContent;
         var timer = null;
 
