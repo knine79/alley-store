@@ -83,6 +83,7 @@
 | [0073](0073-store-app-updates-apps-without-asking.md) | 스토어 앱이 다른 앱도 묻지 않고 업데이트하고, 그것만 사람이 끌 수 있다 | 일부 대체됨(ADR-0074) | 2026-10-06 |
 | [0074](0074-ask-once-to-quit-and-update-running-apps.md) | 실행 중인 앱은 버전마다 한 번 종료하고 업데이트할지 묻는다 | 수락됨 | 2026-10-06 |
 | [0075](0075-announce-releases-to-app-channels-through-the-bot.md) | 출시 소식은 출시할 때마다 사람이 고르고, 스토어 봇이 앱의 채널에 올린다 | 수락됨 | 2026-10-07 |
+| [0076](0076-weekly-store-digest-goes-to-admins-by-dm.md) | 스토어 주간 소식은 관리자에게 DM 두 통으로 보내고, 사람이 다듬어 전한다 | 수락됨 | 2026-10-07 |
 
 ## 언제 쓰나
 

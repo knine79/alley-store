@@ -306,6 +306,7 @@ curl -fsSL -o .env https://raw.githubusercontent.com/<소유자>/<레포>/main/.
 | --- | --- |
 | `SLACK_BOT_TOKEN` | 받는 사람이 정해지는 알림을 Slack DM 으로 보내고, 출시 소식을 앱 채널에 올립니다 (아래) |
 | `SMTP_HOST`, `SMTP_FROM` | 같은 알림을 메일로 보냅니다 (아래) |
+| `TZ` | 서버 시간대. 스토어 주간 소식이 이 시간대의 월요일 오전 10시에 갑니다 (예: `Asia/Seoul`). 안 넣으면 컨테이너는 보통 UTC 입니다 (ADR-0076) |
 
 ### 사람에게 알림을 보내려면
 
