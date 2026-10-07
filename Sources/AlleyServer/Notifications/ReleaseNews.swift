@@ -20,7 +20,7 @@ enum ReleaseNews {
     static let summaryCharacterLimit = 300
 
     /// 올릴 글.
-    struct Message: Equatable {
+    struct Message: Equatable, Sendable {
         /// 알림 미리보기와 블록을 못 그리는 곳에 쓰인다.
         var text: String
         var blocks: [SlackBlock]
@@ -78,17 +78,35 @@ enum ReleaseNews {
             ) ?? AppLink.webPath(appID: appID)
         )
 
+        // **채널마다 동시에 보낸다.** 출시는 이미 저장됐고 응답은 이것을 기다린다.
+        // 차례로 보내면 Slack 이 느릴 때 채널 수만큼 한도(5초)가 쌓인다.
+        let outcomes = await withTaskGroup(of: (Int, String?).self) { group in
+            for (index, channel) in channels.enumerated() {
+                let channelID = channel.slackChannelID
+                group.addTask {
+                    do {
+                        try await bot.post(text: message.text, blocks: message.blocks, to: channelID)
+                        return (index, nil)
+                    } catch {
+                        return (index, String(describing: error))
+                    }
+                }
+            }
+            var collected: [(Int, String?)] = []
+            for await outcome in group { collected.append(outcome) }
+            return collected
+        }
+
         var delivered = 0
-        for channel in channels {
-            do {
-                try await bot.post(text: message.text, blocks: message.blocks, to: channel.slackChannelID)
+        for (index, failure) in outcomes {
+            let channel = channels[index]
+            if let failure {
+                channel.lastError = failure
+                request.logger.warning("출시 소식을 보내지 못했습니다 [채널: #\(channel.name), 이유: \(failure)]")
+            } else {
                 channel.lastSentAt = Date()
                 channel.lastError = nil
                 delivered += 1
-            } catch {
-                let reason = String(describing: error)
-                channel.lastError = reason
-                request.logger.warning("출시 소식을 보내지 못했습니다 [채널: #\(channel.name), 이유: \(reason)]")
             }
             try? await channel.save(on: request.db)
         }

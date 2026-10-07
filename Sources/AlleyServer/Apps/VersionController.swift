@@ -344,8 +344,13 @@ public struct VersionController: RouteCollection, Sendable {
     ///
     /// **본문이 있는데 못 읽으면 말한다.** `"true"` 를 문자열로 보낸 것을 조용히
     /// false 로 읽으면, 보낸 쪽은 알렸다고 믿는다.
+    ///
+    /// JSON 이 아닌 본문은 예전처럼 보지 않는다. 이 경로는 원래 본문을 읽지 않아서,
+    /// 아무 본문이나 실어 보내던 스크립트가 있을 수 있다.
     private static func announce(in request: Request) throws -> Bool {
-        guard let body = request.body.data, body.readableBytes > 0 else { return false }
+        guard let body = request.body.data, body.readableBytes > 0,
+              request.headers.contentType == .json
+        else { return false }
         do {
             return try request.content.decode(ReleaseVersionRequest.self).announce ?? false
         } catch {
@@ -362,8 +367,7 @@ public struct VersionController: RouteCollection, Sendable {
         let version = try await request.findVersion()
         _ = try await request.requireUploadRights(to: version.app)
 
-        try version.transition(to: .ready)
-        version.releasedAt = nil
+        try VersionRelease.unrelease(version)
         try await version.save(on: request.db)
         return try version.toDTO()
     }

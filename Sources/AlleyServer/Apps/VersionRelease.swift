@@ -3,9 +3,9 @@ import Vapor
 
 /// 버전을 출시한다. 웹 콘솔과 API 가 모두 여기를 지난다 (ADR-0075).
 ///
-/// **출시가 일어나는 곳을 하나로 모은다.** CLI 와 MCP 는 API 를 부르므로, 웹과 API
-/// 두 핸들러가 이것을 부르면 네 갈래가 모두 같은 규칙을 지난다. 갈래마다 따로 붙이면
-/// 한 곳에서 빠진다. 실제로 번들 ID 검사가 웹에만 있었다.
+/// **출시가 일어나는 곳을 하나로 모은다.** MCP 는 API 를 부르므로, 웹과 API 두
+/// 핸들러가 이것을 부르면 모든 갈래가 같은 규칙을 지난다. 갈래마다 따로 붙이면 한
+/// 곳에서 빠진다. 실제로 번들 ID 검사가 웹에만 있었다.
 enum VersionRelease {
     /// 권한 확인은 부르는 쪽이 한다. 세션과 배포 토큰이 확인하는 방법이 다르다.
     ///
@@ -43,6 +43,9 @@ enum VersionRelease {
         do {
             storeAppID = try await request.storeAppSettings().$app.id
         } catch {
+            request.logger.warning(
+                "스토어 앱인지 확인하지 못해 출시 소식을 보내지 않습니다 [\(version.app.bundleID), 이유: \(error)]"
+            )
             return
         }
         // 스토어 앱이 아직 없는 스토어도 있다. 그때 nil 은 "스토어 앱이 아니다" 다.
@@ -50,5 +53,14 @@ enum VersionRelease {
         await ReleaseNews.announce(
             version, of: version.app, isFirstRelease: isFirstRelease, on: request
         )
+    }
+
+    /// 출시 철회. 배포 가능하지만 비공개인 `ready` 로 돌아간다. 저장은 부르는 쪽이 한다.
+    ///
+    /// 알린 시각(`announcedAt`)은 지우지 않는다. 다시 출시해도 같은 소식이 두 번
+    /// 올라가지 않게 한다 (ADR-0075).
+    static func unrelease(_ version: Version) throws {
+        try version.transition(to: .ready)
+        version.releasedAt = nil
     }
 }

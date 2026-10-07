@@ -150,9 +150,7 @@ struct VersionPagesController: RouteCollection, Sendable {
     @Sendable
     func unrelease(request: Request) async throws -> Response {
         try await changeRelease(on: request) { version in
-            try version.transition(to: .ready)
-            version.releasedAt = nil
-            try await version.save(on: request.db)
+            try VersionRelease.unrelease(version)
         }
     }
 
@@ -232,8 +230,11 @@ struct VersionPagesController: RouteCollection, Sendable {
             throw Abort(.notFound, reason: "버전을 찾을 수 없습니다.")
         }
 
-        // 저장은 `apply` 가 한다. 출시는 저장한 뒤에 알려야 해서 여기서 몰아 할 수 없다.
         try await apply(version)
+        // 출시는 `apply` 안에서 이미 저장한다(저장한 뒤에 알려야 해서). 그래도 여기서
+        // 한 번 더 저장해 둔다. 바뀐 것이 없으면 아무것도 쓰지 않고, 새로 붙는 `apply`
+        // 가 저장을 잊어도 빠지지 않는다.
+        try await version.save(on: request.db)
 
         // 스토어 앱은 자기 화면으로 돌아간다. 그 앱의 상세는 관리 화면으로 보내므로
         // (ADR-0046) 여기서 앱 주소로 보내면 한 번 더 튕긴다.

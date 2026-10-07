@@ -400,11 +400,14 @@ struct AppPagesController: RouteCollection, Sendable {
 
         // 출시 팝업은 올릴 수 있는 사람 모두가 쓴다. 채널을 넣고 빼는 섹션은 화면이
         // `canManage` 로 가린다 (ADR-0075).
+        // 이 앱이 스토어 앱인가. 스토어 앱만 웹에서 받을 수 있다 (이슈 #17).
+        let isStoreApp = try await request.storeAppSettings().$app.id == app.requireID()
+
         var releaseNews: ReleaseNewsContext?
         if canUpload {
             releaseNews = try await ReleaseNewsContext.make(
                 app: app,
-                isStoreApp: try await request.storeAppSettings().$app.id == app.requireID(),
+                isStoreApp: isStoreApp,
                 canManage: canManage,
                 error: releaseNewsError,
                 on: request
@@ -419,8 +422,6 @@ struct AppPagesController: RouteCollection, Sendable {
             )
             : [:]
 
-        // 이 앱이 스토어 앱인가. 스토어 앱만 웹에서 받을 수 있다 (이슈 #17).
-        let isStoreApp = try await request.storeAppSettings().$app.id == app.requireID()
         // 올릴 권한이 있는 사람에게만 보여준다. 받는 사람에게는 쓸 데가 없는 숫자다.
         var downloads: DownloadSummaryRow?
         var perVersion: [UUID: Int] = [:]
