@@ -311,6 +311,25 @@ struct ReleaseNewsDeliveryTests {
         }
     }
 
+    /// 이 경로는 원래 본문을 읽지 않았다. 아무 본문이나 싣던 스크립트를 깨지 않는다.
+    @Test("API 는 JSON 이 아닌 본문을 예전처럼 보지 않는다")
+    func apiIgnoresNonJSONBody() async throws {
+        try await withMigratedApp(overrides: botEnv) { app in
+            let stub = SlackAPIStub()
+            let fixture = try await seed(on: app, stub: stub)
+
+            try await app.testing().test(
+                .POST, APIPath.release(versionID: fixture.versionID),
+                headers: .bearer(fixture.token),
+                beforeRequest: { request in
+                    request.headers.contentType = .plainText
+                    request.body = ByteBuffer(string: "x")
+                }
+            ) { #expect($0.status == .ok) }
+            #expect(stub.posts.isEmpty)
+        }
+    }
+
     /// 스토어 앱은 스스로 업데이트하고, 공유 링크도 상세가 아니라 설치 페이지로 간다.
     @Test("스토어 앱은 알리지 않는다")
     func storeAppIsNotAnnounced() async throws {
@@ -426,6 +445,53 @@ struct ReleaseChannelRegistrationTests {
         }
     }
 
+    /// 봇만 보면 다른 팀이 봇을 초대해 둔 채널을 아무 앱 관리자나 걸 수 있다.
+    @Test("등록하는 사람이 들어가 있지 않은 채널은 넣지 않는다")
+    func refusesWhenRegistrantIsNotInChannel() async throws {
+        try await withMigratedApp(overrides: botEnv) { app in
+            let stub = SlackAPIStub(
+                list: #"{"ok":true,"channels":[{"id":"C0123456789","name":"team-b","is_member":true}]}"#,
+                members: #"{"ok":true,"members":["U9"]}"#
+            )
+            let (token, appID) = try await seed(on: app, stub: stub)
+
+            var body = ""
+            try await app.testing().test(
+                .POST, "/apps/\(appID.uuidString)/release-channels",
+                headers: .form(cookie: token),
+                beforeRequest: { try $0.content.encode(["channel": "team-b"], as: .urlEncodedForm) }
+            ) { response in
+                #expect(response.status == .forbidden)
+                body = response.body.string
+            }
+            #expect(body.contains("#team-b 에 들어가 있는 사람만 등록할 수 있습니다"))
+            #expect(try await ReleaseChannel.query(on: app.db).count() == 0)
+        }
+    }
+
+    @Test("Slack 계정을 찾지 못하면 넣지 않고 이유를 말한다")
+    func refusesWithoutSlackAccount() async throws {
+        try await withMigratedApp(overrides: botEnv) { app in
+            let stub = SlackAPIStub(
+                list: #"{"ok":true,"channels":[{"id":"C0123456789","name":"team-clip","is_member":true}]}"#,
+                lookup: #"{"ok":false,"error":"users_not_found"}"#
+            )
+            let (token, appID) = try await seed(on: app, stub: stub)
+
+            var body = ""
+            try await app.testing().test(
+                .POST, "/apps/\(appID.uuidString)/release-channels",
+                headers: .form(cookie: token),
+                beforeRequest: { try $0.content.encode(["channel": "team-clip"], as: .urlEncodedForm) }
+            ) { response in
+                #expect(response.status == .badRequest)
+                body = response.body.string
+            }
+            #expect(body.contains("dev@example.com 으로 Slack 계정을 찾지 못했습니다"))
+            #expect(try await ReleaseChannel.query(on: app.db).count() == 0)
+        }
+    }
+
     @Test("없는 채널은 넣지 않는다")
     func refusesUnknownChannel() async throws {
         try await withMigratedApp(overrides: botEnv) { app in
@@ -485,13 +551,17 @@ final class SlackAPIStub: Client, @unchecked Sendable {
         list: String = #"{"ok":true,"channels":[]}"#,
         info: String = #"{"ok":false,"error":"channel_not_found"}"#,
         post: String = #"{"ok":true}"#,
-        auth: String = #"{"ok":true,"user":"alley"}"#
+        auth: String = #"{"ok":true,"user":"alley"}"#,
+        lookup: String = #"{"ok":true,"user":{"id":"U1"}}"#,
+        members: String = #"{"ok":true,"members":["U1","U2"]}"#
     ) {
         responses = [
             "conversations.list": list,
             "conversations.info": info,
+            "conversations.members": members,
             "chat.postMessage": post,
             "auth.test": auth,
+            "users.lookupByEmail": lookup,
         ]
     }
 

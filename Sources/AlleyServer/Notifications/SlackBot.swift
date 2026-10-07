@@ -12,7 +12,8 @@ import Vapor
 /// 채널에 봇을 초대하기만 하면 된다.
 ///
 /// DM 에 쓰는 봇과 같은 토큰이다 (`SlackDirectMessageChannel`). 그쪽 권한에 더해
-/// `channels:read`, `groups:read` 가 있어야 채널 이름으로 찾고 봇이 들어가 있는지 본다.
+/// `channels:read`, `groups:read` 가 있어야 채널 이름으로 찾고 봇과 등록하는 사람이
+/// 들어가 있는지 본다.
 public struct SlackBot: Sendable {
     private let client: any Client
     private let token: String
@@ -33,6 +34,8 @@ public struct SlackBot: Sendable {
     public enum BotError: Error, CustomStringConvertible, Equatable {
         /// 그 이름이나 ID 로 채널을 찾지 못했다.
         case noSuchChannel(String)
+        /// 그 이메일을 쓰는 Slack 사용자가 없다.
+        case noSuchUser(email: String)
         /// 봇에 권한이 모자란다. `needed` 는 Slack 이 알려준 권한이다.
         case missingScope(needed: String?)
         /// Slack 이 거절했다. `error` 는 Slack 이 준 코드다.
@@ -43,6 +46,8 @@ public struct SlackBot: Sendable {
             switch self {
             case .noSuchChannel(let input):
                 return "'\(input)' 채널을 찾지 못했습니다. 비공개 채널이면 봇을 먼저 초대해야 보입니다."
+            case .noSuchUser(let email):
+                return "\(email) 으로 Slack 계정을 찾지 못했습니다. 스토어 계정과 Slack 계정의 이메일이 같아야 채널을 등록할 수 있습니다."
             case .missingScope(let needed):
                 let scope = needed.map { " (\($0))" } ?? ""
                 return "Slack 봇에 필요한 권한\(scope)이 없습니다. 스토어 관리자에게 권한 추가를 요청하세요."
@@ -104,6 +109,38 @@ public struct SlackBot: Sendable {
             return false
         }
         return text.allSatisfy { $0.isUppercase || $0.isNumber }
+    }
+
+    // MARK: - 사람
+
+    /// 이 이메일을 쓰는 Slack 사용자의 ID.
+    public func userID(email: String) async throws -> String {
+        let encoded = email.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? email
+        let response = try await get("users.lookupByEmail", query: "email=\(encoded)")
+        guard let decoded = try? response.content.decode(LookupResponse.self) else {
+            throw BotError.rejected(api: "users.lookupByEmail", error: "HTTP \(response.status.code)")
+        }
+        guard decoded.ok, let user = decoded.user else {
+            if decoded.error == "users_not_found" { throw BotError.noSuchUser(email: email) }
+            throw Self.failure(api: "users.lookupByEmail", error: decoded.error, needed: decoded.needed)
+        }
+        return user.id
+    }
+
+    /// 이 사용자가 채널에 들어가 있나. 멤버 목록을 끝까지 넘긴다.
+    public func isMember(userID: String, of channelID: String) async throws -> Bool {
+        var cursor: String?
+        repeat {
+            var query = "channel=\(Self.percentEncoded(channelID))&limit=1000"
+            if let cursor, !cursor.isEmpty {
+                query += "&cursor=\(Self.percentEncoded(cursor))"
+            }
+            let response = try await get("conversations.members", query: query)
+            let page = try decode(MembersResponse.self, from: response, api: "conversations.members")
+            if page.members?.contains(userID) == true { return true }
+            cursor = page.responseMetadata?.nextCursor
+        } while cursor.map { !$0.isEmpty } ?? false
+        return false
     }
 
     // MARK: - 올리기
@@ -228,6 +265,30 @@ public struct SlackBot: Sendable {
             case ok, error, needed, channels
             case responseMetadata = "response_metadata"
         }
+    }
+
+    private struct MembersResponse: SlackResponse {
+        var ok: Bool
+        var error: String?
+        var needed: String?
+        var members: [String]?
+        var responseMetadata: Metadata?
+
+        enum CodingKeys: String, CodingKey {
+            case ok, error, needed, members
+            case responseMetadata = "response_metadata"
+        }
+    }
+
+    private struct LookupUser: Codable {
+        var id: String
+    }
+
+    private struct LookupResponse: SlackResponse {
+        var ok: Bool
+        var error: String?
+        var needed: String?
+        var user: LookupUser?
     }
 
     private struct InfoResponse: SlackResponse {

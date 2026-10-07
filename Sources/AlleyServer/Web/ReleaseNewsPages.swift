@@ -103,6 +103,21 @@ extension AppPagesController {
             )
         }
 
+        // **등록하는 사람도 그 채널에 있어야 한다.** 봇만 보면 다른 팀이 봇을 초대해 둔
+        // 채널을 아무 앱 관리자나 걸 수 있다. 그러면 남의 채널에 엉뚱한 앱 소식이
+        // 스토어 이름으로 올라가고, ID 로 넣으면 비공개 채널 이름까지 알게 된다.
+        do {
+            let person = try await bot.userID(email: user.email)
+            guard try await bot.isMember(userID: person, of: channel.id) else {
+                return try await releaseNewsError(
+                    "#\(channel.name) 에 들어가 있는 사람만 등록할 수 있습니다. 채널에 들어간 뒤 다시 추가하세요.",
+                    status: .forbidden, on: request
+                )
+            }
+        } catch let error as SlackBot.BotError {
+            return try await releaseNewsError(error.description, status: .badRequest, on: request)
+        }
+
         let exists = try await ReleaseChannel.query(on: request.db)
             .filter(\.$app.$id == appID)
             .filter(\.$slackChannelID == channel.id)
