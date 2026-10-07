@@ -56,6 +56,21 @@
                 </span>
             </label>
 
+            <!-- 스토어 전체 소식이라 관리자에게만 간다 (ADR-0076). 관리자가 아니면 칸도
+                 그리지 않는다. 받지 않는 것을 고르게 하면 받는 줄 안다. -->
+            #if(page.isAdmin):
+            <label class="choice">
+                <input type="checkbox" name="weeklyDigest" #if(weeklyDigest):checked#endif>
+                <span>
+                    <span class="choice-name">스토어 주간 소식</span>
+                    <span class="choice-note">
+                        매주 월요일 아침, 지난 한 주의 스토어 소식과 운영 지표를 보냅니다.
+                        스토어 관리자에게만 갑니다.
+                    </span>
+                </span>
+            </label>
+            #endif
+
             <!-- **끌 수 없는 것도 같은 목록에 세운다.** 체크박스 둘만 있으면 그것이
                  받는 알림의 전부로 읽힌다. 빼두면 사람은 안 오는 줄 알고, 따로 묶어
                  두면 설정과 안내가 두 군데로 갈린다. 여기 켠 채로 잠가둔다

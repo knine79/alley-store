@@ -405,6 +405,11 @@ struct MePagesController: RouteCollection, Sendable {
         // 체크박스는 꺼져 있으면 아예 보내지지 않는다. 값이 없으면 끈 것이다.
         user.notifySigningFailure = values.signingFailure == "on"
         user.notifyFeedback = values.feedback == "on"
+        // 주간 소식 칸은 관리자에게만 보인다. 관리자가 아닌 사람의 폼에는 이 값이 없으니
+        // 그것을 "껐다" 로 읽지 않는다. 나중에 관리자가 되면 기본값(켜짐)으로 받는다.
+        if user.role.canAdminister {
+            user.notifyWeeklyDigest = values.weeklyDigest == "on"
+        }
 
         // **비활성 칸은 폼에서 오지 않는다.** 지금 쓸 수 없는 수단은 회색으로 두는데,
         // 그 값을 "껐다" 로 읽으면 Slack 이 잠깐 안 되는 사이에 저장을 누른 사람의
@@ -430,6 +435,7 @@ struct MePagesController: RouteCollection, Sendable {
                 page: try await request.pageContext(title: "내 알림", myTab: .notifications),
                 signingFailure: user.notifySigningFailure,
                 feedback: user.notifyFeedback,
+                weeklyDigest: user.notifyWeeklyDigest,
                 ways: await PersonalDelivery.all(for: user, on: request),
                 saved: saved
             )
@@ -592,6 +598,8 @@ struct MyNotificationsContext: Encodable {
     var page: PageContext
     var signingFailure: Bool
     var feedback: Bool
+    /// 스토어 주간 소식. 화면은 관리자에게만 이 칸을 그린다 (ADR-0076).
+    var weeklyDigest: Bool
     /// 받는 방법들. 쓸 수 없는 것도 회색으로 들어 있다.
     var ways: [PersonalDelivery]
     var saved: Bool
@@ -600,6 +608,7 @@ struct MyNotificationsContext: Encodable {
 struct NotificationPreferenceValues: Codable {
     var signingFailure: String?
     var feedback: String?
+    var weeklyDigest: String?
     /// 체크박스 여럿이라 값도 여럿 온다. 하나도 안 고르면 오지 않는다.
     var via: [String]?
 }

@@ -59,6 +59,12 @@ public func configure(_ app: Application, config: AppConfig) async throws {
             await UserTokenExpiryNotice.run(on: application)
         }
     )
+    // 관리자에게 스토어 주간 소식을 보낸다 (ADR-0076). 한 시간마다 보낼 때가 됐는지 본다.
+    app.lifecycle.use(
+        PeriodicSweep(name: "스토어 주간 소식", interval: WeeklyDigest.checkInterval) { application in
+            await WeeklyDigest.run(on: application)
+        }
+    )
     // 데이터베이스를 닫기 전에 긴 폴링을 내보낸다. 남겨두면 그것이 닫힌 데이터베이스를
     // 잡고 프로세스를 죽인다 (ADR-0052).
     app.lifecycle.use(ShutdownSignalLifecycle())
@@ -203,6 +209,10 @@ private func configureMigrations(_ app: Application) {
     // 출시 소식을 앱 채널에 올린다 (이슈 #63, ADR-0075).
     app.migrations.add(CreateReleaseChannel())
     app.migrations.add(AddVersionAnnouncedAt())
+
+    // 관리자에게 스토어 주간 소식을 보낸다 (이슈 #65, ADR-0076).
+    app.migrations.add(AddWeeklyDigestPreferenceToUser())
+    app.migrations.add(CreateWeeklyDigestRun())
 }
 
 /// 미들웨어 스택.
