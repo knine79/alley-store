@@ -80,7 +80,8 @@
 | [0070](0070-app-categories-are-a-fixed-list.md) | 앱 분류는 코드에 정한 목록에서 고른다 | 수락됨 | 2026-10-01 |
 | [0071](0071-app-screenshots-need-sign-in.md) | 앱 스크린샷은 로그인한 사람에게만 내준다 | 수락됨 | 2026-10-01 |
 | [0072](0072-share-apps-through-a-web-page-and-the-custom-scheme.md) | 앱 공유 링크는 웹 페이지가 받고 커스텀 스킴으로 스토어 앱을 부른다 | 수락됨 | 2026-10-02 |
-| [0073](0073-store-app-updates-apps-without-asking.md) | 스토어 앱이 다른 앱도 묻지 않고 업데이트하고, 그것만 사람이 끌 수 있다 | 수락됨 | 2026-10-06 |
+| [0073](0073-store-app-updates-apps-without-asking.md) | 스토어 앱이 다른 앱도 묻지 않고 업데이트하고, 그것만 사람이 끌 수 있다 | 일부 대체됨(ADR-0074) | 2026-10-06 |
+| [0074](0074-ask-once-to-quit-and-update-running-apps.md) | 실행 중인 앱은 버전마다 한 번 종료하고 업데이트할지 묻는다 | 수락됨 | 2026-10-06 |
 
 ## 언제 쓰나
 
