@@ -95,11 +95,12 @@ public struct StoreAPI: Sendable {
         )
     }
 
-    public func release(versionID: UUID) async throws -> VersionDTO {
+    /// 출시. `announce` 가 true 이면 앱의 출시 소식 채널에도 알린다 (ADR-0075).
+    public func release(versionID: UUID, announce: Bool = false) async throws -> VersionDTO {
         try await send(
             APIPath.release(versionID: versionID),
             method: "POST",
-            body: EmptyBody(),
+            body: ReleaseVersionRequest(announce: announce),
             as: VersionDTO.self
         )
     }

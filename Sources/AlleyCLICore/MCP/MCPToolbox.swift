@@ -16,6 +16,7 @@ enum MCPToolbox {
         case badUUID(String)
         case appNotFound(String)
         case notANumber(String, String)
+        case notAFlag(String, String)
         case relativePath(String)
 
         /// 붙어 있는 쪽이 규약을 어긴 것인가.
@@ -40,6 +41,8 @@ enum MCPToolbox {
                 return "그런 앱을 찾지 못했습니다: \(value). list_apps 로 이름을 확인하세요."
             case .notANumber(let name, let value):
                 return "\(name) 은 숫자여야 합니다: \(value)"
+            case .notAFlag(let name, let value):
+                return "\(name) 은 true 나 false 여야 합니다: \(value)"
             case .relativePath(let value):
                 return """
                     파일 경로는 절대 경로여야 합니다: \(value). 이 서버는 에이전트를 \
@@ -107,9 +110,14 @@ enum MCPToolbox {
             name: "release_version",
             description: """
                 상태가 ready 인 버전을 출시한다. 이때부터 사람들이 받아간다. \
-                되돌릴 수 없으니 사람이 그러라고 했을 때만 부른다.
+                되돌릴 수 없으니 사람이 그러라고 했을 때만 부른다. \
+                announce 를 "true" 로 주면 앱의 출시 소식 Slack 채널에도 알린다. \
+                **알릴지는 사람에게 물어보고 정한다.** 안 주면 알리지 않는다.
                 """,
-            inputSchema: MCPTool.schema(required: ["version": "버전 id"])
+            inputSchema: MCPTool.schema(
+                required: ["version": "버전 id"],
+                optional: ["announce": "출시 소식 채널에 알릴지. \"true\" 또는 \"false\". 기본은 false"]
+            )
         ),
         MCPTool(
             name: "sparkle_feed",
@@ -183,7 +191,11 @@ enum MCPToolbox {
 
         case "release_version":
             let versionID = try uuid(named: "version", in: arguments)
-            return try MCPToolResult.json(try await api.release(versionID: versionID))
+            return try MCPToolResult.json(
+                try await api.release(
+                    versionID: versionID, announce: try flag(named: "announce", in: arguments)
+                )
+            )
 
         case "sparkle_feed":
             let app = try await resolveApp(arguments, api: api)
@@ -265,6 +277,26 @@ enum MCPToolbox {
             return nil
         default:
             throw ToolError.notANumber(name, String(describing: value))
+        }
+    }
+
+    /// 참/거짓 인자. 모델은 `true` 로도 `"true"` 로도 보낸다. 없으면 false.
+    ///
+    /// **못 읽으면 말한다.** 출시 소식처럼 사람들에게 나가는 것을 오타 하나로 조용히
+    /// 끄거나 켜면 안 된다.
+    private static func flag(named name: String, in arguments: [String: JSONValue]) throws -> Bool {
+        guard let value = arguments[name], value != .null else { return false }
+        switch value {
+        case .bool(let flag):
+            return flag
+        case .string(let text):
+            switch text.lowercased() {
+            case "true": return true
+            case "false", "": return false
+            default: throw ToolError.notAFlag(name, text)
+            }
+        default:
+            throw ToolError.notAFlag(name, String(describing: value))
         }
     }
 

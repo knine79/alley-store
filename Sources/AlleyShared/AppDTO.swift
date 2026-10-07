@@ -364,6 +364,19 @@ public struct CompleteUploadRequest: Codable, Sendable {
     }
 }
 
+/// 버전을 출시할 때 함께 보내는 것.
+public struct ReleaseVersionRequest: Codable, Sendable {
+    /// 앱의 출시 소식 채널에 알릴지 (ADR-0075).
+    ///
+    /// **비우면 알리지 않는다.** 사람이 고르지 않은 출시가 채널에 올라가면 안 된다.
+    /// CI 가 배포 토큰으로 출시할 때가 그렇다.
+    public var announce: Bool?
+
+    public init(announce: Bool? = nil) {
+        self.announce = announce
+    }
+}
+
 /// 다운로드 응답. 서버가 이력을 남긴 뒤 만료 있는 URL을 내준다.
 public struct DownloadTicket: Codable, Sendable {
     public var downloadURL: String

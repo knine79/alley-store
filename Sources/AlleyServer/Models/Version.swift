@@ -66,6 +66,13 @@ public final class Version: Model, @unchecked Sendable {
     @OptionalField(key: "released_at")
     public var releasedAt: Date?
 
+    /// 출시 소식을 채널에 올린 때 (ADR-0075). 올리지 않았으면 nil.
+    ///
+    /// **철회해도 지우지 않는다.** 철회했다가 다시 출시하면 같은 버전이 채널에 두 번
+    /// 올라간다. 한 버전은 한 번만 알린다.
+    @OptionalField(key: "announced_at")
+    public var announcedAt: Date?
+
     @Children(for: \.$version)
     public var artifacts: [Artifact]
 
@@ -245,6 +252,25 @@ public struct AddVersionBundleVersion: AsyncMigration {
     public func revert(on database: any Database) async throws {
         try await database.schema(Version.schema)
             .deleteField("bundle_version")
+            .update()
+    }
+}
+
+/// 출시 소식을 올린 때를 적는 칸 (ADR-0075).
+///
+/// 이미 출시된 버전은 비워 둔다. 이 칸이 생기기 전에는 알린 적이 없다.
+public struct AddVersionAnnouncedAt: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        try await database.schema(Version.schema)
+            .field("announced_at", .datetime)
+            .update()
+    }
+
+    public func revert(on database: any Database) async throws {
+        try await database.schema(Version.schema)
+            .deleteField("announced_at")
             .update()
     }
 }

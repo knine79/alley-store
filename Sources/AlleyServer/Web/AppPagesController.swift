@@ -43,6 +43,8 @@ struct AppPagesController: RouteCollection, Sendable {
             ":appID", "notification-targets", ":targetID", "delete",
             use: removeNotificationTarget
         )
+        pages.post(":appID", "release-channels", use: addReleaseChannel)
+        pages.post(":appID", "release-channels", ":channelID", "delete", use: removeReleaseChannel)
     }
 
     // MARK: - 목록
@@ -294,7 +296,8 @@ struct AppPagesController: RouteCollection, Sendable {
         feedError: String? = nil,
         portalError: String? = nil,
         portalNotice: String? = nil,
-        memberError: String? = nil
+        memberError: String? = nil,
+        releaseNewsError: String? = nil
     ) async throws -> View {
         let user = try request.requireUser()
         let app = try await request.findApp()
@@ -395,6 +398,22 @@ struct AppPagesController: RouteCollection, Sendable {
             )
         }
 
+        // 출시 팝업은 올릴 수 있는 사람 모두가 쓴다. 채널을 넣고 빼는 섹션은 화면이
+        // `canManage` 로 가린다 (ADR-0075).
+        // 이 앱이 스토어 앱인가. 스토어 앱만 웹에서 받을 수 있다 (이슈 #17).
+        let isStoreApp = try await request.storeAppSettings().$app.id == app.requireID()
+
+        var releaseNews: ReleaseNewsContext?
+        if canUpload {
+            releaseNews = try await ReleaseNewsContext.make(
+                app: app,
+                isStoreApp: isStoreApp,
+                canManage: canManage,
+                error: releaseNewsError,
+                on: request
+            )
+        }
+
         // 실패한 버전은 로그가 있어야 올린 사람이 스스로 고칠 수 있다.
         // 올릴 권한이 없는 사람에게는 보여줄 이유가 없다. 워커 환경이 드러난다.
         let reports = canUpload
@@ -403,8 +422,6 @@ struct AppPagesController: RouteCollection, Sendable {
             )
             : [:]
 
-        // 이 앱이 스토어 앱인가. 스토어 앱만 웹에서 받을 수 있다 (이슈 #17).
-        let isStoreApp = try await request.storeAppSettings().$app.id == app.requireID()
         // 올릴 권한이 있는 사람에게만 보여준다. 받는 사람에게는 쓸 데가 없는 숫자다.
         var downloads: DownloadSummaryRow?
         var perVersion: [UUID: Int] = [:]
@@ -471,6 +488,7 @@ struct AppPagesController: RouteCollection, Sendable {
                 feedError: feedError,
                 sparkle: sparkle,
                 alerts: alerts,
+                releaseNews: releaseNews,
                 feedback: feedback,
                 canUpload: canUpload,
                 canManage: canManage,
@@ -1468,6 +1486,8 @@ struct AppDetailContext: Encodable {
     var sparkle: SparkleReadinessRow?
     /// 보내는 방법. 관리 권한이 없으면 nil (ADR-0059).
     var alerts: AlertDeliveryContext?
+    /// 출시 소식 알림. 올릴 권한이 없으면 nil (ADR-0075).
+    var releaseNews: ReleaseNewsContext?
     var feedback: [FeedbackRow]
     /// 지금 사람이 피드백을 남길 수 있는 버전들. 받아본 것만 들어온다.
     /// 익명 체크박스를 띄울지. 스토어 설정에서 온다.
