@@ -148,8 +148,12 @@
                         <button class="button" type="submit">철회</button>
                     </form>
                     #elseif(version.canRelease):
+                    <!-- 출시 소식을 알릴지 팝업에서 묻는다 (ADR-0075). 스크립트가 없으면
+                         묻지 않고 출시하고, 그때는 알리지 않는다. -->
                     <form class="row-form" method="post"
-                          action="/apps/#(app.id)/versions/#(version.id)/release">
+                          action="/apps/#(app.id)/versions/#(version.id)/release"
+                          #if(releaseNews.asksOnRelease):data-release="#(version.shortVersion)" data-release-build="#(version.buildNumber)"#endif>
+                        <input type="hidden" name="announce" value="">
                         <button class="button button-primary" type="submit">출시</button>
                     </form>
                     <!-- 권한이 모자란 실패는 왼쪽 칸의 폼이 대신한다. 여기 버튼을
@@ -475,6 +479,91 @@
 </section>
 #endif
 
+<!-- 출시 소식을 올릴 채널 (ADR-0075). 위 알림 채널과 따로 둔다. 그쪽은 앱 관리자가
+     받는 알림이고, 이쪽은 사람들에게 새 버전을 알리는 곳이다.
+     스토어 앱은 알리지 않으므로 이 섹션이 없다. -->
+#if(canManage):#if(releaseNews.asksOnRelease):
+<section class="section" id="release-news">
+    <h2 class="section-title">출시 소식 알림</h2>
+    <p class="page-lead">
+        출시할 때 여기 등록한 Slack 채널에 알릴지 묻습니다. 앱 이름과 소개, 버전, 릴리즈
+        노트, 공유 링크가 올라갑니다.
+    </p>
+
+    #if(releaseNews.error):
+    <p class="notice notice-error">#(releaseNews.error)</p>
+    #endif
+
+    <!-- 봇이 없으면 채널을 넣어도 보낼 수 없다. 넣을 칸을 주지 않고 누구에게 무엇을
+         부탁하면 되는지만 말한다. 알림 화면의 같은 안내와 문구를 맞춘다. -->
+    #if(!releaseNews.botReady):
+    <p class="notice notice-warn">
+        <strong>Slack 봇이 연결되어 있지 않아 출시 소식을 보낼 수 없습니다.</strong>
+        스토어 관리자에게 봇 연결을 요청하세요. 스토어 관리자가 서버 환경변수
+        <code>SLACK_BOT_TOKEN</code> 을 넣고 다시 띄우면 됩니다.
+    </p>
+    #else:
+    #if(count(releaseNews.channels) == 0):
+    <p class="field-note">등록된 채널이 없습니다. 채널을 넣으면 출시할 때 소식을 보낼 수 있습니다.</p>
+    #else:
+    <div class="table-scroll">
+    <table class="table">
+        <thead>
+            <tr>
+                <th class="table-fill">채널</th>
+                <th class="table-tight">마지막 발송</th>
+                <th class="table-tight"><span class="visually-hidden">지우기</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            #for(channel in releaseNews.channels):
+            <tr>
+                <td class="table-fill">
+                    <span class="table-strong">#(channel.name)</span>
+                    <!-- 봇이 채널에서 빠지면 그 뒤로 조용히 실패한다. -->
+                    #if(channel.lastError):
+                    <span class="table-note">#(channel.lastError)</span>
+                    #endif
+                </td>
+                <td class="table-tight table-muted">
+                    #if(channel.lastSentAt):#(channel.lastSentAt)#else:보낸 적 없음#endif
+                </td>
+                <td class="table-tight">
+                    <form class="row-form" method="post" action="#(channel.deletePath)">
+                        <button class="button" type="submit">지우기</button>
+                    </form>
+                </td>
+            </tr>
+            #endfor
+        </tbody>
+    </table>
+    </div>
+    #endif
+
+    <form class="form" method="post" action="#(releaseNews.addAction)">
+        <label class="field">
+            <span class="field-label">Slack 채널</span>
+            <input class="input" type="text" name="channel" required placeholder="#team-releases"
+                   autocapitalize="off" autocorrect="off" spellcheck="false">
+            <span class="field-note">
+                #if(releaseNews.botHandle):
+                채널에 <strong>@#(releaseNews.botHandle)</strong> 봇을 먼저 초대하세요. 채널에서
+                <code>/invite @#(releaseNews.botHandle)</code> 를 보내면 됩니다.
+                #else:
+                채널에 스토어의 Slack 봇을 먼저 초대하세요. 채널에서 <code>/invite</code> 로
+                봇을 부르면 됩니다.
+                #endif
+                비공개 채널도 초대하면 쓸 수 있습니다.
+            </span>
+        </label>
+        <div class="form-actions">
+            <button class="button" type="submit">채널 추가</button>
+        </div>
+    </form>
+    #endif
+</section>
+#endif#endif
+
 #if(canManage):
 <section class="section" id="feed-tokens">
     <h2 class="section-title">자동 업데이트 피드</h2>
@@ -690,6 +779,63 @@
     </div>
 </section>
 #endif
+
+<!-- 출시할 때 출시 소식을 알릴지 묻는 팝업 (ADR-0075). `data-release` 가 붙은 폼이 쓴다.
+     버전 번호는 누른 줄에서 스크립트가 채운다.
+
+     **취소가 먼저다.** Enter 나 Esc 로 닫으면 아무 일도 없다. 출시는 사람들에게 나가는
+     일이라 실수로 넘어가면 안 된다. -->
+#if(canUpload):#if(releaseNews.asksOnRelease):
+<dialog class="modal" id="release-dialog" aria-labelledby="release-title">
+    <form method="dialog">
+        #if(!releaseNews.botReady):
+        <h2 class="modal-title" id="release-title">#(app.name) <span data-release-short></span> 를 출시할까요?</h2>
+        <div class="modal-body">
+            <p>Slack 봇이 연결되어 있지 않아 출시 소식을 보낼 수 없습니다.</p>
+            <p>
+                스토어 관리자에게 봇 연결을 요청하세요. 스토어 관리자가 서버 환경변수
+                <code>SLACK_BOT_TOKEN</code> 을 넣고 다시 띄우면 됩니다.
+            </p>
+        </div>
+        <div class="modal-actions">
+            <button class="button" type="submit" value="cancel">취소</button>
+            <button class="button button-primary" type="submit" value="release">출시</button>
+        </div>
+        #else:
+        #if(count(releaseNews.channels) == 0):
+        <h2 class="modal-title" id="release-title">#(app.name) <span data-release-short></span> 를 출시할까요?</h2>
+        <div class="modal-body">
+            <p>출시 소식을 올릴 채널이 없어 Slack 에 알리지 않습니다.</p>
+            <p>
+                앱 상세의 <strong>출시 소식 알림</strong> 에서 채널을 등록하면 출시할 때 소식을
+                보낼 수 있습니다.
+            </p>
+        </div>
+        <div class="modal-actions">
+            <button class="button" type="submit" value="cancel">취소</button>
+            #if(canManage):
+            <button class="button" type="submit" value="setup">채널 등록하러 가기</button>
+            #endif
+            <button class="button button-primary" type="submit" value="release">출시</button>
+        </div>
+        #else:
+        <h2 class="modal-title" id="release-title">출시 소식을 알릴까요?</h2>
+        <div class="modal-body">
+            <p>#(app.name) <span data-release-full></span> 를 출시합니다.</p>
+            <p>#(releaseNews.channelList) 에 출시 소식을 올릴 수 있습니다.</p>
+        </div>
+        <div class="modal-actions">
+            <button class="button" type="submit" value="cancel">취소</button>
+            <button class="button" type="submit" value="release">알리지 않고 출시</button>
+            <button class="button button-primary" type="submit" value="announce">출시하고 알리기</button>
+        </div>
+        #endif
+        #endif
+    </form>
+</dialog>
+
+<script src="/release-confirm.js?v=#(page.assetVersion)" defer></script>
+#endif#endif
 
 <!-- 되돌릴 수 없는 폼 앞에 세우는 팝업. `data-confirm` 이 붙은 폼이 쓴다. -->
 #if(canManage):

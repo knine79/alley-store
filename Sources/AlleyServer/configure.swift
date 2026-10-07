@@ -199,6 +199,10 @@ private func configureMigrations(_ app: Application) {
 
     // 앱 상세에 스크린샷을 둔다 (이슈 #40).
     app.migrations.add(AddAppScreenshots())
+
+    // 출시 소식을 앱 채널에 올린다 (이슈 #63, ADR-0075).
+    app.migrations.add(CreateReleaseChannel())
+    app.migrations.add(AddVersionAnnouncedAt())
 }
 
 /// 미들웨어 스택.

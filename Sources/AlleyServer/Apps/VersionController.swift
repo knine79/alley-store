@@ -326,14 +326,31 @@ public struct VersionController: RouteCollection, Sendable {
 
     // MARK: - 출시
 
+    /// 출시. 본문의 `announce` 가 true 일 때만 출시 소식을 올린다 (ADR-0075).
+    ///
+    /// 본문이 없거나 비어 있어도 된다. 예전 CLI 는 빈 객체를 보낸다.
     @Sendable
     func release(request: Request) async throws -> VersionDTO {
         let version = try await request.findVersion()
         _ = try await request.requireUploadRights(to: version.app)
 
-        try version.transition(to: .released)
-        try await version.save(on: request.db)
+        try await VersionRelease.release(
+            version, announce: try Self.announce(in: request), on: request
+        )
         return try version.toDTO()
+    }
+
+    /// 본문의 `announce`. 본문이 없으면 false.
+    ///
+    /// **본문이 있는데 못 읽으면 말한다.** `"true"` 를 문자열로 보낸 것을 조용히
+    /// false 로 읽으면, 보낸 쪽은 알렸다고 믿는다.
+    private static func announce(in request: Request) throws -> Bool {
+        guard let body = request.body.data, body.readableBytes > 0 else { return false }
+        do {
+            return try request.content.decode(ReleaseVersionRequest.self).announce ?? false
+        } catch {
+            throw Abort(.badRequest, reason: "출시 본문을 읽지 못했습니다. announce 는 true 나 false 여야 합니다.")
+        }
     }
 
     /// 출시 철회. 배포 가능하지만 비공개인 `ready` 로 돌아간다.
@@ -410,5 +427,6 @@ extension DownloadTicket: Content {}
 extension CreateAppRequest: Content {}
 extension CreateVersionRequest: Content {}
 extension CompleteUploadRequest: Content {}
+extension ReleaseVersionRequest: Content {}
 extension UpdateAppRequest: Content {}
 extension AddAppMemberRequest: Content {}

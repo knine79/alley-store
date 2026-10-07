@@ -130,25 +130,16 @@ struct VersionPagesController: RouteCollection, Sendable {
 
     // MARK: - 출시 / 철회
 
+    /// 출시. 알릴지는 팝업에서 고른 값이 `announce` 로 온다 (ADR-0075).
+    ///
+    /// 스크립트가 없으면 팝업 없이 폼이 그대로 가고, 그때는 알리지 않는다. 사람이
+    /// 고르지 않은 출시가 채널에 올라가면 안 된다.
     @Sendable
     func release(request: Request) async throws -> Response {
-        try await changeRelease(on: request) { version in
-            // 번들 ID 가 확정되지 않은 앱은 출시할 수 없다 (ADR-0034).
-            //
-            // 스토어 앱은 `CFBundleIdentifier` 로 설치 여부를 판단한다. 임시값인 채로
-            // 내보내면 받은 사람의 맥에서 영영 "설치 안 됨" 으로 남고, 업데이트도
-            // 잡히지 않는다. 받아간 뒤에 고쳐도 이미 나간 것은 되돌릴 수 없다.
-            guard !version.app.bundleIDPending else {
-                throw Abort(
-                    .conflict,
-                    reason: """
-                        번들 ID 가 아직 확정되지 않아 출시할 수 없습니다. 서명 워커가 \
-                        번들을 열어 번들 ID 를 읽어야 확정됩니다. 서명이 실패했다면 \
-                        고친 뒤 다시 올리세요.
-                        """
-                )
-            }
-            try version.transition(to: .released)
+        let values = try? request.content.decode(ReleaseFormValues.self)
+        let announce = values?.announce == "1"
+        return try await changeRelease(on: request) { version in
+            try await VersionRelease.release(version, announce: announce, on: request)
         }
     }
 
@@ -161,6 +152,7 @@ struct VersionPagesController: RouteCollection, Sendable {
         try await changeRelease(on: request) { version in
             try version.transition(to: .ready)
             version.releasedAt = nil
+            try await version.save(on: request.db)
         }
     }
 
@@ -225,7 +217,7 @@ struct VersionPagesController: RouteCollection, Sendable {
 
     private func changeRelease(
         on request: Request,
-        apply: (Version) throws -> Void
+        apply: (Version) async throws -> Void
     ) async throws -> Response {
         let user = try request.requireUser()
         let version = try await request.findVersion()
@@ -240,8 +232,8 @@ struct VersionPagesController: RouteCollection, Sendable {
             throw Abort(.notFound, reason: "버전을 찾을 수 없습니다.")
         }
 
-        try apply(version)
-        try await version.save(on: request.db)
+        // 저장은 `apply` 가 한다. 출시는 저장한 뒤에 알려야 해서 여기서 몰아 할 수 없다.
+        try await apply(version)
 
         // 스토어 앱은 자기 화면으로 돌아간다. 그 앱의 상세는 관리 화면으로 보내므로
         // (ADR-0046) 여기서 앱 주소로 보내면 한 번 더 튕긴다.
@@ -296,4 +288,9 @@ struct VersionConfirmContext: Encodable {
     var versionID: String
     /// 브라우저가 값이 올 때까지 폴링할 경로.
     var versionPath: String
+}
+
+/// 출시 폼. 팝업에서 "출시하고 알리기" 를 누르면 `announce=1` 이 함께 온다.
+struct ReleaseFormValues: Content {
+    var announce: String?
 }
