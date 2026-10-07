@@ -820,10 +820,10 @@ dmg, CLI, 버전 화면으로 올린 앱과 `Assets.car` 에만 아이콘이 든
 
 앱이 나와도 스토어 앱을 열어보지 않으면 아무도 몰랐습니다(이슈 #63).
 
-- [x] 앱 상세 "출시 소식 알림": 앱 관리자가 Slack 채널을 등록하고 지운다. 봇이 없는 채널은 받지 않는다
+- [x] 앱 상세 "출시 소식 알림": 앱 관리자가 Slack 채널을 등록하고 지운다. 봇과 등록하는 사람이 모두 들어가 있는 채널만 받는다
 - [x] 출시 팝업: 채널이 있으면 알릴지 고르고, 없거나 봇이 없으면 무엇을 하면 되는지 안내
 - [x] 웹·API 출시가 `VersionRelease` 하나를 지난다. API 도 번들 ID 가 확정되지 않은 앱을 막는다
-- [x] API `announce`, MCP `release_version` 의 `announce`. 비우면 알리지 않는다
+- [x] API `announce`, MCP `release_version` 의 `announce`. 비우면 알리지 않는다 (CLI `--release` 는 이미 쓰이지 않음)
 - [x] 한 버전은 한 번만 알린다 (`versions.announced_at`). 스토어 앱은 알리지 않는다
 - [ ] 운영 봇 앱에 `channels:read`, `groups:read` 를 더하고 다시 설치
 - [ ] 운영 채널에 실제로 올려 보고 문구 확인

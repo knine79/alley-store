@@ -333,10 +333,10 @@ curl -fsSL -o .env https://raw.githubusercontent.com/<소유자>/<레포>/main/.
    `templates/ops/slack-app-manifest.yml` 을 **From an app manifest** 에 붙여넣으면
    권한까지 한 번에 들어갑니다
 2. 손으로 만든다면 **OAuth & Permissions** 에서 봇 권한 다섯을 줍니다
-   - `users:read.email` - 이메일로 사용자를 찾습니다
+   - `users:read.email` - 이메일로 사용자를 찾습니다. 출시 소식 채널을 등록하는 사람이 그 채널에 있는지 볼 때도 씁니다
    - `users:read` - 위 권한이 기대는 것이라 함께 켭니다
    - `chat:write` - 그 사용자에게 DM 을 쓰고, 출시 소식을 채널에 씁니다
-   - `channels:read`, `groups:read` - 출시 소식 채널을 이름으로 찾고 봇이 들어가 있는지 봅니다
+   - `channels:read`, `groups:read` - 출시 소식 채널을 이름으로 찾고 봇과 등록하는 사람이 들어가 있는지 봅니다
 3. 워크스페이스에 설치하고 **Bot User OAuth Token** (`xoxb-` 로 시작)을 받습니다
 4. `.env` 에 `SLACK_BOT_TOKEN=xoxb-...` 로 넣습니다
 

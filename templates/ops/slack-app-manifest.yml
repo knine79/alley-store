@@ -41,8 +41,9 @@ oauth_config:
       #
       # 사용자 ID 를 채널로 넘기면 DM 으로 갑니다. 출시 소식은 초대된 채널에 씁니다.
       - chat:write
-      # 앱 관리자가 적은 채널 이름으로 채널을 찾고, 봇이 그 채널에 들어가 있는지
-      # 봅니다 (`conversations.list`, `conversations.info`). 공개 채널용입니다.
+      # 앱 관리자가 적은 채널 이름으로 채널을 찾고, 봇과 등록하는 사람이 그 채널에
+      # 들어가 있는지 봅니다 (`conversations.list`, `conversations.info`,
+      # `conversations.members`). 공개 채널용입니다.
       - channels:read
       # 위와 같고 비공개 채널용입니다. 봇이 초대된 비공개 채널만 보입니다.
       - groups:read
