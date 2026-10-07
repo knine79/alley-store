@@ -425,9 +425,96 @@ final class StoreModel {
     }
 
     /// 자동 업데이트를 한다. 다른 앱 먼저, 스토어 앱 나중.
+    ///
+    /// 실행 중이라 건너뛴 앱은 종료하고 업데이트할지 묻는다 (ADR-0074). 그 얼럿이 떠 있으면
+    /// 스토어 앱은 갈아끼우지 않는다. 갈아끼우면 스토어 앱이 종료되면서 얼럿이 사라진다.
     private func applyAutomaticUpdates() async {
         await applyAppUpdatesIfIdle()
+        findRunningUpdates()
         await applySelfUpdateIfIdle()
+    }
+
+    // MARK: - 실행 중인 앱 (ADR-0074)
+
+    /// 지금 띄운 얼럿에 실린 앱들. 비어 있지 않으면 얼럿이 떠 있다.
+    private(set) var runningUpdatePrompt: [AppDTO] = []
+    /// 물어볼 앱. 스토어 앱이 뒤에 있으면 앞으로 나올 때까지 여기서 기다린다.
+    private var runningUpdatesWaiting: [AppDTO] = []
+
+    /// 실행 중이라 건너뛴 앱 가운데 아직 묻지 않은 버전을 찾는다.
+    ///
+    /// 앱 자동 업데이트를 끈 사람에게는 묻지 않는다. 끈 것은 "알아서 바꾸지 말라" 는 뜻이고,
+    /// 30분마다 묻는 것은 그보다 더 시끄럽다.
+    private func findRunningUpdates() {
+        guard UpdatePreferences.autoUpdatesApps() else {
+            runningUpdatesWaiting = []
+            return
+        }
+        runningUpdatesWaiting = AutoUpdate.runningCandidates(
+            in: catalog,
+            state: state(of:),
+            isRunning: AutoUpdate.isRunning(bundleID:),
+            alreadyAsked: UpdatePreferences.askedRunning()
+        )
+        presentRunningUpdatesIfActive()
+    }
+
+    /// 스토어 앱이 앞에 나와 있으면 얼럿을 띄운다.
+    ///
+    /// **뒤에 있을 때는 띄우지 않는다.** 스토어 앱 창은 대개 다른 창 뒤에 있어서 얼럿이
+    /// 떠도 보이지 않는다. 사람이 스토어 앱을 앞으로 가져올 때 다시 부른다 (`CatalogView`).
+    func presentRunningUpdatesIfActive() {
+        guard NSApplication.shared.isActive, runningUpdatePrompt.isEmpty,
+              !runningUpdatesWaiting.isEmpty
+        else { return }
+        // 기다리는 사이에 사람이 앱을 껐거나 직접 업데이트했을 수 있다.
+        let stillNeeded = runningUpdatesWaiting.filter {
+            state(of: $0) == .updateAvailable && AutoUpdate.isRunning(bundleID: $0.bundleID)
+        }
+        runningUpdatesWaiting = []
+        runningUpdatePrompt = stillNeeded
+    }
+
+    /// "나중에". 이 버전들은 다시 묻지 않는다. 목록의 "업데이트" 버튼은 그대로 남는다.
+    func declineRunningUpdates() {
+        guard !runningUpdatePrompt.isEmpty else { return }
+        UpdatePreferences.rememberAsked(runningUpdatePrompt)
+        runningUpdatePrompt = []
+    }
+
+    /// "종료하고 업데이트". 앱마다 정상 종료를 요청하고, 종료되면 업데이트한 뒤 다시 실행한다.
+    ///
+    /// 얼럿은 바로 닫는다. 앱이 저장할지 묻는 창이 그 뒤에 뜨고, 사람은 그쪽에 답해야 한다.
+    func acceptRunningUpdates() {
+        let apps = runningUpdatePrompt
+        guard !apps.isEmpty else { return }
+        UpdatePreferences.rememberAsked(apps)
+        runningUpdatePrompt = []
+
+        Task {
+            var updated: [String] = []
+            var skipped: [String] = []
+            for app in apps {
+                guard await AutoUpdate.quit(bundleID: app.bundleID) else {
+                    skipped.append(app.name)
+                    continue
+                }
+                if await install(app, announcing: false) {
+                    updated.append(app.name)
+                    await open(app)
+                }
+            }
+            var parts: [String] = []
+            switch updated.count {
+            case 0: break
+            case 1: parts.append("\(Josa.object(updated[0])) 업데이트했습니다.")
+            default: parts.append("앱 \(updated.count)개를 업데이트했습니다.")
+            }
+            if !skipped.isEmpty {
+                parts.append("종료되지 않아 건너뛴 앱: \(skipped.joined(separator: ", "))")
+            }
+            if !parts.isEmpty { announce(parts.joined(separator: " ")) }
+        }
     }
 
     /// 실행 중이 아니고 덮어써도 되는 앱을 차례로 받는다 (ADR-0073).
@@ -470,7 +557,9 @@ final class StoreModel {
     /// 못 바꾸는 자리면 시도하지 않는다. 시도하면 앱이 종료됐다가 옛 번들로 다시 뜨고,
     /// 주기마다 그것을 되풀이한다. 그 자리에서는 배너가 까닭과 할 일을 안내한다.
     private func applySelfUpdateIfIdle() async {
-        guard selfUpdateBlocker == nil, progress.isEmpty, let update = selfUpdate else { return }
+        guard selfUpdateBlocker == nil, progress.isEmpty, runningUpdatePrompt.isEmpty,
+              let update = selfUpdate
+        else { return }
         await updateSelf(update)
     }
 
