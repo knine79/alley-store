@@ -337,7 +337,23 @@ public struct VersionController: RouteCollection, Sendable {
         try await VersionRelease.release(
             version, announce: try Self.announce(in: request), on: request
         )
-        return try version.toDTO()
+        var dto = try version.toDTO()
+        // 방금 출시했으니 출시본은 있다. 스토어 앱인지만 본다. 그것도 못 알아내면
+        // 링크만 빼고 돌려준다. 출시는 이미 저장됐고, 오류를 돌려주면 CI 는 실패로 알고
+        // 다시 출시하려다 409 를 받는다.
+        // `$app.id` 는 스토어 앱이 아직 없으면 nil 이다. 그것은 "스토어 앱이 아니다" 이므로
+        // `try?` 로 겹쳐 접으면 안 된다. 읽기에 실패했을 때만 링크를 뺀다.
+        if let settings = try? await request.storeAppSettings() {
+            let storeAppID = settings.$app.id
+            dto.shareURL = App.shareURL(
+                appID: version.$app.id,
+                bundleIDPending: version.app.bundleIDPending,
+                isStoreApp: storeAppID == version.$app.id,
+                hasRelease: true,
+                base: request.application.alleyConfig.publicBaseURL
+            )
+        }
+        return dto
     }
 
     /// 본문의 `announce`. 본문이 없으면 false.

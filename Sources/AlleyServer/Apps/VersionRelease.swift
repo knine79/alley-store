@@ -11,7 +11,10 @@ enum VersionRelease {
     ///
     /// `announce` 가 true 이면 저장한 뒤 앱의 출시 소식 채널에 알린다. 스토어 앱은
     /// 알리지 않는다. 스스로 업데이트하고, 공유 링크도 상세가 아니라 설치 페이지로 간다.
-    static func release(_ version: Version, announce: Bool, on request: Request) async throws {
+    /// 돌려주는 것은 출시 소식을 실제로 올린 채널 이름들이다. 출시 직후 화면이 "어디에
+    /// 알렸는지" 를 말하는 데 쓴다 (이슈 #64).
+    @discardableResult
+    static func release(_ version: Version, announce: Bool, on request: Request) async throws -> [String] {
         // 번들 ID 가 확정되지 않은 앱은 출시할 수 없다 (ADR-0034).
         //
         // 스토어 앱은 `CFBundleIdentifier` 로 설치 여부를 판단한다. 임시값인 채로
@@ -36,7 +39,7 @@ enum VersionRelease {
         try version.transition(to: .released)
         try await version.save(on: request.db)
 
-        guard announce else { return }
+        guard announce else { return [] }
         // 여기서 던지면 출시는 저장됐는데 오류가 돌아간다. CI 는 실패로 알고 다시
         // 출시하려다 409 를 받는다. 스토어 앱인지 모르겠으면 알리지 않는다.
         let storeAppID: UUID?
@@ -46,11 +49,11 @@ enum VersionRelease {
             request.logger.warning(
                 "스토어 앱인지 확인하지 못해 출시 소식을 보내지 않습니다 [\(version.app.bundleID), 이유: \(error)]"
             )
-            return
+            return []
         }
         // 스토어 앱이 아직 없는 스토어도 있다. 그때 nil 은 "스토어 앱이 아니다" 다.
-        guard storeAppID != version.$app.id else { return }
-        await ReleaseNews.announce(
+        guard storeAppID != version.$app.id else { return [] }
+        return await ReleaseNews.announce(
             version, of: version.app, isFirstRelease: isFirstRelease, on: request
         )
     }

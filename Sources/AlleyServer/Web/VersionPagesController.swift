@@ -138,8 +138,20 @@ struct VersionPagesController: RouteCollection, Sendable {
     func release(request: Request) async throws -> Response {
         let values = try? request.content.decode(ReleaseFormValues.self)
         let announce = values?.announce == "1"
+        // 돌아간 앱 상세가 "출시했습니다" 와 공유 링크를 한 번 크게 보여준다 (이슈 #64).
+        // 어디에 알렸는지도 함께 넘긴다. 주소에서 걷어내는 일은 `flash.js` 가 한다.
         return try await changeRelease(on: request) { version in
-            try await VersionRelease.release(version, announce: announce, on: request)
+            let announced = try await VersionRelease.release(version, announce: announce, on: request)
+            var query = "released=\(try version.requireID().uuidString)"
+            if !announced.isEmpty {
+                // 쉼표로 잇는다. Slack 채널 이름에는 쉼표가 들어갈 수 없다(소문자, 숫자,
+                // `-`, `_` 뿐이다). 쿼리에서 뜻을 갖는 `& + =` 만 퍼센트로 바꾼다.
+                var allowed = CharacterSet.urlQueryAllowed
+                allowed.remove(charactersIn: "&+=")
+                let joined = announced.joined(separator: ",")
+                query += "&announced=\(joined.addingPercentEncoding(withAllowedCharacters: allowed) ?? joined)"
+            }
+            return query
         }
     }
 
@@ -151,6 +163,7 @@ struct VersionPagesController: RouteCollection, Sendable {
     func unrelease(request: Request) async throws -> Response {
         try await changeRelease(on: request) { version in
             try VersionRelease.unrelease(version)
+            return nil
         }
     }
 
@@ -215,7 +228,7 @@ struct VersionPagesController: RouteCollection, Sendable {
 
     private func changeRelease(
         on request: Request,
-        apply: (Version) async throws -> Void
+        apply: (Version) async throws -> String?
     ) async throws -> Response {
         let user = try request.requireUser()
         let version = try await request.findVersion()
@@ -230,7 +243,7 @@ struct VersionPagesController: RouteCollection, Sendable {
             throw Abort(.notFound, reason: "버전을 찾을 수 없습니다.")
         }
 
-        try await apply(version)
+        let query = try await apply(version)
         // 출시는 `apply` 안에서 이미 저장한다(저장한 뒤에 알려야 해서). 그래도 여기서
         // 한 번 더 저장해 둔다. 바뀐 것이 없으면 아무것도 쓰지 않고, 새로 붙는 `apply`
         // 가 저장을 잊어도 빠지지 않는다.
@@ -241,7 +254,7 @@ struct VersionPagesController: RouteCollection, Sendable {
         if try await request.storeAppSettings().$app.id == appID {
             return request.redirect(to: AdminTab.storeApp.path)
         }
-        return request.redirect(to: "/apps/\(appID.uuidString)")
+        return request.redirect(to: "/apps/\(appID.uuidString)" + (query.map { "?\($0)" } ?? ""))
     }
 }
 

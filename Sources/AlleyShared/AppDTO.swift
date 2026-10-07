@@ -179,6 +179,11 @@ public struct VersionDTO: Codable, Sendable, Identifiable, Equatable {
     /// 올린 뒤 확인 화면이 이것을 보여준다. 그 화면은 워커가 값을 채울 때까지
     /// 기다리는 자리라, 실패했을 때 왜 실패했는지도 거기서 알려줘야 한다.
     public var failureReason: String?
+    /// 이 앱의 공유 링크 (`/a/<앱 ID>`, ADR-0072). **출시 응답에만 싣는다** (이슈 #64).
+    ///
+    /// CI 나 에이전트가 출시하고 바로 팀에 건넬 수 있게 한다. 목록이나 상세 응답에는
+    /// 없다. 앱의 공유 링크는 `AppDTO.shareURL` 이 맡는다.
+    public var shareURL: String?
 
     public init(
         id: UUID,
@@ -193,7 +198,8 @@ public struct VersionDTO: Codable, Sendable, Identifiable, Equatable {
         sha256: String? = nil,
         createdAt: Date,
         releasedAt: Date? = nil,
-        failureReason: String? = nil
+        failureReason: String? = nil,
+        shareURL: String? = nil
     ) {
         self.id = id
         self.appID = appID
@@ -208,6 +214,7 @@ public struct VersionDTO: Codable, Sendable, Identifiable, Equatable {
         self.createdAt = createdAt
         self.releasedAt = releasedAt
         self.failureReason = failureReason
+        self.shareURL = shareURL
     }
 }
 

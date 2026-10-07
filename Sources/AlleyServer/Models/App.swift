@@ -227,9 +227,13 @@ extension App {
             isStoreApp: isStoreApp ? true : nil,
             // 출시 전 앱의 공유 페이지는 앱 정보를 보여주지 않는다 (ADR-0072). 스토어 앱
             // 자신은 목록에 없어서 그 링크로 열 상세가 없다. 사람에게는 `/get` 을 건넨다.
-            shareURL: latestReleased != nil && !isStoreApp
-                ? Self.absolute(AppLink.webPath(appID: try requireID()), base: baseURL)
-                : nil,
+            shareURL: Self.shareURL(
+                appID: try requireID(),
+                bundleIDPending: bundleIDPending,
+                isStoreApp: isStoreApp,
+                hasRelease: latestReleased != nil,
+                base: baseURL
+            ),
             createdAt: createdAt ?? Date(),
             updatedAt: updatedAt ?? createdAt ?? Date()
         )
@@ -378,6 +382,37 @@ extension App {
                 Self.absolute(APIPath.appScreenshot(appID, id: $0), base: baseURL)
             }
         }
+    }
+
+    /// 사람에게 건넬 공유 링크. 건넬 수 없는 앱이면 nil (ADR-0072).
+    ///
+    /// `toDTO` 와 같은 규칙이다. 출시본이 없으면 공유 페이지가 앱 정보를 보여주지 않고,
+    /// 스토어 앱은 링크로 열 상세가 없다. 번들 ID 가 확정되지 않은 앱은 출시할 수 없다.
+    func shareURL(on request: Request) async throws -> String? {
+        let appID = try requireID()
+        return try Self.shareURL(
+            appID: appID,
+            bundleIDPending: bundleIDPending,
+            isStoreApp: try await request.storeAppSettings().$app.id == appID,
+            hasRelease: try await Version.query(on: request.db)
+                .filter(\.$app.$id == appID)
+                .filter(\.$state == .released)
+                .count() > 0,
+            base: request.application.alleyConfig.publicBaseURL
+        )
+    }
+
+    /// 공유 링크를 건넬 수 있는가의 규칙. 화면, API, `toDTO` 가 모두 이것을 쓴다.
+    /// 한쪽에만 조건을 더하면 스토어 앱과 웹 콘솔이 링크 유무를 다르게 말한다.
+    static func shareURL(
+        appID: UUID,
+        bundleIDPending: Bool,
+        isStoreApp: Bool,
+        hasRelease: Bool,
+        base: String?
+    ) -> String? {
+        guard !bundleIDPending, !isStoreApp, hasRelease else { return nil }
+        return absolute(AppLink.webPath(appID: appID), base: base)
     }
 
     /// `/` 로 시작하는 주소에만 서버 주소를 붙인다. 예전처럼 사람이 적어 넣은 외부 주소는

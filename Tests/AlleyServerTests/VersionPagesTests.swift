@@ -81,9 +81,13 @@ struct ReleaseActionTests {
                 .POST, "/apps/\(appID.uuidString)/versions/\(versionID.uuidString)/release",
                 headers: .form(cookie: token)
             ) { response in
-                // 새로 고침이 같은 요청을 다시 보내지 않게 상세 화면으로 보낸다.
+                // 새로 고침이 같은 요청을 다시 보내지 않게 상세 화면으로 보낸다. 방금 출시한
+                // 버전을 함께 넘겨 공유 링크를 한 번 크게 보여준다 (이슈 #64).
                 #expect(response.status == .seeOther)
-                #expect(response.headers.first(name: .location) == "/apps/\(appID.uuidString)")
+                #expect(
+                    response.headers.first(name: .location)
+                        == "/apps/\(appID.uuidString)?released=\(versionID.uuidString)"
+                )
             }
 
             let stored = try #require(try await Version.find(versionID, on: app.db))
