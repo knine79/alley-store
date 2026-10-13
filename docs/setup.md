@@ -832,7 +832,9 @@ claude mcp add alley --env ALLEY_SERVER_URL=https://store.example.com -- alley m
 
 붙으면 에이전트가 이런 것들을 할 수 있습니다. 앱 목록과 버전 목록을 보고, 빌드를
 올리고, **서명이 왜 실패했고 무엇을 고치면 되는지 읽고**, 출시하고, Sparkle 에
-넣을 `SUPublicEDKey` 를 가져오고, 들어온 피드백을 읽습니다.
+넣을 `SUPublicEDKey` 를 가져오고, 들어온 피드백을 읽습니다. 앱 상세의 소개, 분류,
+태그를 고치고 스크린샷을 올리거나 지울 수도 있습니다
+([ADR-0077](adr/0077-mcp-edits-app-details-and-screenshots.md)).
 
 앱을 지우거나 사람을 떼는 것은 내주지 않습니다. 돌이킬 수 없는 일은 화면에서
 사람이 합니다.
