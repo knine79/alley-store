@@ -38,6 +38,13 @@ enum UserTokenScope {
 
         // 들어온 별점과 피드백.
         Rule(method: .GET, pattern: ["api", "v1", "apps", "*", "feedback"]),
+
+        // 앱 상세의 소개와 스크린샷 (이슈 #70, ADR-0077). 번들 ID 는 수정 요청에
+        // 아예 없어서 이 길로 바뀌지 않는다.
+        Rule(method: .PATCH, pattern: ["api", "v1", "apps", "*"]),
+        Rule(method: .GET, pattern: ["api", "v1", "apps", "*", "screenshots", "*"]),
+        Rule(method: .POST, pattern: ["api", "v1", "apps", "*", "screenshots"]),
+        Rule(method: .DELETE, pattern: ["api", "v1", "apps", "*", "screenshots", "*"]),
     ]
 
     /// 이 메서드와 경로가 열려 있나.

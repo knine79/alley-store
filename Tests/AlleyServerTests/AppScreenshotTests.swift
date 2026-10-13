@@ -202,6 +202,99 @@ struct AppScreenshotTests {
         }
     }
 
+    // MARK: - API (이슈 #70)
+
+    /// 본문에 그림 한 장을 실어 올린다. 에이전트가 쓰는 길이라 사람 토큰으로 부른다.
+    private func post(
+        _ data: Data, to appID: UUID, headers: HTTPHeaders, on app: Application
+    ) async throws -> (HTTPStatus, AppDTO?) {
+        var result: (HTTPStatus, AppDTO?) = (.ok, nil)
+        try await app.testing().test(
+            .POST, APIPath.appScreenshots(ofApp: appID), headers: headers,
+            beforeRequest: { $0.body = .init(data: data) }
+        ) { response in
+            result = (response.status, try? response.content.decode(AppDTO.self))
+        }
+        return result
+    }
+
+    @Test("사람 토큰으로 한 장씩 올리고 지운다")
+    func apiUploadsAndDeletes() async throws {
+        try await withMigratedApp { app in
+            let (seeded, _) = try await seed(app)
+            let appID = try seeded.requireID()
+            let owner = try #require(try await User.query(on: app.db).filter(\.$email == "dev@example.com").first())
+            let token = try await app.makeUserToken(for: owner)
+
+            let (status, dto) = try await post(
+                PNGFixture.png(width: 100, height: 100), to: appID, headers: .bearer(token), on: app
+            )
+            #expect(status == .ok)
+            // 돌려준 주소는 공개 주소가 붙은 절대 주소다. 요청에는 경로만 쓴다.
+            let shot = try #require(dto?.screenshotURLs?.first?.split(separator: "/").last.flatMap { UUID(uuidString: String($0)) })
+            let address = APIPath.appScreenshot(appID, id: shot)
+            // 돌려준 앱에 방금 올린 것이 보여야 다음 수를 정할 수 있다.
+            #expect(try await App.find(appID, on: app.db)?.screenshotKeys.count == 1)
+
+            // 받을 수도 있다. 에이전트가 지금 무엇이 올라가 있는지 본다.
+            try await app.testing().test(.GET, address, headers: .bearer(token)) {
+                #expect($0.status == .ok)
+            }
+
+            var remaining: AppDTO?
+            try await app.testing().test(.DELETE, address, headers: .bearer(token)) { response in
+                #expect(response.status == .ok)
+                remaining = try? response.content.decode(AppDTO.self)
+            }
+            #expect(remaining?.screenshotURLs?.isEmpty == true)
+            #expect(try await App.find(appID, on: app.db)?.screenshotKeys.isEmpty == true)
+
+            // 이미 지운 것은 없다고 말한다.
+            try await app.testing().test(.DELETE, address, headers: .bearer(token)) {
+                #expect($0.status == .notFound)
+            }
+        }
+    }
+
+    @Test("API 도 그림이 아닌 것과 여섯째 장을 거절한다")
+    func apiFollowsTheSameRules() async throws {
+        try await withMigratedApp { app in
+            let (seeded, token) = try await seed(app)
+            let appID = try seeded.requireID()
+
+            #expect(try await post(Data("text".utf8), to: appID, headers: .bearer(token), on: app).0 == .badRequest)
+            #expect(try await post(Data(), to: appID, headers: .bearer(token), on: app).0 == .badRequest)
+
+            let png = PNGFixture.png(width: 100, height: 100)
+            for _ in 0..<AppScreenshots.maximumCount {
+                #expect(try await post(png, to: appID, headers: .bearer(token), on: app).0 == .ok)
+            }
+            #expect(try await post(png, to: appID, headers: .bearer(token), on: app).0 == .conflict)
+            #expect(try await App.find(appID, on: app.db)?.screenshotKeys.count == AppScreenshots.maximumCount)
+        }
+    }
+
+    @Test("API 로도 올릴 권한이 없는 사람은 올리거나 지우지 못한다")
+    func apiRequiresUploadAccess() async throws {
+        try await withMigratedApp { app in
+            let (seeded, token) = try await seed(app)
+            let appID = try seeded.requireID()
+            let (stranger, _) = try await app.makeUser(email: "other@example.com", role: .developer)
+            let strangerToken = try await app.makeUserToken(for: stranger)
+            let png = PNGFixture.png(width: 100, height: 100)
+
+            #expect(try await post(png, to: appID, headers: .bearer(strangerToken), on: app).0 == .forbidden)
+
+            _ = try await post(png, to: appID, headers: .bearer(token), on: app)
+            let key = try #require(try await App.find(appID, on: app.db)?.screenshotKeys.first)
+            let address = APIPath.appScreenshot(appID, id: try #require(AppScreenshots.id(fromKey: key)))
+            try await app.testing().test(.DELETE, address, headers: .bearer(strangerToken)) {
+                #expect($0.status == .forbidden)
+            }
+            #expect(try await App.find(appID, on: app.db)?.screenshotKeys.count == 1)
+        }
+    }
+
     @Test("키에서 주소에 쓰는 ID 를 꺼낸다")
     func idFromKey() {
         let id = UUID()

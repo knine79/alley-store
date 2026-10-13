@@ -10,10 +10,10 @@ import Vapor
 /// 볼 수 있게 한다. **버전이 아니라 앱에 묶는다.** 사내 앱은 버전마다 바꿀 만큼 화면이
 /// 달라지지 않고, 버전마다 다시 올리게 하면 아무도 올리지 않는다.
 enum AppScreenshots {
-    /// 앱 하나에 둘 수 있는 수.
-    static let maximumCount = 5
-    /// 한 장의 크기. 레티나 전체 화면 PNG 도 보통 이 안에 든다.
-    static let maximumSize = 5 * 1024 * 1024
+    /// 앱 하나에 둘 수 있는 수. CLI 도 같은 값을 본다 (`AppScreenshotLimits`).
+    static let maximumCount = AppScreenshotLimits.maximumCount
+    /// 한 장의 크기.
+    static let maximumSize = AppScreenshotLimits.maximumSize
 
     enum Format: String {
         case png
@@ -61,16 +61,24 @@ enum AppScreenshots {
 
 /// 스크린샷을 받고, 내주고, 지운다.
 ///
-/// 받기와 지우기는 콘솔 폼이 부른다. 앱 상세에서 고르고 올리는 것으로 충분하고,
-/// 에이전트가 스크린샷까지 올릴 일은 아직 없다.
+/// 받기와 지우기는 두 길이 있다. 콘솔 폼은 여러 장을 한 번에 받고 화면으로 돌아가고,
+/// API 는 한 장씩 받고 앱을 돌려준다 (이슈 #70). 에이전트가 앱 소개를 고치면서 화면도
+/// 새로 찍어 올리게 하려는 것이다. 두 길 모두 같은 규칙(`store`, `remove`)을 지난다.
 struct AppScreenshotController: RouteCollection, Sendable {
     func boot(routes: any RoutesBuilder) throws {
         // **내주는 쪽도 로그인을 건다.** 아이콘과 다르다. 사내 앱 화면에는 사내 데이터가
         // 찍힐 수 있다. 스토어 앱은 토큰을 붙여 받고, 콘솔은 쿠키로 받는다.
-        routes
+        let api = routes
             .grouped(SessionAuthenticator(), User.guardMiddleware())
             .grouped(APIPath.apiRoot.pathComponents)
-            .get("apps", ":appID", "screenshots", ":screenshotID", use: serve)
+        api.get("apps", ":appID", "screenshots", ":screenshotID", use: serve)
+        api.on(
+            .POST,
+            "apps", ":appID", "screenshots",
+            body: .collect(maxSize: .init(value: AppScreenshots.maximumSize)),
+            use: uploadOne
+        )
+        api.delete("apps", ":appID", "screenshots", ":screenshotID", use: deleteOne)
 
         let pages = routes
             .grouped(SessionAuthenticator(), User.guardMiddleware())
@@ -117,6 +125,74 @@ struct AppScreenshotController: RouteCollection, Sendable {
             return try await reject(abort, app: app, user: user, on: request)
         }
 
+        let added = try await Self.store(images, for: app, by: user, on: request)
+        guard added == images.count else {
+            let skipped = images.count - added
+            let reason = "스크린샷은 \(AppScreenshots.maximumCount)장까지라 \(skipped)장은 올리지 못했습니다. 하나를 지우고 올리세요."
+            return try await reject(Abort(.badRequest, reason: reason), app: app, user: user, on: request)
+        }
+        return request.redirect(to: "/apps/\(appID.uuidString)/edit#screenshots")
+    }
+
+    /// 한 장을 받고 앱을 돌려준다 (이슈 #70).
+    ///
+    /// 본문이 그림 그 자체다. multipart 로 받으면 CLI 가 경계를 직접 만들어야 하는데,
+    /// 앱 아이콘 API 가 이미 이 모양이라 맞춘다. 여러 장은 여러 번 부른다. 한 장씩이면
+    /// 상한에 걸렸을 때 어느 것이 빠졌는지 부른 쪽이 안다.
+    @Sendable
+    func uploadOne(request: Request) async throws -> AppDTO {
+        let user = try request.requireUser()
+        let app = try await request.findApp()
+        try await app.requireUploadAccess(for: user, on: request.db)
+
+        guard let buffer = request.body.data, buffer.readableBytes > 0 else {
+            throw Abort(.badRequest, reason: "이미지가 비어 있습니다.")
+        }
+        let image = try Self.checked(Data(buffer: buffer))
+        guard try await Self.store([image], for: app, by: user, on: request) == 1 else {
+            throw Abort(
+                .conflict,
+                reason: "스크린샷은 \(AppScreenshots.maximumCount)장까지입니다. 하나를 지우고 올리세요."
+            )
+        }
+        return try await Self.dto(of: app, on: request)
+    }
+
+    /// 한 장의 형식과 크기를 본다. 파일 이름이나 브라우저가 붙인 형식은 믿지 않는다.
+    private static func checked(_ file: File) throws -> (Data, AppScreenshots.Format) {
+        guard file.data.readableBytes <= AppScreenshots.maximumSize else {
+            throw Abort(.payloadTooLarge, reason: "\(file.filename) 이 5MB 를 넘습니다.")
+        }
+        let data = Data(buffer: file.data)
+        guard let format = AppScreenshots.format(of: data) else {
+            throw Abort(.badRequest, reason: "\(file.filename) 은 PNG 나 JPEG 가 아닙니다.")
+        }
+        return (data, format)
+    }
+
+    /// API 로 온 한 장. 파일 이름이 없으니 무엇이 틀렸는지만 말하고, 어느 파일인지는
+    /// 부른 쪽이 붙인다.
+    private static func checked(_ data: Data) throws -> (Data, AppScreenshots.Format) {
+        guard data.count <= AppScreenshots.maximumSize else {
+            throw Abort(.payloadTooLarge, reason: "5MB 를 넘습니다.")
+        }
+        guard let format = AppScreenshots.format(of: data) else {
+            throw Abort(.badRequest, reason: "PNG 나 JPEG 가 아닙니다.")
+        }
+        return (data, format)
+    }
+
+    /// 스토리지에 넣고 앱에 덧붙인다. 들어간 장 수를 돌려준다.
+    ///
+    /// 자리가 모자라면 앞에서부터 들어가는 만큼만 넣고 멈춘다. 몇 장이 빠졌는지 어떻게
+    /// 알릴지는 부른 쪽이 정한다.
+    private static func store(
+        _ images: [(Data, AppScreenshots.Format)],
+        for app: App,
+        by user: User,
+        on request: Request
+    ) async throws -> Int {
+        let appID = try app.requireID()
         var added = 0
         for (data, format) in images {
             let key = request.artifactStorage.newKey(
@@ -129,7 +205,7 @@ struct AppScreenshotController: RouteCollection, Sendable {
             // 아무도 가리키지 않은 채 남는다. 상한도 같은 문장에서 본다.
             let appended: Bool
             do {
-                appended = try await Self.append(key, to: appID, on: request.db)
+                appended = try await append(key, to: appID, on: request.db)
             } catch {
                 // 행에 적지 못한 오브젝트는 아무도 가리키지 않는다. 남기지 않는다.
                 try? await request.artifactStorage.delete(key: key)
@@ -145,24 +221,17 @@ struct AppScreenshotController: RouteCollection, Sendable {
         request.logger.notice(
             "앱 스크린샷을 받았습니다 [\(app.bundleID), \(added)장, 올린 사람: \(user.email)]"
         )
-        guard added == images.count else {
-            let skipped = images.count - added
-            let reason = "스크린샷은 \(AppScreenshots.maximumCount)장까지라 \(skipped)장은 올리지 못했습니다. 하나를 지우고 올리세요."
-            return try await reject(Abort(.badRequest, reason: reason), app: app, user: user, on: request)
-        }
-        return request.redirect(to: "/apps/\(appID.uuidString)/edit#screenshots")
+        return added
     }
 
-    /// 한 장의 형식과 크기를 본다. 파일 이름이나 브라우저가 붙인 형식은 믿지 않는다.
-    private static func checked(_ file: File) throws -> (Data, AppScreenshots.Format) {
-        guard file.data.readableBytes <= AppScreenshots.maximumSize else {
-            throw Abort(.payloadTooLarge, reason: "\(file.filename) 이 5MB 를 넘습니다.")
-        }
-        let data = Data(buffer: file.data)
-        guard let format = AppScreenshots.format(of: data) else {
-            throw Abort(.badRequest, reason: "\(file.filename) 은 PNG 나 JPEG 가 아닙니다.")
-        }
-        return (data, format)
+    /// API 가 돌려줄 앱. 방금 바뀐 키 목록을 다시 읽는다.
+    private static func dto(of app: App, on request: Request) async throws -> AppDTO {
+        let appID = try app.requireID()
+        let fresh = try await App.find(appID, on: request.db) ?? app
+        let latest = try await App.latestReleasedVersion(ofApp: appID, on: request.db)
+        return try fresh.toDTO(
+            latestReleased: latest, baseURL: request.application.alleyConfig.publicBaseURL
+        )
     }
 
     /// 고치는 화면에 머문 채 무엇이 틀렸는지 말한다. 오류 화면으로 보내면 돌아오는 길을
@@ -181,6 +250,18 @@ struct AppScreenshotController: RouteCollection, Sendable {
 
     @Sendable
     func delete(request: Request) async throws -> Response {
+        let app = try await Self.remove(on: request)
+        return request.redirect(to: "/apps/\(try app.requireID().uuidString)/edit#screenshots")
+    }
+
+    /// 한 장을 지우고 앱을 돌려준다 (이슈 #70).
+    @Sendable
+    func deleteOne(request: Request) async throws -> AppDTO {
+        try await Self.dto(of: try await Self.remove(on: request), on: request)
+    }
+
+    /// 주소가 가리키는 한 장을 지운다. 콘솔과 API 가 함께 부른다.
+    private static func remove(on request: Request) async throws -> App {
         let user = try request.requireUser()
         let app = try await request.findApp()
         try await app.requireUploadAccess(for: user, on: request.db)
@@ -189,7 +270,7 @@ struct AppScreenshotController: RouteCollection, Sendable {
         // 행을 먼저 고친다. 오브젝트를 먼저 지우고 행 저장이 실패하면 화면에 깨진
         // 그림이 남는다. 반대로 실패하면 아무도 가리키지 않는 오브젝트만 남는다.
         // 올리기와 같은 까닭으로 데이터베이스에서 한 번에 뺀다.
-        try await Self.sql(request.db)
+        try await sql(request.db)
             .raw("UPDATE apps SET screenshot_keys = array_remove(screenshot_keys, \(bind: key)) WHERE id = \(bind: try app.requireID())")
             .run()
         do {
@@ -197,7 +278,8 @@ struct AppScreenshotController: RouteCollection, Sendable {
         } catch {
             request.logger.warning("앱 스크린샷 오브젝트를 지우지 못했습니다 [키: \(key), 오류: \(error)]")
         }
-        return request.redirect(to: "/apps/\(try app.requireID().uuidString)/edit#screenshots")
+        request.logger.notice("앱 스크린샷을 지웠습니다 [\(app.bundleID), 지운 사람: \(user.email)]")
+        return app
     }
 
     // MARK: - 내주기

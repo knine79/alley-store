@@ -653,7 +653,7 @@ GET   /api/v1/admin/portal/certificates      # 인증서 만료 현황 (ASC API)
 까지 적어주는데(ADR-0023), 그것을 읽고 파일을 고치고 다시 올리는 것은 사람이 합니다.
 에이전트는 그 셋을 이어서 합니다.
 
-내주는 도구는 일곱입니다.
+내주는 도구는 열둘입니다.
 
 | 도구 | 하는 일 |
 | --- | --- |
@@ -663,6 +663,13 @@ GET   /api/v1/admin/portal/certificates      # 인증서 만료 현황 (ASC API)
 | `list_versions` · `release_version` | 올린 것 중에 무엇을 내보낼지. 출시는 `ready` 에서만. 출시 소식은 사람이 고른 경우에만 (`announce`, ADR-0075) |
 | `sparkle_feed` | `SUPublicEDKey` 와 지금 쓸 수 있는 상태인지 (ADR-0057). 피드 주소는 서버도 모른다 |
 | `app_feedback` | 그 앱에 들어온 별점과 피드백 |
+| `app_details` · `update_app` | 앱 상세의 이름, 소개, 설명, 분류, 태그. 넣은 항목만 바뀌고 빈 값은 그대로 둔다 ([ADR-0077](adr/0077-mcp-edits-app-details-and-screenshots.md)) |
+| `add_screenshots` · `remove_screenshot` · `save_screenshots` | 스크린샷을 올리고, 지우고, 내려받는다. 콘솔과 같은 규칙(5장, 5MB, PNG·JPEG)을 지난다 |
+
+**릴리스 둘레의 일까지만 냅니다.** 새 기능을 내면 소개와 화면도 바뀌므로 앱 상세를
+고치는 것은 넣었습니다. 글은 다시 고치면 되돌아갑니다. 지운 스크린샷만은 되살릴 수
+없어서 도구 설명이 먼저 받아두라고 말합니다. 번들 ID, 아이콘 주소, 멤버, 토큰, 앱
+삭제는 넣지 않습니다.
 
 **운영 기능은 넣지 않습니다.** 워커 조작, 워커 릴리스 올리기, 스토어 앱 조립은
 스토어 전체를 흔드는 일이라 잘못 부르면 서명 파이프라인이 멈춥니다. 필요해지면 별도

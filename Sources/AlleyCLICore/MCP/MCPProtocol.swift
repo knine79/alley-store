@@ -57,16 +57,26 @@ struct MCPTool: Sendable {
     }
 
     /// 문자열 인자 몇 개짜리 스키마를 짧게 적는다.
+    ///
+    /// `lists` 는 문자열 배열을 받는 인자다. 태그나 파일 여러 개처럼 쉼표로 이어 받으면
+    /// 값 안의 쉼표와 구분할 수 없는 것들이다.
     static func schema(
         required: [String: String] = [:],
-        optional: [String: String] = [:]
+        optional: [String: String] = [:],
+        lists: Set<String> = []
     ) -> JSONValue {
         var properties: [String: JSONValue] = [:]
         for (name, description) in required.merging(optional, uniquingKeysWith: { first, _ in first }) {
-            properties[name] = .object([
-                "type": .string("string"),
-                "description": .string(description),
-            ])
+            properties[name] = lists.contains(name)
+                ? .object([
+                    "type": .string("array"),
+                    "items": .object(["type": .string("string")]),
+                    "description": .string(description),
+                ])
+                : .object([
+                    "type": .string("string"),
+                    "description": .string(description),
+                ])
         }
         return .object([
             "type": .string("object"),

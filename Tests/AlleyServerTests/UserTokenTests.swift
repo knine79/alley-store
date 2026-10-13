@@ -198,6 +198,56 @@ struct UserTokenTests {
         }
     }
 
+    /// 앱 상세의 글을 고치는 것은 열려 있다 (이슈 #70). 번들 ID 는 수정 요청에 없으므로
+    /// 실어 보내도 바뀌지 않는다.
+    @Test("사람 토큰으로 앱 정보를 고친다")
+    func updatesAppDetails() async throws {
+        try await withMigratedApp { app in
+            let (owner, _) = try await app.makeUser(email: "owner@example.com", role: .developer)
+            let registered = try await app.seedApp(
+                bundleID: "com.example.edit", name: "고칠앱", owner: owner
+            )
+            let appID = try registered.requireID()
+            let token = try await issue(for: owner, on: app)
+
+            try await app.testing().test(
+                .PATCH, APIPath.app(appID), headers: .bearer(token),
+                beforeRequest: {
+                    try $0.content.encode([
+                        "summary": "한 줄 소개", "bundleID": "com.example.stolen", "category": "utilities",
+                    ])
+                }
+            ) { response in
+                #expect(response.status == .ok)
+            }
+            let stored = try #require(try await App.find(appID, on: app.db))
+            #expect(stored.summary == "한 줄 소개")
+            #expect(stored.category == "utilities")
+            #expect(stored.bundleID == "com.example.edit")
+
+            // 공동 담당자는 고치지 못한다. 화면과 같은 답이어야 한다.
+            let (mate, _) = try await app.makeUser(email: "mate@example.com", role: .developer)
+            try await AppMember(appID: appID, userID: mate.requireID()).save(on: app.db)
+            let mateToken = try await issue(for: mate, on: app)
+            try await app.testing().test(
+                .PATCH, APIPath.app(appID), headers: .bearer(mateToken),
+                beforeRequest: { try $0.content.encode(["name": "가로챈 이름"]) }
+            ) { response in
+                #expect(response.status == .forbidden)
+            }
+            #expect(try await App.find(appID, on: app.db)?.name == "고칠앱")
+
+            // 아이콘 주소는 토큰으로 바꾸지 못한다. 남의 호스트로 돌리는 길이 된다.
+            try await app.testing().test(
+                .PATCH, APIPath.app(appID), headers: .bearer(token),
+                beforeRequest: { try $0.content.encode(["iconURL": "https://attacker.example.com/x.png"]) }
+            ) { response in
+                #expect(response.status == .forbidden)
+            }
+            #expect(try await App.find(appID, on: app.db)?.iconURL == nil)
+        }
+    }
+
     /// 앱 삭제는 화면 경로에만 있다. 그래서 경로 자체를 막는다.
     @Test("사람 토큰은 화면 경로에서 인증되지 않는다")
     func webRoutesNeedASession() async throws {
