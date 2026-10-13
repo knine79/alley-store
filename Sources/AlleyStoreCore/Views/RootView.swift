@@ -135,6 +135,11 @@ struct SignInView: View {
             Spacer()
         }
         .padding(40)
+        // 로그인하려다 서버에 닿지 못했을 때. 이 화면에는 다른 배너가 없다.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            ConnectionBanner()
+                .animation(.spring(duration: 0.35), value: model.connectionNotice)
+        }
     }
 }
 

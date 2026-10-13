@@ -158,10 +158,15 @@ struct CatalogView: View {
             }
         }
         .animation(.spring(duration: 0.35), value: model.statusMessage)
-        .safeAreaInset(edge: .top) {
-            if let update = model.selfUpdate {
-                SelfUpdateBanner(app: update)
+        // 연결 배너를 위에 둔다. 끊긴 동안에는 업데이트도 받을 수 없어서 그것이 먼저다.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                ConnectionBanner()
+                if let update = model.selfUpdate {
+                    SelfUpdateBanner(app: update)
+                }
             }
+            .animation(.spring(duration: 0.35), value: model.connectionNotice)
         }
         .onChange(of: model.apps) { _, _ in
             openLinkedApp()
@@ -774,26 +779,14 @@ struct SelfUpdateBanner: View {
     let app: AppDTO
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "arrow.down.circle.fill")
-                .foregroundStyle(.tint)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(app.name) 새 버전이 있습니다")
-                    .font(.callout.weight(.medium))
-                if let blocker = model.selfUpdateBlocker {
-                    // 누를 버튼을 주지 않는다. 눌러도 할 수 있는 일이 없다.
-                    Text(blocker.message)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else if let version = app.latestReleasedVersion {
-                    Text("업데이트하면 앱이 다시 시작합니다 · \(version.shortVersion)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Spacer()
-
+        NoticeBanner(
+            symbol: "arrow.down",
+            tint: .accentColor,
+            title: "\(app.name) 새 버전이 있습니다",
+            caption: caption
+        ) {
             if model.selfUpdateBlocker != nil {
+                // 누를 버튼을 주지 않는다. 눌러도 할 수 있는 일이 없다.
                 EmptyView()
             } else if let progress = model.progress[app.id] {
                 switch progress {
@@ -810,10 +803,12 @@ struct SelfUpdateBanner: View {
                 .controlSize(.small)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.thinMaterial)
-        .overlay(alignment: .bottom) { Divider() }
+    }
+
+    private var caption: String? {
+        if let blocker = model.selfUpdateBlocker { return blocker.message }
+        guard let version = app.latestReleasedVersion else { return nil }
+        return "업데이트하면 앱이 다시 시작합니다 · \(version.shortVersion)"
     }
 }
 

@@ -60,6 +60,136 @@ final class StoreModel {
         }
     }
 
+    // MARK: - 연결
+
+    /// 서버와의 연결을 알리는 배너의 상태.
+    enum ConnectionNotice: Equatable {
+        /// 서버에 닿지 못했다. 다시 붙을 때까지 떠 있다.
+        case lost
+        /// 끊겼다가 다시 붙었다. 잠깐 떴다가 사라진다.
+        case restored
+    }
+
+    /// 지금 띄울 연결 배너. 없으면 배너도 없다.
+    ///
+    /// 연결 실패는 얼럿으로 띄우지 않는다. 30분마다 배경에서 목록을 읽으므로, 잠자기에서
+    /// 깨거나 사내망을 벗어나면 사람이 아무것도 하지 않았는데 얼럿이 뜨고, 닫아도 다음
+    /// 차례에 또 떴다. 연결은 사람이 고칠 수 있는 오류가 아니라 상태라서 배너로 둔다.
+    private(set) var connectionNotice: ConnectionNotice?
+    /// 다시 시도하는 중인지. 배너가 버튼 대신 진행 표시를 띄운다.
+    private(set) var isReconnecting = false
+    private var restoredDismissal: Task<Void, Never>?
+    private var reconnectLoop: Task<Void, Never>?
+
+    /// 다시 붙었다는 배너가 머무는 시간. 테스트가 줄여 쓸 수 있게 인스턴스에 둔다.
+    var restoredNoticeDuration: Duration = .seconds(3)
+    /// 끊긴 동안 다시 붙어보는 간격. 처음에는 촘촘히, 오래 끊기면 성기게.
+    static let reconnectDelays: [Duration] = [.seconds(3), .seconds(6), .seconds(12), .seconds(30)]
+
+    /// 서버에 닿지 못해서 난 실패인지.
+    ///
+    /// 서버가 답을 준 실패(4xx, 5xx, 해석 실패)는 아니다. 그것은 다시 붙어도 그대로라
+    /// 배너로 "자동으로 다시 붙습니다" 라고 하면 거짓말이 된다.
+    ///
+    /// 스토어 서버로 보낸 요청(`StoreClient`)만 본다. 내려받기는 스토리지에서 받아서
+    /// 거기서 난 `URLError` 는 스토어와 무관하고, 사람이 누른 설치가 실패했다는 것을
+    /// 배너로 바꾸면 실패했다는 말을 아무도 듣지 못한다. 그것은 얼럿으로 둔다.
+    nonisolated static func isConnectionFailure(_ error: any Error) -> Bool {
+        guard case StoreClient.ClientError.unreachable(_, let code) = error else { return false }
+        // URLSession 이 `URLError` 가 아닌 것을 던지는 일은 드물다. 닿지 못한 것으로 본다.
+        guard let code else { return true }
+        // 인증서·TLS 실패도 닿지 못한 것이지만 기다린다고 낫지 않는다. 원인을 얼럿으로 보인다.
+        switch code {
+        case .notConnectedToInternet, .networkConnectionLost, .cannotConnectToHost,
+             .cannotFindHost, .dnsLookupFailed, .timedOut, .dataNotAllowed,
+             .internationalRoamingOff:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// 실패를 알린다. 서버에 닿지 못한 것이면 배너로, 나머지는 얼럿으로.
+    func report(_ error: any Error) {
+        // 거둔 요청은 실패가 아니다. 알릴 것이 없다.
+        if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
+        guard Self.isConnectionFailure(error) else {
+            // 서버가 답을 줬다면 연결은 된 것이다. 끊긴 배너를 걷어야 재시도가 멈춘다.
+            // 걷지 않으면 프록시가 502 를 주는 동안 재시도마다 얼럿이 뜬다.
+            if case StoreClient.ClientError.server = error { markConnectionRestored() }
+            if case StoreClient.ClientError.malformedResponse = error { markConnectionRestored() }
+            errorMessage = error.localizedDescription
+            return
+        }
+        markConnectionLost()
+    }
+
+    /// 연결이 끊겼다고 표시하고, 다시 붙을 때까지 주기적으로 붙어본다.
+    ///
+    /// 붙기 전 화면(`connecting`)에서는 띄우지 않는다. 그 화면이 통째로 실패를 말한다.
+    func markConnectionLost() {
+        guard phase != .connecting else { return }
+        restoredDismissal?.cancel()
+        connectionNotice = .lost
+        guard reconnectLoop == nil else { return }
+        reconnectLoop = Task { [weak self] in
+            var attempt = 0
+            while !Task.isCancelled {
+                let delay = Self.reconnectDelays[min(attempt, Self.reconnectDelays.count - 1)]
+                try? await Task.sleep(for: delay)
+                guard !Task.isCancelled, let self, self.connectionNotice == .lost else { break }
+                await self.reconnect()
+                attempt += 1
+            }
+            // 취소됐으면 취소한 쪽이 이미 비웠다. 그 사이 새로 건 주기를 지우면 안 된다.
+            if !Task.isCancelled { self?.reconnectLoop = nil }
+        }
+    }
+
+    /// 요청 하나가 서버에 닿았다. 끊겨 있었으면 다시 붙었다고 알린다.
+    func markConnectionRestored() {
+        guard connectionNotice == .lost else { return }
+        reconnectLoop?.cancel()
+        reconnectLoop = nil
+        connectionNotice = .restored
+        let duration = restoredNoticeDuration
+        restoredDismissal = Task { [weak self] in
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled, self?.connectionNotice == .restored else { return }
+            self?.connectionNotice = nil
+        }
+    }
+
+    /// 연결 배너를 걷는다. 화면이 바뀌어 배너가 뜻을 잃었을 때.
+    private func clearConnectionNotice() {
+        reconnectLoop?.cancel()
+        reconnectLoop = nil
+        restoredDismissal?.cancel()
+        connectionNotice = nil
+    }
+
+    /// 다시 붙어본다. 배너의 "다시 시도" 와 끊긴 동안의 주기가 여기로 온다.
+    func reconnect() async {
+        guard !isReconnecting else { return }
+        isReconnecting = true
+        defer { isReconnecting = false }
+
+        switch phase {
+        case .ready:
+            await refresh()
+        case .signedOut:
+            guard let client else { return }
+            do {
+                _ = try await client.meta()
+                markConnectionRestored()
+            } catch {
+                report(error)
+            }
+        case .connecting:
+            await restore()
+        }
+    }
+
     /// 이 빌드에 박혀 나온 서버 주소.
     ///
     /// **이 앱은 붙을 곳을 하나만 안다.** 주소는 빌드할 때 `Info.plist` 에 박히고,
@@ -106,7 +236,7 @@ final class StoreModel {
                 phase = .signedOut(meta)
             }
         } catch {
-            errorMessage = error.localizedDescription
+            report(error)
         }
     }
 
@@ -132,7 +262,7 @@ final class StoreModel {
         } catch WebSignIn.SignInError.cancelled {
             // 사용자가 창을 닫은 것뿐이다. 오류로 띄우지 않는다.
         } catch {
-            errorMessage = error.localizedDescription
+            report(error)
         }
     }
 
@@ -142,6 +272,8 @@ final class StoreModel {
     }
 
     func signOut() {
+        // 로그인 화면에는 목록이 없다. 목록을 못 읽었다는 배너가 남으면 뜻이 어긋난다.
+        clearConnectionNotice()
         guard let client else { return }
         credentials.setToken(nil, for: client.server)
         self.client?.token = nil
@@ -171,8 +303,10 @@ final class StoreModel {
             // 아니라 답을 못 받은 것이다. 잠자기에서 막 깨어 네트워크가 붙기 전에 앱이
             // 켜지면 여기로 온다. 예전에는 로그인 화면을 띄웠고, 토큰은 멀쩡한데 사람은
             // 로그아웃된 줄 알았다. `/meta` 가 실패했을 때와 같은 연결 화면에 둔다.
-            errorMessage = error.localizedDescription
+            // 연결 화면이 실패를 통째로 말한다. 목록 화면에서 건 배너와 재시도를 거둔다.
+            clearConnectionNotice()
             phase = .connecting
+            report(error)
         }
     }
 
@@ -232,10 +366,11 @@ final class StoreModel {
                 .map { Self.resolvingIcon($0, against: client.server) }
                 .sorted { $0.name < $1.name }
             installed = scanned
+            markConnectionRestored()
         } catch StoreClient.ClientError.unauthorized {
             signOut()
         } catch {
-            errorMessage = error.localizedDescription
+            report(error)
         }
     }
 
@@ -297,10 +432,11 @@ final class StoreModel {
 
         do {
             feedback = try await client.feedback(ofApp: app.id)
+            markConnectionRestored()
         } catch StoreClient.ClientError.unauthorized {
             signOut()
         } catch {
-            errorMessage = error.localizedDescription
+            report(error)
         }
     }
 
@@ -328,7 +464,7 @@ final class StoreModel {
             signOut()
             return false
         } catch {
-            errorMessage = error.localizedDescription
+            report(error)
             return false
         }
     }
@@ -582,6 +718,7 @@ final class StoreModel {
 
         do {
             let ticket = try await client.downloadTicket(versionID: version.id)
+            markConnectionRestored()
             guard let url = URL(string: ticket.downloadURL) else {
                 throw StoreClient.ClientError.malformedResponse
             }
@@ -602,7 +739,7 @@ final class StoreModel {
         } catch StoreClient.ClientError.unauthorized {
             signOut()
         } catch {
-            errorMessage = error.localizedDescription
+            report(error)
         }
     }
 
@@ -658,6 +795,7 @@ final class StoreModel {
 
         do {
             let ticket = try await client.downloadTicket(versionID: version.id)
+            markConnectionRestored()
             guard let url = URL(string: ticket.downloadURL) else {
                 throw StoreClient.ClientError.malformedResponse
             }
@@ -686,7 +824,7 @@ final class StoreModel {
         } catch StoreClient.ClientError.unauthorized {
             signOut()
         } catch {
-            errorMessage = error.localizedDescription
+            report(error)
         }
         return false
     }
