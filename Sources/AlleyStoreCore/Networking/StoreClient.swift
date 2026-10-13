@@ -11,14 +11,16 @@ struct StoreClient: Sendable {
     var token: String?
 
     enum ClientError: LocalizedError {
-        case unreachable(String)
+        /// 서버에 닿지 못했다. 원인이 `URLError` 면 그 코드를 함께 싣는다.
+        /// 끊긴 것(배너)과 인증서 같은 고쳐야 할 것(얼럿)을 가르는 데 쓴다.
+        case unreachable(String, code: URLError.Code? = nil)
         case unauthorized
         case server(status: Int, reason: String?)
         case malformedResponse
 
         var errorDescription: String? {
             switch self {
-            case .unreachable(let detail):
+            case .unreachable(let detail, _):
                 return "서버에 연결하지 못했습니다. 주소를 확인하세요.\n\(detail)"
             case .unauthorized:
                 return "로그인이 만료됐습니다. 다시 로그인하세요."
@@ -162,6 +164,13 @@ struct StoreClient: Sendable {
         let response: URLResponse
         do {
             (data, response) = try await URLSession.shared.data(for: request)
+        } catch let error as URLError where error.code == .cancelled {
+            // 화면이 사라져 요청을 거둔 것이다. 서버에 닿지 못한 것으로 보이면 연결 배너가 뜬다.
+            throw CancellationError()
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError {
+            throw ClientError.unreachable(error.localizedDescription, code: error.code)
         } catch {
             throw ClientError.unreachable(error.localizedDescription)
         }
