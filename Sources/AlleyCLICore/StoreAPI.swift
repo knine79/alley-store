@@ -71,6 +71,38 @@ public struct StoreAPI: Sendable {
         try await get(APIPath.feedback(ofApp: appID), as: [FeedbackDTO].self)
     }
 
+    // MARK: - 앱 상세 (이슈 #70)
+
+    /// 앱 하나. 목록과 달리 받아간 횟수와 별점이 채워져 온다.
+    public func app(id: UUID) async throws -> AppDTO {
+        try await get(APIPath.app(id), as: AppDTO.self)
+    }
+
+    /// 보낸 항목만 바꾼다. 소유자와 관리자만 할 수 있다.
+    public func updateApp(id: UUID, _ payload: UpdateAppRequest) async throws -> AppDTO {
+        try await send(APIPath.app(id), method: "PATCH", body: payload, as: AppDTO.self)
+    }
+
+    /// 스크린샷 한 장을 덧붙인다. 형식과 크기는 서버가 본다.
+    public func addScreenshot(_ image: Data, toApp id: UUID) async throws -> AppDTO {
+        var request = authorized(APIPath.appScreenshots(ofApp: id))
+        request.httpMethod = "POST"
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.httpBody = image
+        return try await perform(request, as: AppDTO.self)
+    }
+
+    public func removeScreenshot(_ screenshotID: UUID, ofApp id: UUID) async throws -> AppDTO {
+        var request = authorized(APIPath.appScreenshot(id, id: screenshotID))
+        request.httpMethod = "DELETE"
+        return try await perform(request, as: AppDTO.self)
+    }
+
+    /// 스크린샷 원본. 로그인한 요청에만 내주므로 토큰을 붙여 받는다 (ADR-0071).
+    public func screenshot(_ screenshotID: UUID, ofApp id: UUID) async throws -> Data {
+        try await load(authorized(APIPath.appScreenshot(id, id: screenshotID))).data
+    }
+
     public func createVersion(
         _ payload: CreateVersionRequest,
         ofApp id: UUID
@@ -137,10 +169,14 @@ public struct StoreAPI: Sendable {
         return decoder
     }
 
-    private func get<T: Decodable>(_ path: String, as type: T.Type) async throws -> T {
+    private func authorized(_ path: String) -> URLRequest {
         var request = URLRequest(url: config.serverURL.appendingPathComponent(path))
         request.setValue("Bearer \(config.token)", forHTTPHeaderField: "Authorization")
-        return try await perform(request, as: type)
+        return request
+    }
+
+    private func get<T: Decodable>(_ path: String, as type: T.Type) async throws -> T {
+        try await perform(authorized(path), as: type)
     }
 
     private func send<Body: Encodable, T: Decodable>(
@@ -149,15 +185,24 @@ public struct StoreAPI: Sendable {
         body: Body,
         as type: T.Type
     ) async throws -> T {
-        var request = URLRequest(url: config.serverURL.appendingPathComponent(path))
+        var request = authorized(path)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(config.token)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONEncoder().encode(body)
         return try await perform(request, as: type)
     }
 
     private func perform<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
+        let (data, _) = try await load(request)
+        do {
+            return try decoder.decode(type, from: data)
+        } catch {
+            throw APIError.malformedResponse
+        }
+    }
+
+    /// 보내고, 실패한 응답을 사람이 읽을 오류로 바꾼다. 본문은 해석하지 않는다.
+    private func load(_ request: URLRequest) async throws -> (data: Data, response: HTTPURLResponse) {
         let data: Data
         let response: URLResponse
         do {
@@ -175,12 +220,7 @@ public struct StoreAPI: Sendable {
         guard (200..<300).contains(http.statusCode) else {
             throw APIError.server(status: http.statusCode, reason: reason(from: data))
         }
-
-        do {
-            return try decoder.decode(type, from: data)
-        } catch {
-            throw APIError.malformedResponse
-        }
+        return (data, http)
     }
 
     private func reason(from data: Data) -> String? {
