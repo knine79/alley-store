@@ -73,8 +73,8 @@ struct UserTokenAuthenticator: AsyncMiddleware {
             throw Abort(
                 .forbidden,
                 reason: """
-                    사람 토큰으로 부를 수 있는 경로가 아닙니다. 지우거나 자격증명을 \
-                    만드는 일은 웹 콘솔에서 사람이 합니다.
+                    사람 토큰으로 부를 수 있는 경로가 아닙니다. 앱을 지우거나 사람을 \
+                    바꾸거나 자격증명을 만드는 일은 웹 콘솔에서 사람이 합니다.
                     """
             )
         }
@@ -92,5 +92,15 @@ struct UserTokenAuthenticator: AsyncMiddleware {
 
         request.auth.login(token.user)
         return try await next.respond(to: request)
+    }
+}
+
+extension Request {
+    /// 사람 토큰으로 온 요청인가.
+    ///
+    /// 여기까지 왔으면 `UserTokenAuthenticator` 가 이미 검증을 마친 것이다. 접두어만 보면 된다.
+    /// 같은 경로라도 화면에서는 되고 토큰으로는 안 되는 칸을 가를 때 쓴다.
+    var isPersonToken: Bool {
+        headers.bearerAuthorization?.token.hasPrefix(UserToken.prefix) == true
     }
 }

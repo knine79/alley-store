@@ -141,11 +141,14 @@ public struct AppController: RouteCollection, Sendable {
         let app = try await request.findApp()
         try app.requireManageAccess(for: user)
 
-        try await AppRegistration.update(
-            app,
-            with: try request.content.decode(UpdateAppRequest.self),
-            on: request.db
-        )
+        let payload = try request.content.decode(UpdateAppRequest.self)
+        // **아이콘 주소는 사람 토큰으로 바꾸지 못한다** (ADR-0077). 아이콘은 워커가 번들에서
+        // 뽑고(ADR-0067) 콘솔은 이 칸을 보내지 않는다. 토큰으로 열어두면 새어 나간 토큰
+        // 하나로 모든 스토어 앱이 남의 호스트에서 아이콘을 받아가게 만들 수 있다.
+        if payload.iconURL != nil, request.isPersonToken {
+            throw Abort(.forbidden, reason: "아이콘은 번들에서 뽑습니다. 사람 토큰으로는 바꿀 수 없습니다.")
+        }
+        try await AppRegistration.update(app, with: payload, on: request.db)
 
         let latest = try await App.latestReleasedVersion(ofApp: try app.requireID(), on: request.db)
         return try app.toDTO(latestReleased: latest, baseURL: request.application.alleyConfig.publicBaseURL)

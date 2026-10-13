@@ -63,9 +63,14 @@ public enum APIPath {
         "\(apps)/\(id.uuidString)"
     }
 
-    /// 앱 스크린샷 하나. 로그인해야 받는다 (이슈 #40).
+    /// 앱 스크린샷을 한 장씩 올리는 자리 (이슈 #70). 본문이 그림 그 자체다.
+    public static func appScreenshots(ofApp id: UUID) -> String {
+        "\(app(id))/screenshots"
+    }
+
+    /// 앱 스크린샷 하나. 로그인해야 받는다 (이슈 #40). 같은 주소로 지운다 (이슈 #70).
     public static func appScreenshot(_ appID: UUID, id: UUID) -> String {
-        "\(app(appID))/screenshots/\(id.uuidString.lowercased())"
+        "\(appScreenshots(ofApp: appID))/\(id.uuidString.lowercased())"
     }
 
     /// 앱별 업로드 권한자 목록.
