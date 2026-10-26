@@ -569,6 +569,15 @@ appcast는 XML 엔드포인트 하나라 구현 비용이 거의 없습니다.
 묻습니다. 위 교체 절차를 따르되 버전마다 한 번만 묻고, "나중에" 를 누른 버전은 목록의 버튼으로
 남깁니다 ([ADR-0074](adr/0074-ask-once-to-quit-and-update-running-apps.md)).
 
+**스토어 앱이 꺼져 있어도 4시간마다 업데이트를 확인해 알림으로 알립니다**
+([ADR-0080](adr/0080-store-app-checks-updates-through-a-bundled-launch-agent.md)). 번들 안의
+LaunchAgent(`Contents/Library/LaunchAgents/update-check.plist`)를 스토어 앱이 로그인한 뒤
+`SMAppService` 로 등록하고, launchd 가 같은 실행 파일을 `--check-updates` 로 띄웁니다. 그
+실행은 창 없이 목록을 읽어 설치한 앱의 업데이트를 한 통으로 묶어 알리고 끝납니다. 받지는
+않습니다. 알림을 누르면 스토어 앱이 열리고 위 자동 업데이트가 그대로 돕니다. 이미 알린
+버전만 남았으면 다시 알리지 않고, 스토어 앱이 떠 있거나 토큰이 없거나 만료됐으면 조용히
+건너뜁니다. 계정 메뉴의 "업데이트 알림" 으로 끕니다.
+
 #### 경로 B: Sparkle appcast
 
 서버가 앱별로 appcast를 서빙합니다.
