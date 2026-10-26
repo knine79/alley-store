@@ -52,6 +52,47 @@
 </section>
 #endif
 
+<!-- 동영상은 앱마다 하나다 (이슈 #73). 새로 올리면 지금 것과 바뀐다. -->
+<section class="section" id="video">
+    <h2 class="section-title">동영상</h2>
+    <p class="page-lead">
+        스토어 앱의 앱 상세에서 스크린샷보다 앞에 보입니다. 화면 전환이나 동작이 중요한 앱이면 짧은 영상 하나가 스크린샷 여러 장보다 낫습니다.
+    </p>
+
+    #if(videoError):
+    <p class="notice notice-error">#(videoError)</p>
+    #endif
+
+    #if(videoURL):
+    <div class="screenshot-grid">
+        <figure class="screenshot">
+            <video class="video-preview" src="#(videoURL)" controls preload="metadata"></video>
+            <form method="post" action="/apps/#(appID)/video/delete">
+                <button class="button button-small" type="submit">지우기</button>
+            </form>
+        </figure>
+    </div>
+    #endif
+
+    <form class="screenshot-upload" method="post" action="/apps/#(appID)/video"
+          enctype="multipart/form-data" data-screenshot-upload data-uploading="동영상을 올리는 중입니다…">
+        <div class="dropzone">
+            <input class="dropzone-input" type="file" name="video"
+                   accept="video/mp4,video/quicktime,.mp4,.mov" required aria-label="동영상 고르기">
+            #if(videoURL):
+            <span class="dropzone-title">바꾸려면 새 동영상을 끌어다 놓거나 여기를 눌러서 파일을 선택하세요</span>
+            <span class="dropzone-note">MP4 나 MOV 하나. 60초, 50MB 까지입니다. 올리면 지금 것과 바뀝니다.</span>
+            #else:
+            <span class="dropzone-title">동영상을 끌어다 놓거나 여기를 눌러서 파일을 선택하세요</span>
+            <span class="dropzone-note">MP4 나 MOV 하나. 60초, 50MB 까지입니다.</span>
+            #endif
+        </div>
+        <div class="form-actions">
+            <button class="button" type="submit">올리기</button>
+        </div>
+    </form>
+</section>
+
 <section class="section" id="screenshots">
     <h2 class="section-title">스크린샷</h2>
     <p class="page-lead">

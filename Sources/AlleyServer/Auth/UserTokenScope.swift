@@ -45,6 +45,11 @@ enum UserTokenScope {
         Rule(method: .GET, pattern: ["api", "v1", "apps", "*", "screenshots", "*"]),
         Rule(method: .POST, pattern: ["api", "v1", "apps", "*", "screenshots"]),
         Rule(method: .DELETE, pattern: ["api", "v1", "apps", "*", "screenshots", "*"]),
+
+        // 앱 동영상 (이슈 #73). 스크린샷과 같은 까닭으로 연다.
+        Rule(method: .GET, pattern: ["api", "v1", "apps", "*", "video"]),
+        Rule(method: .PUT, pattern: ["api", "v1", "apps", "*", "video"]),
+        Rule(method: .DELETE, pattern: ["api", "v1", "apps", "*", "video"]),
     ]
 
     /// 이 메서드와 경로가 열려 있나.

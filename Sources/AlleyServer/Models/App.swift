@@ -50,6 +50,10 @@ public final class App: Model, @unchecked Sendable {
     @Field(key: "screenshot_keys")
     public var screenshotKeys: [String]
 
+    /// 동영상이 스토리지에 놓인 자리. 앱마다 하나다 (`AppVideoController`, ADR-0079).
+    @OptionalField(key: "video_key")
+    public var videoKey: String?
+
     /// 번들 ID 가 아직 확정되지 않았다.
     ///
     /// dmg 로 올린 직후가 그렇다. `bundleID` 에는 임시값이 들어 있고, 워커가 번들에서
@@ -166,6 +170,25 @@ public struct AddAppScreenshots: AsyncMigration {
     }
 }
 
+/// 앱에 동영상 자리를 만든다 (이슈 #73). 없는 것이 기본이라 NULL 이다.
+public struct AddAppVideo: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+        try await sql.raw("ALTER TABLE apps ADD COLUMN IF NOT EXISTS video_key text").run()
+    }
+
+    public func revert(on database: any Database) async throws {
+        guard let sql = database as? any SQLDatabase else {
+            throw MigrationError.needsSQLDatabase
+        }
+        try await sql.raw("ALTER TABLE apps DROP COLUMN IF EXISTS video_key").run()
+    }
+}
+
 /// 사람이 적어둔 분류를 정해진 값으로 옮긴다 (이슈 #44).
 ///
 /// 분류는 자유 텍스트였다. 화면 이름과 같은 값("개발 도구")은 저장할 값
@@ -219,6 +242,7 @@ extension App {
             category: category,
             tags: tags,
             screenshotURLs: try screenshotURLs(baseURL: baseURL),
+            videoURL: try videoURL(baseURL: baseURL),
             ownerID: $owner.id,
             developerNames: developerNames,
             downloadCount: downloadCount,
@@ -382,6 +406,16 @@ extension App {
                 Self.absolute(APIPath.appScreenshot(appID, id: $0), base: baseURL)
             }
         }
+    }
+
+    /// 동영상 주소. 없으면 nil.
+    ///
+    /// 주소 자체는 늘 같아서, 갈아끼운 뒤에도 브라우저와 스토어 앱이 앞의 것을 붙들지
+    /// 않게 키의 ID 를 `v` 로 붙인다. 서버는 이 값을 보지 않는다.
+    func videoURL(baseURL: String?) throws -> String? {
+        guard let key = videoKey, let id = AppVideos.id(fromKey: key) else { return nil }
+        let path = APIPath.appVideo(ofApp: try requireID()) + "?v=\(id.uuidString.lowercased())"
+        return Self.absolute(path, base: baseURL)
     }
 
     /// 사람에게 건넬 공유 링크. 건넬 수 없는 앱이면 nil (ADR-0072).

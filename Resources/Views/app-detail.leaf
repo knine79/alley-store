@@ -82,8 +82,12 @@
 #if(count(app.tags) > 0):
 <p class="tag-list">#for(tag in app.tags):<span class="badge">\##(tag)</span>#endfor</p>
 #endif
-#if(count(app.screenshots) > 0):
+#if(app.videoURL || count(app.screenshots) > 0):
 <div class="screenshot-grid">
+    #if(app.videoURL):
+    <!-- 동영상이 있으면 맨 앞이다 (이슈 #73). 자동 재생하지 않는다. -->
+    <video class="video-preview" src="#(app.videoURL)" controls preload="metadata"></video>
+    #endif
     #for(shot in app.screenshots):
     <a class="screenshot" href="#(shot.url)" target="_blank" rel="noopener"><img src="#(shot.url)" alt="스크린샷" loading="lazy"></a>
     #endfor

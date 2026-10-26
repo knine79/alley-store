@@ -213,6 +213,9 @@ private func configureMigrations(_ app: Application) {
     // 관리자에게 스토어 주간 소식을 보낸다 (이슈 #65, ADR-0076).
     app.migrations.add(AddWeeklyDigestPreferenceToUser())
     app.migrations.add(CreateWeeklyDigestRun())
+
+    // 앱 상세에 동영상을 둔다 (이슈 #73, ADR-0079).
+    app.migrations.add(AddAppVideo())
 }
 
 /// 미들웨어 스택.

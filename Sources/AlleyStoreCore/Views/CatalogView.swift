@@ -1,4 +1,5 @@
 import AlleyShared
+import AVKit
 import SwiftUI
 
 /// 앱 목록과 상세.
@@ -390,8 +391,9 @@ struct AppDetailView: View {
                 if let description = app.description {
                     Text(description).textSelection(.enabled)
                 }
-                if let screenshots = app.screenshotURLs, !screenshots.isEmpty {
-                    ScreenshotStrip(addresses: screenshots)
+                let screenshots = app.screenshotURLs ?? []
+                if app.videoURL != nil || !screenshots.isEmpty {
+                    ScreenshotStrip(video: app.videoURL, addresses: screenshots)
                 }
                 if let tags = app.tags, !tags.isEmpty {
                     // 왜 검색에 걸렸는지 알 수 있게 보인다.
@@ -608,6 +610,8 @@ private final class LinkSharePicker: NSObject, NSSharingServicePickerDelegate {
 /// 그림은 로그인한 요청으로만 받는다 (`StoreModel.screenshot`). 받기 전과 실패했을
 /// 때는 같은 크기의 빈 칸을 둬서 줄 높이가 흔들리지 않게 한다.
 struct ScreenshotStrip: View {
+    /// 동영상 주소. 있으면 맨 앞에 둔다 (이슈 #73).
+    var video: String?
     let addresses: [String]
     static let height: CGFloat = 220
     /// 크게 보고 있는 스크린샷의 자리. nil 이면 닫혀 있다.
@@ -616,6 +620,9 @@ struct ScreenshotStrip: View {
     var body: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 12) {
+                if let video {
+                    VideoTile(address: video)
+                }
                 ForEach(Array(addresses.enumerated()), id: \.element) { index, address in
                     Screenshot(address: address) { enlarged = index }
                 }
@@ -657,6 +664,53 @@ private struct Screenshot: View {
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
         .accessibilityLabel("스크린샷")
         .task(id: address) { image = await model.screenshot(address) }
+    }
+}
+
+/// 앱 동영상 칸 (이슈 #73).
+///
+/// 앱 상세를 열면 틀 주소를 받아 첫 프레임을 보여주고, 가운데 단추를 누르면 그 자리에서
+/// 튼다. **스스로 재생하지 않는다.** 소리가 갑자기 나고, 보지도 않을 영상을 수십 MB 받는다.
+/// 크게 보려면 재생 막대의 전체 화면 단추를 쓴다.
+private struct VideoTile: View {
+    @Environment(StoreModel.self) private var model
+    let address: String
+    @State private var player: AVPlayer?
+    @State private var started = false
+
+    var body: some View {
+        ZStack {
+            if let player {
+                VideoPlayer(player: player)
+            } else {
+                RoundedRectangle(cornerRadius: 6).fill(.quaternary)
+            }
+            if !started {
+                Button {
+                    started = true
+                    player?.play()
+                } label: {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 52))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.black.opacity(0.8), .white.opacity(0.9))
+                }
+                .buttonStyle(.plain)
+                .disabled(player == nil)
+                .help("동영상 재생")
+            }
+        }
+        .aspectRatio(16 / 10, contentMode: .fit)
+        .frame(height: ScreenshotStrip.height)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
+        .accessibilityLabel("동영상")
+        .task(id: address) {
+            started = false
+            player = await model.videoLocation(address).map { AVPlayer(url: $0) }
+        }
+        // 다른 앱으로 넘어가면 소리가 남지 않게 멈춘다.
+        .onDisappear { player?.pause() }
     }
 }
 

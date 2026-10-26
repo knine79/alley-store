@@ -149,7 +149,8 @@ struct MCPServerTests {
         let byName = Dictionary(uniqueKeysWithValues: tools.compactMap { tool in
             tool["name"]?.stringValue.map { ($0, tool) }
         })
-        for name in ["app_details", "update_app", "add_screenshots", "remove_screenshot", "save_screenshots"] {
+        for name in ["app_details", "update_app", "add_screenshots", "remove_screenshot", "save_screenshots",
+                     "set_video", "remove_video"] {
             #expect(byName[name] != nil, "\(name) 이 없습니다")
         }
         // 태그와 파일은 배열로 받는다. 쉼표로 이으면 값 안의 쉼표와 구분할 수 없다.
@@ -183,6 +184,11 @@ struct MCPServerTests {
         let details = AppDetails(dto)
         #expect(details.screenshots == [shot])
         #expect(details.tags == [])
+        #expect(details.hasVideo == false)
+
+        var withVideo = dto
+        withVideo.videoURL = "https://store.example.com" + APIPath.appVideo(ofApp: appID) + "?v=1"
+        #expect(AppDetails(withVideo).hasVideo)
     }
 
     /// 무엇 때문에 막혔는지까지 본다. 앱을 찾으러 서버에 갔다면 연결 실패가 오고, 그것도
@@ -199,6 +205,9 @@ struct MCPServerTests {
 
         let upload = try await call("add_screenshots", #"{"app":"com.example.notes","files":["shots/a.png"]}"#)
         #expect(message(upload)?.contains("절대 경로") == true)
+
+        let video = try await call("set_video", #"{"app":"com.example.notes","file":"demo.mp4"}"#)
+        #expect(message(video)?.contains("절대 경로") == true)
 
         let remove = try await call("remove_screenshot", #"{"app":"com.example.notes","screenshot":"첫째"}"#)
         #expect(message(remove)?.contains("id 로 읽을 수 없습니다") == true)

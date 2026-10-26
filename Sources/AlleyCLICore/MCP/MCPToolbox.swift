@@ -27,6 +27,8 @@ enum MCPToolbox {
         case unreadableFile(String)
         case screenshotNotFound(String)
         case tooLarge(String)
+        case videoTooLarge(String)
+        case noVideo
 
         /// 붙어 있는 쪽이 규약을 어긴 것인가.
         ///
@@ -66,6 +68,10 @@ enum MCPToolbox {
                 return "파일을 읽지 못했습니다: \(path)"
             case .tooLarge(let path):
                 return "\(path): 한 장에 \(AppScreenshotLimits.maximumSize / 1024 / 1024)MB 까지입니다."
+            case .videoTooLarge(let path):
+                return "\(path): 동영상은 \(AppVideoLimits.maximumSize / 1024 / 1024)MB 까지입니다."
+            case .noVideo:
+                return "이 앱에는 동영상이 없습니다."
             case .screenshotNotFound(let value):
                 return "이 앱에 그런 스크린샷이 없습니다: \(value). app_details 로 id 를 확인하세요."
             }
@@ -162,7 +168,7 @@ enum MCPToolbox {
             name: "app_details",
             description: """
                 스토어 앱 상세에 보이는 정보. 이름, 한 줄 소개(summary), 설명, 분류, 태그, \
-                스크린샷 id 목록(보이는 순서), 개발자, 최신 출시본, 공유 링크. \
+                스크린샷 id 목록(보이는 순서), 동영상이 있는지, 개발자, 최신 출시본, 공유 링크. \
                 update_app 이나 스크린샷 도구를 부르기 전에 지금 값을 확인할 때 쓴다. \
                 스크린샷 그림 자체는 save_screenshots 로 받는다.
                 """,
@@ -230,6 +236,29 @@ enum MCPToolbox {
                     "directory": "받을 디렉터리의 **절대** 경로. 없으면 만든다",
                 ]
             )
+        ),
+        MCPTool(
+            name: "set_video",
+            description: """
+                앱 상세의 동영상을 올린다. 스크린샷보다 앞에 보인다. 앱마다 하나라 이미 \
+                있으면 **갈아끼운다.** MP4 나 MOV, \(Int(AppVideoLimits.maximumDuration))초, \
+                \(AppVideoLimits.maximumSize / 1024 / 1024)MB 까지. 사람들이 스토어에서 보는 영상이니 \
+                올리기 전에 사람에게 확인한다.
+                """,
+            inputSchema: MCPTool.schema(
+                required: [
+                    "app": "앱 id 또는 번들 ID",
+                    "file": "올릴 동영상 파일의 **절대** 경로",
+                ]
+            )
+        ),
+        MCPTool(
+            name: "remove_video",
+            description: """
+                앱 상세의 동영상을 지운다. 지운 영상은 되살릴 수 없으니 원본이 있는지 \
+                사람에게 먼저 확인한다.
+                """,
+            inputSchema: MCPTool.schema(required: ["app": "앱 id 또는 번들 ID"])
         ),
     ]
 
@@ -391,6 +420,31 @@ enum MCPToolbox {
                 }
             }
             return try MCPToolResult.json(SavedScreenshots(files: saved, notSaved: nil, reason: nil))
+
+        case "set_video":
+            guard let raw = arguments["file"]?.stringValue, !raw.isEmpty else {
+                throw ToolError.missingArgument("file")
+            }
+            let path = try absolutePath(raw)
+            guard let data = FileManager.default.contents(atPath: path) else {
+                throw ToolError.unreadableFile(path)
+            }
+            // 상한을 넘는 본문은 서버가 다 받기 전에 끊어, 이유 없는 연결 오류만 남는다.
+            guard data.count <= AppVideoLimits.maximumSize else {
+                throw ToolError.videoTooLarge(path)
+            }
+            let app = try await resolveApp(arguments, api: api)
+            _ = try await api.setVideo(data, ofApp: app.id)
+            return try MCPToolResult.json(try await details(of: app.id, api: api))
+
+        case "remove_video":
+            let app = try await resolveApp(arguments, api: api)
+            do {
+                _ = try await api.removeVideo(ofApp: app.id)
+            } catch StoreAPI.APIError.server(status: 404, _) {
+                throw ToolError.noVideo
+            }
+            return try MCPToolResult.json(try await details(of: app.id, api: api))
 
         default:
             throw ToolError.unknownTool(name)
@@ -622,6 +676,8 @@ struct AppDetails: Encodable {
     var tags: [String]
     /// 보이는 순서대로.
     var screenshots: [UUID]
+    /// 동영상이 올라가 있나 (이슈 #73). 주소는 토큰 없이 열리지 않아 싣지 않는다.
+    var hasVideo: Bool
     var developers: [String]?
     /// 예: `1.2.0 (34)`. 아직 출시본이 없으면 nil.
     var latestRelease: String?
@@ -642,6 +698,7 @@ struct AppDetails: Encodable {
         self.screenshots = (app.screenshotURLs ?? []).compactMap {
             $0.split(separator: "/").last.flatMap { UUID(uuidString: String($0)) }
         }
+        self.hasVideo = app.videoURL != nil
         self.developers = app.developerNames
         self.latestRelease = app.latestReleasedVersion.map { "\($0.shortVersion) (\($0.buildNumber))" }
         self.downloadCount = app.downloadCount

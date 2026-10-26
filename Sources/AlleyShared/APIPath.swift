@@ -73,6 +73,12 @@ public enum APIPath {
         "\(appScreenshots(ofApp: appID))/\(id.uuidString.lowercased())"
     }
 
+    /// 앱 동영상 (이슈 #73). 받기는 로그인한 요청을 스토리지 주소로 넘기고, 같은 주소에
+    /// 본문을 PUT 하면 갈아끼우고, DELETE 하면 지운다.
+    public static func appVideo(ofApp id: UUID) -> String {
+        "\(app(id))/video"
+    }
+
     /// 앱별 업로드 권한자 목록.
     public static func members(ofApp id: UUID) -> String {
         "\(app(id))/members"

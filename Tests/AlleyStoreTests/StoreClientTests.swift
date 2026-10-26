@@ -92,4 +92,13 @@ struct ScreenshotOriginTests {
         #expect(!StoreClient.sameOrigin(URL(string: "http://store.example.com/a")!, server))
         #expect(!StoreClient.sameOrigin(URL(string: "https://store.example.com:8443/a")!, server))
     }
+
+    @Test("동영상 주소도 다른 출처면 토큰을 싣기 전에 거절한다")
+    func videoLocationRejectsOtherOrigins() async {
+        var client = StoreClient(server: URL(string: "https://store.example.com")!)
+        client.token = "secret"
+        await #expect(throws: StoreClient.ClientError.self) {
+            _ = try await client.videoLocation(at: URL(string: "https://evil.example.com/api/v1/apps/x/video")!)
+        }
+    }
 }

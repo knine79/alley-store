@@ -1060,6 +1060,16 @@ a.tab:hover {
     border-radius: 6px;
 }
 
+/* 앱 동영상. 스크린샷과 같은 높이에 두어 한 줄로 읽히게 한다. 폭은 영상 비율을 따른다. */
+.video-preview {
+    display: block;
+    max-width: 100%;
+    height: 160px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #000;
+}
+
 /* 앱 상세의 태그. 배지를 그대로 쓰고 줄바꿈만 허용한다. */
 .tag-list {
     display: flex;

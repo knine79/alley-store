@@ -663,6 +663,7 @@ struct AppPagesController: RouteCollection, Sendable {
         values: AppFormValues?,
         error: String? = nil,
         screenshotError: String? = nil,
+        videoError: String? = nil,
         on request: Request
     ) async throws -> View {
         let values = values ?? AppFormValues(
@@ -685,7 +686,9 @@ struct AppPagesController: RouteCollection, Sendable {
                 error: error,
                 screenshots: row.screenshots,
                 screenshotLimit: AppScreenshots.maximumCount,
-                screenshotError: screenshotError
+                screenshotError: screenshotError,
+                videoURL: row.videoURL,
+                videoError: videoError
             )
         ).get()
     }
@@ -1223,6 +1226,8 @@ struct AppRow: Encodable {
     var category: String?
     var tags: [String]
     var screenshots: [ScreenshotRow]
+    /// 동영상 주소. 없으면 nil. 스크린샷 줄 맨 앞에 둔다 (이슈 #73).
+    var videoURL: String?
     var ownerEmail: String
     var latestReleasedVersion: String?
     /// 별점 평균. 아무도 안 남겼으면 nil.
@@ -1261,6 +1266,7 @@ struct AppRow: Encodable {
                 )
             }
         }
+        self.videoURL = try app.videoURL(baseURL: nil)
         // 목록에서 소유자를 함께 읽어두므로 여기서 관계를 만지지 않는다.
         self.ownerEmail = app.$owner.value?.email ?? ""
         self.latestReleasedVersion = latestReleased?.shortVersion
@@ -1477,6 +1483,9 @@ struct AppEditContext: Encodable {
     var screenshots: [ScreenshotRow]
     var screenshotLimit: Int
     var screenshotError: String?
+    /// 올려둔 동영상. 쿠키로 받는 같은 출처 주소다 (이슈 #73).
+    var videoURL: String?
+    var videoError: String?
 }
 
 /// 앱 상세에 그리는 스크린샷 한 장.

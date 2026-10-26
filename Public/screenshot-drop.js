@@ -28,7 +28,8 @@
             // 올리는 동안 다시 놓으면 어느 것이 올라가는지 알 수 없게 된다.
             zone.classList.add("dropzone-locked");
             var title = zone.querySelector(".dropzone-title");
-            if (title) title.textContent = input.files.length + "장을 올리는 중입니다…";
+            // 동영상 상자는 한 개만 받아서 장 수를 세지 않는다 (`data-uploading`).
+            if (title) title.textContent = form.dataset.uploading || input.files.length + "장을 올리는 중입니다…";
             form.submit();
         });
     });

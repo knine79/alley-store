@@ -114,6 +114,9 @@ public struct SecurityHeadersMiddleware: AsyncMiddleware {
             // 전부 같은 출처다. 스토리지 주소는 설정에서 정확히 계산해 넣으므로
             // 여기서는 https 를 통째로 열지 않는다.
             "connect-src 'self'\(storage)",
+            // 앱 동영상은 우리 주소가 확인한 뒤 스토리지 presigned URL 로 넘긴다
+            // (`AppVideoController`). `<video>` 는 넘겨받은 주소에도 이 지시를 건다.
+            "media-src 'self'\(storage)",
             // 폼은 전부 우리 경로로 간다. 주입된 폼이 밖으로 값을 보내는 것을 막는다.
             //
             // 로그인 공급자만 예외다. 로그아웃 폼의 응답이 공급자의 세션 종료 주소로

@@ -414,6 +414,15 @@ final class StoreModel {
         return image
     }
 
+    /// 앱 동영상을 틀 주소. 못 받으면 nil.
+    ///
+    /// 받아두지 않는다. 서버가 주는 스토리지 주소는 금방 만료되어서, 앱 상세를 열 때마다
+    /// 새로 받는다 (`StoreClient.videoLocation`).
+    func videoLocation(_ address: String) async -> URL? {
+        guard let client, let url = URL(string: address) else { return nil }
+        return try? await client.videoLocation(at: url)
+    }
+
     // MARK: - 피드백
 
     /// 지금 상세를 보고 있는 앱의 피드백. 앱을 고를 때마다 새로 읽는다.
