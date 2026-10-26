@@ -306,7 +306,7 @@ Google 에서는 `hd`(hosted domain) claim 까지 함께 봅니다. 그 claim �
 | `store_settings` | 스토어 이름, 로고, 강조색, 허용 도메인, 번들 ID 프리픽스 (singleton, [ADR-0011](adr/0011-store-settings-in-database.md)) |
 | `branding_assets` | 종류(파비콘·로고·앱 아이콘), 스토리지 키, 크기 ([ADR-0045](adr/0045-branding-assets-in-storage.md)) |
 | `store_app_settings` | 스토어 앱의 번들 ID·이름·URL 스킴·베이스 번들 (singleton, [ADR-0046](adr/0046-server-assembles-store-app.md)) |
-| `apps`           | bundle_id, 이름, 아이콘, 설명, 분류(`AppCategory` 8개 중 하나, [ADR-0070](adr/0070-app-categories-are-a-fixed-list.md)), 태그(검색용, 10개·20자까지), 스크린샷 키(5장까지, [ADR-0071](adr/0071-app-screenshots-need-sign-in.md)), owner_id |
+| `apps`           | bundle_id, 이름, 아이콘, 설명, 분류(`AppCategory` 8개 중 하나, [ADR-0070](adr/0070-app-categories-are-a-fixed-list.md)), 태그(검색용, 10개·20자까지), 스크린샷 키(5장까지, [ADR-0071](adr/0071-app-screenshots-need-sign-in.md)), 동영상 키(하나, [ADR-0079](adr/0079-app-video-goes-through-a-presigned-redirect.md)), owner_id |
 | `app_members`    | app_id, user_id (앱별 업로드 권한)                                |
 | `versions`       | app_id, short_version, build_number, 릴리즈 노트, min_macos, 상태, entitlements ([ADR-0020](adr/0020-uploader-provides-entitlements.md)) |
 | `artifacts`      | version_id, kind(unsigned/signed), s3_key, sha256, size    |
@@ -639,6 +639,8 @@ GET   /api/v1/versions/:id/signing     # 서명 상태·실패 갈래·할 일 (
 GET   /api/v1/apps/:id/sparkle         # SUPublicEDKey 와 쓸 수 있는 상태 (ADR-0060)
 GET   /api/v1/apps/:id/feedback        # 별점·피드백 목록
 GET   /api/v1/apps/:id/screenshots/:sid  # 앱 스크린샷 (로그인 필요, ADR-0071)
+GET   /api/v1/apps/:id/video           # 앱 동영상. 로그인 확인 뒤 스토리지로 302 (ADR-0079)
+PUT   /api/v1/apps/:id/video           # 앱 동영상 올리기·갈아끼우기. DELETE 로 지운다
 POST  /api/v1/versions/:id/feedback    # 별점·피드백 남기기
 POST  /api/v1/apps/:id/notification-targets  # 알림 채널 등록 (ADR-0059)
 GET   /api/v1/admin/portal/certificates      # 인증서 만료 현황 (ASC API)
@@ -658,7 +660,7 @@ GET   /api/v1/admin/portal/certificates      # 인증서 만료 현황 (ASC API)
 까지 적어주는데(ADR-0023), 그것을 읽고 파일을 고치고 다시 올리는 것은 사람이 합니다.
 에이전트는 그 셋을 이어서 합니다.
 
-내주는 도구는 열둘입니다.
+내주는 도구는 열넷입니다.
 
 | 도구 | 하는 일 |
 | --- | --- |
@@ -670,10 +672,11 @@ GET   /api/v1/admin/portal/certificates      # 인증서 만료 현황 (ASC API)
 | `app_feedback` | 그 앱에 들어온 별점과 피드백 |
 | `app_details` · `update_app` | 앱 상세의 이름, 소개, 설명, 분류, 태그. 넣은 항목만 바뀌고 빈 값은 그대로 둔다 ([ADR-0077](adr/0077-mcp-edits-app-details-and-screenshots.md)) |
 | `add_screenshots` · `remove_screenshot` · `save_screenshots` | 스크린샷을 올리고, 지우고, 내려받는다. 콘솔과 같은 규칙(5장, 5MB, PNG·JPEG)을 지난다 |
+| `set_video` · `remove_video` | 동영상을 올리거나 갈아끼우고, 지운다. 콘솔과 같은 규칙(하나, 60초, 50MB, MP4·MOV)을 지난다 ([ADR-0079](adr/0079-app-video-goes-through-a-presigned-redirect.md)) |
 
 **릴리스 둘레의 일까지만 냅니다.** 새 기능을 내면 소개와 화면도 바뀌므로 앱 상세를
-고치는 것은 넣었습니다. 글은 다시 고치면 되돌아갑니다. 지운 스크린샷만은 되살릴 수
-없어서 도구 설명이 먼저 받아두라고 말합니다. 번들 ID, 아이콘 주소, 멤버, 토큰, 앱
+고치는 것은 넣었습니다. 글은 다시 고치면 되돌아갑니다. 지운 스크린샷과 동영상만은 되살릴 수
+없어서 도구 설명이 먼저 받아두거나 원본을 확인하라고 말합니다. 번들 ID, 아이콘 주소, 멤버, 토큰, 앱
 삭제는 넣지 않습니다.
 
 **운영 기능은 넣지 않습니다.** 워커 조작, 워커 릴리스 올리기, 스토어 앱 조립은

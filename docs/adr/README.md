@@ -86,6 +86,7 @@
 | [0076](0076-weekly-store-digest-goes-to-admins-by-dm.md) | 스토어 주간 소식은 관리자에게 DM 두 통으로 보내고, 사람이 다듬어 전한다 | 수락됨 | 2026-10-07 |
 | [0077](0077-mcp-edits-app-details-and-screenshots.md) | MCP 로 앱 상세의 글과 스크린샷을 고친다 | 수락됨 | 2026-10-13 |
 | [0078](0078-connection-failures-show-as-a-banner.md) | 스토어 앱의 연결 실패는 얼럿이 아니라 사라지지 않는 배너로 알린다 | 수락됨 | 2026-10-12 |
+| [0079](0079-app-video-goes-through-a-presigned-redirect.md) | 앱 동영상은 하나만 두고, 로그인 확인 뒤 스토리지 주소로 넘겨 튼다 | 수락됨 | 2026-10-26 |
 
 ## 언제 쓰나
 
