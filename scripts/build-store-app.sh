@@ -183,6 +183,37 @@ $SERVER_ENTRY
 </plist>
 PLIST_EOF
 
+# 스토어 앱이 꺼져 있어도 업데이트를 확인하는 LaunchAgent (이슈 #74, ADR-0080).
+# 앱이 SMAppService 로 등록하고, launchd 가 같은 실행 파일을 --check-updates 로 띄운다.
+# **서버의 StoreAppUpdateCheck.launchAgentPlist 와 같은 값을 내야 한다.** 서버가 조직의
+# 번들을 조립할 때 이 파일을 버리고 그 함수로 다시 쓴다. 갈라지면 시험이 잡는다.
+mkdir -p "$APP_DIR/Contents/Library/LaunchAgents"
+cat > "$APP_DIR/Contents/Library/LaunchAgents/update-check.plist" <<PLIST_EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>$BUNDLE_ID.update-check</string>
+    <key>BundleProgram</key>
+    <string>Contents/MacOS/$EXECUTABLE_NAME</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>Contents/MacOS/$EXECUTABLE_NAME</string>
+        <string>--check-updates</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>14400</integer>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+        <string>$BUNDLE_ID</string>
+    </array>
+</dict>
+</plist>
+PLIST_EOF
+
 info "번들을 만들었습니다: $APP_DIR"
 
 if [ "${1:-}" != "--sign" ]; then

@@ -21,6 +21,25 @@ enum UpdatePreferences {
         store.object(forKey: appsKey) as? Bool ?? defaultValue
     }
 
+    /// 스토어 앱이 꺼져 있어도 업데이트를 확인해 알릴지 (이슈 #74). 계정 메뉴의
+    /// "업데이트 알림" 이 이 값이다. 기본으로 켠다. 메뉴의 `@AppStorage` 기본값도 같아야 한다.
+    static let backgroundKey = "backgroundUpdateCheck"
+
+    static func checksInBackground(_ store: UserDefaults = .standard) -> Bool {
+        store.object(forKey: backgroundKey) as? Bool ?? defaultValue
+    }
+
+    /// 백그라운드 확인이 이미 알린 업데이트. 번들 ID → 출시본의 버전 ID (`UpdateNotice`).
+    static let notifiedKey = "notifiedBackgroundUpdates"
+
+    static func notifiedUpdates(_ store: UserDefaults = .standard) -> [String: String] {
+        store.dictionary(forKey: notifiedKey) as? [String: String] ?? [:]
+    }
+
+    static func rememberNotified(_ notified: [String: String], _ store: UserDefaults = .standard) {
+        store.set(notified, forKey: notifiedKey)
+    }
+
     /// 실행 중이라 물어본 업데이트. 번들 ID → 물어본 출시본의 버전 ID (ADR-0074).
     ///
     /// 버전마다 한 번만 묻는다. "나중에" 를 누른 사람에게 30분마다 같은 것을 물으면 결국

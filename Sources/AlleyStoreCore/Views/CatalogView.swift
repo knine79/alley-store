@@ -17,6 +17,8 @@ struct CatalogView: View {
     @AppStorage("catalogSort") private var sort: CatalogSort = .name
     /// 계정 메뉴의 "앱 자동 업데이트". 이 맥에만 둔다 (ADR-0073).
     @AppStorage(UpdatePreferences.appsKey) private var autoUpdatesApps = UpdatePreferences.defaultValue
+    /// 계정 메뉴의 "업데이트 알림". 스토어 앱이 꺼져 있어도 확인한다 (이슈 #74).
+    @AppStorage(UpdatePreferences.backgroundKey) private var checksInBackground = UpdatePreferences.defaultValue
     /// 거를 분류. nil 이면 전부 보인다.
     @State private var categoryFilter: AppCategory?
 
@@ -132,6 +134,8 @@ struct CatalogView: View {
                     // 켜두는 설정이라 체크로 보인다 (ADR-0073).
                     Toggle("앱 자동 업데이트", isOn: $autoUpdatesApps)
                     Text("실행 중이 아닌 앱을 자동으로 최신으로 받습니다")
+                    Toggle("업데이트 알림", isOn: $checksInBackground)
+                    Text("스토어 앱을 닫아도 4시간마다 확인해 알려줍니다")
                     Divider()
                     Button("로그아웃", action: model.signOut)
                 } label: {
@@ -148,6 +152,12 @@ struct CatalogView: View {
         // 창을 열어둔 채로 두는 사람이 있다. 목록이 어제 것으로 굳어 있으면
         // 업데이트가 있어도 모른다.
         .task { await model.watchForUpdates() }
+        // 로그인한 뒤에 등록한다. 로그인 전에 등록하면 확인할 토큰이 없어 헛돈다. 처음이면
+        // 여기서 알림 권한을 묻는다 (이슈 #74).
+        .task { await BackgroundUpdateCheck.sync() }
+        .onChange(of: checksInBackground) {
+            Task { await BackgroundUpdateCheck.sync() }
+        }
         // 방금 한 일을 아래쪽 가운데에 잠깐 띄운다 (`StoreModel.announce`). 툴바 상태 칸에
         // 회색 글자로 두면 눈에 안 띄고, 사라지지 않아 언제 일인지 알 수 없었다. 위쪽에
         // 띄우면 상세의 앱 이름을 가린다.

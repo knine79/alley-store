@@ -1,3 +1,4 @@
+import AlleyShared
 import Foundation
 import Testing
 import Vapor
@@ -256,6 +257,50 @@ struct StoreAppBundleRewriterTests {
         )
         #expect(binary.compressedData == Data("실행 파일이라고 치자".utf8))
         #expect((binary.externalAttributes >> 16) & 0o777 == 0o755)
+    }
+
+    @Test("업데이트 확인 LaunchAgent 를 새 번들 ID 와 실행 파일로 다시 쓴다")
+    func rewritesLaunchAgent() throws {
+        var entries = try ZipArchive.entries(in: Self.baseZip())
+        entries.append(ZipArchive.stored(
+            name: "Alley Store.app/\(StoreAppUpdateCheck.bundlePath)", data: Data("<plist>옛것</plist>".utf8)
+        ))
+        let output = try StoreAppBundleRewriter.rewrite(baseZip: ZipArchive.write(entries), branding: Self.branding())
+        let agents = try ZipArchive.entries(in: output).filter { $0.name.hasSuffix(StoreAppUpdateCheck.plistName) }
+
+        #expect(agents.map(\.name) == ["우리 스토어.app/Contents/Library/LaunchAgents/update-check.plist"])
+        let plist = try #require(
+            try PropertyListSerialization.propertyList(from: agents[0].compressedData, format: nil) as? [String: Any]
+        )
+        #expect(plist["Label"] as? String == "com.example.alley.store.update-check")
+        #expect(plist["BundleProgram"] as? String == "Contents/MacOS/AlleyStore")
+        #expect(plist["ProgramArguments"] as? [String] == ["Contents/MacOS/AlleyStore", "--check-updates"])
+        #expect(plist["StartInterval"] as? Int == StoreAppUpdateCheck.interval)
+    }
+
+    /// 셸 스크립트는 이 코드를 부를 수 없어 같은 plist 를 따로 쓴다. 갈라지면 베이스 번들과
+    /// 조직 번들의 확인 주기나 인자가 달라진다.
+    @Test("조립 스크립트와 서버가 같은 LaunchAgent 를 쓴다")
+    func launchAgentMatchesBuildScript() throws {
+        let script = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+                .appendingPathComponent("scripts/build-store-app.sh"),
+            encoding: .utf8
+        )
+        let marker = "LaunchAgents/update-check.plist\" <<PLIST_EOF\n"
+        let start = try #require(script.range(of: marker)).upperBound
+        let end = try #require(script.range(of: "\nPLIST_EOF", range: start..<script.endIndex)).lowerBound
+        let rendered = String(script[start..<end])
+            .replacingOccurrences(of: "$BUNDLE_ID", with: "com.example.alley.store")
+            .replacingOccurrences(of: "$EXECUTABLE_NAME", with: "AlleyStore")
+
+        func parse(_ text: String) throws -> NSDictionary {
+            try #require(try PropertyListSerialization.propertyList(from: Data(text.utf8), format: nil) as? NSDictionary)
+        }
+        let fromScript = try parse(rendered)
+        let fromServer = try parse(StoreAppUpdateCheck.launchAgentPlist(bundleID: "com.example.alley.store", executable: "AlleyStore"))
+        #expect(fromScript == fromServer)
     }
 
     @Test("옛 Info.plist 는 새것으로 바뀐다")
