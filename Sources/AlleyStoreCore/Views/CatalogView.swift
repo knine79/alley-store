@@ -691,7 +691,7 @@ private struct VideoTile: View {
     var body: some View {
         ZStack {
             if let player {
-                VideoPlayer(player: player)
+                PlayerView(player: player)
             } else {
                 RoundedRectangle(cornerRadius: 6).fill(.quaternary)
             }
@@ -721,6 +721,28 @@ private struct VideoTile: View {
         }
         // 다른 앱으로 넘어가면 소리가 남지 않게 멈춘다.
         .onDisappear { player?.pause() }
+    }
+}
+
+/// `AVPlayerView` 를 SwiftUI 에 놓는다.
+///
+/// **SwiftUI 의 `VideoPlayer` 를 쓰지 않는다.** Xcode 프로젝트 없이 SwiftPM 으로 만든 이
+/// 번들에서는 `VideoPlayer` 의 형식 정보를 만들다가 AVKit 의 상위 클래스를 찾지 못해 앱이
+/// 켜지자마자 죽었다(`_AVKit_SwiftUI`, `getSuperclassMetadata`). `AVPlayerView` 를 직접
+/// 부르면 AVKit 이 링크된다.
+private struct PlayerView: NSViewRepresentable {
+    let player: AVPlayer
+
+    func makeNSView(context: Context) -> AVPlayerView {
+        let view = AVPlayerView()
+        view.controlsStyle = .inline
+        view.allowsPictureInPicturePlayback = false
+        view.player = player
+        return view
+    }
+
+    func updateNSView(_ view: AVPlayerView, context: Context) {
+        if view.player !== player { view.player = player }
     }
 }
 
