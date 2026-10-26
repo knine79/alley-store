@@ -189,7 +189,10 @@ code {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--space-4);
+    /* 좁은 화면에서는 메뉴가 로고 아래 줄로 내려간다. 한 줄을 고집하면 "로그아웃" 이
+       화면 밖으로 밀려 잘린다. */
+    flex-wrap: wrap;
+    gap: var(--space-3) var(--space-4);
 }
 
 .brand {
@@ -225,8 +228,10 @@ code {
 
 .chrome-nav {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--space-3);
+    min-width: 0;
 }
 
 .chrome-link {
@@ -1055,6 +1060,16 @@ a.tab:hover {
     border-radius: 6px;
 }
 
+/* 앱 동영상. 스크린샷과 같은 높이에 두어 한 줄로 읽히게 한다. 폭은 영상 비율을 따른다. */
+.video-preview {
+    display: block;
+    max-width: 100%;
+    height: 160px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #000;
+}
+
 /* 앱 상세의 태그. 배지를 그대로 쓰고 줄바꿈만 허용한다. */
 .tag-list {
     display: flex;
@@ -1107,6 +1122,10 @@ a.tab:hover {
  * 넘칠 만한 표에만 씌우지 않는다. 그러면 칸이 하나 늘거나 값이 길어진 날 그 표만
  * 다시 삐져나오고, 씌우는 것을 잊었다는 사실은 화면이 깨진 뒤에야 알게 된다. */
 .table-scroll {
+    /* 칸 머리의 `.visually-hidden` 은 `position: absolute` 라서, 기준이 이 상자 밖에
+       있으면 스크롤에 갇히지 않고 화면 폭을 민다. 앱 상세의 "출시" 칸이 그래서 좁은
+       화면에서 페이지 전체를 옆으로 밀었다. 이 상자를 기준으로 세워 안에 가둔다. */
+    position: relative;
     overflow-x: auto;
     /* 표의 둥근 모서리가 상자에 잘리지 않게 같은 값을 준다. */
     border-radius: var(--radius-large);

@@ -1,4 +1,5 @@
 import AlleyShared
+import AVKit
 import SwiftUI
 
 /// 앱 목록과 상세.
@@ -16,6 +17,8 @@ struct CatalogView: View {
     @AppStorage("catalogSort") private var sort: CatalogSort = .name
     /// 계정 메뉴의 "앱 자동 업데이트". 이 맥에만 둔다 (ADR-0073).
     @AppStorage(UpdatePreferences.appsKey) private var autoUpdatesApps = UpdatePreferences.defaultValue
+    /// 계정 메뉴의 "업데이트 알림". 스토어 앱이 꺼져 있어도 확인한다 (이슈 #74).
+    @AppStorage(UpdatePreferences.backgroundKey) private var checksInBackground = UpdatePreferences.defaultValue
     /// 거를 분류. nil 이면 전부 보인다.
     @State private var categoryFilter: AppCategory?
 
@@ -131,6 +134,8 @@ struct CatalogView: View {
                     // 켜두는 설정이라 체크로 보인다 (ADR-0073).
                     Toggle("앱 자동 업데이트", isOn: $autoUpdatesApps)
                     Text("실행 중이 아닌 앱을 자동으로 최신으로 받습니다")
+                    Toggle("업데이트 알림", isOn: $checksInBackground)
+                    Text("스토어 앱을 닫아도 4시간마다 확인해 알려줍니다")
                     Divider()
                     Button("로그아웃", action: model.signOut)
                 } label: {
@@ -147,6 +152,12 @@ struct CatalogView: View {
         // 창을 열어둔 채로 두는 사람이 있다. 목록이 어제 것으로 굳어 있으면
         // 업데이트가 있어도 모른다.
         .task { await model.watchForUpdates() }
+        // 로그인한 뒤에 등록한다. 로그인 전에 등록하면 확인할 토큰이 없어 헛돈다. 처음이면
+        // 여기서 알림 권한을 묻는다 (이슈 #74).
+        .task { await BackgroundUpdateCheck.sync() }
+        .onChange(of: checksInBackground) {
+            Task { await BackgroundUpdateCheck.sync() }
+        }
         // 방금 한 일을 아래쪽 가운데에 잠깐 띄운다 (`StoreModel.announce`). 툴바 상태 칸에
         // 회색 글자로 두면 눈에 안 띄고, 사라지지 않아 언제 일인지 알 수 없었다. 위쪽에
         // 띄우면 상세의 앱 이름을 가린다.
@@ -390,8 +401,9 @@ struct AppDetailView: View {
                 if let description = app.description {
                     Text(description).textSelection(.enabled)
                 }
-                if let screenshots = app.screenshotURLs, !screenshots.isEmpty {
-                    ScreenshotStrip(addresses: screenshots)
+                let screenshots = app.screenshotURLs ?? []
+                if app.videoURL != nil || !screenshots.isEmpty {
+                    ScreenshotStrip(video: app.videoURL, addresses: screenshots)
                 }
                 if let tags = app.tags, !tags.isEmpty {
                     // 왜 검색에 걸렸는지 알 수 있게 보인다.
@@ -608,6 +620,8 @@ private final class LinkSharePicker: NSObject, NSSharingServicePickerDelegate {
 /// 그림은 로그인한 요청으로만 받는다 (`StoreModel.screenshot`). 받기 전과 실패했을
 /// 때는 같은 크기의 빈 칸을 둬서 줄 높이가 흔들리지 않게 한다.
 struct ScreenshotStrip: View {
+    /// 동영상 주소. 있으면 맨 앞에 둔다 (이슈 #73).
+    var video: String?
     let addresses: [String]
     static let height: CGFloat = 220
     /// 크게 보고 있는 스크린샷의 자리. nil 이면 닫혀 있다.
@@ -616,6 +630,9 @@ struct ScreenshotStrip: View {
     var body: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 12) {
+                if let video {
+                    VideoTile(address: video)
+                }
                 ForEach(Array(addresses.enumerated()), id: \.element) { index, address in
                     Screenshot(address: address) { enlarged = index }
                 }
@@ -657,6 +674,75 @@ private struct Screenshot: View {
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
         .accessibilityLabel("스크린샷")
         .task(id: address) { image = await model.screenshot(address) }
+    }
+}
+
+/// 앱 동영상 칸 (이슈 #73).
+///
+/// 앱 상세를 열면 틀 주소를 받아 첫 프레임을 보여주고, 가운데 단추를 누르면 그 자리에서
+/// 튼다. **스스로 재생하지 않는다.** 소리가 갑자기 나고, 보지도 않을 영상을 수십 MB 받는다.
+/// 크게 보려면 재생 막대의 전체 화면 단추를 쓴다.
+private struct VideoTile: View {
+    @Environment(StoreModel.self) private var model
+    let address: String
+    @State private var player: AVPlayer?
+    @State private var started = false
+
+    var body: some View {
+        ZStack {
+            if let player {
+                PlayerView(player: player)
+            } else {
+                RoundedRectangle(cornerRadius: 6).fill(.quaternary)
+            }
+            if !started {
+                Button {
+                    started = true
+                    player?.play()
+                } label: {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 52))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.black.opacity(0.8), .white.opacity(0.9))
+                }
+                .buttonStyle(.plain)
+                .disabled(player == nil)
+                .help("동영상 재생")
+            }
+        }
+        .aspectRatio(16 / 10, contentMode: .fit)
+        .frame(height: ScreenshotStrip.height)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
+        .accessibilityLabel("동영상")
+        .task(id: address) {
+            started = false
+            player = await model.videoLocation(address).map { AVPlayer(url: $0) }
+        }
+        // 다른 앱으로 넘어가면 소리가 남지 않게 멈춘다.
+        .onDisappear { player?.pause() }
+    }
+}
+
+/// `AVPlayerView` 를 SwiftUI 에 놓는다.
+///
+/// **SwiftUI 의 `VideoPlayer` 를 쓰지 않는다.** Xcode 프로젝트 없이 SwiftPM 으로 만든 이
+/// 번들에서는 `VideoPlayer` 의 형식 정보를 만들다가 AVKit 의 상위 클래스를 찾지 못해 앱이
+/// 켜지자마자 죽었다(`_AVKit_SwiftUI`, `getSuperclassMetadata`). `AVPlayerView` 를 직접
+/// 부르면 AVKit 이 링크된다.
+private struct PlayerView: NSViewRepresentable {
+    let player: AVPlayer
+
+    func makeNSView(context: Context) -> AVPlayerView {
+        let view = AVPlayerView()
+        view.controlsStyle = .inline
+        view.allowsPictureInPicturePlayback = false
+        view.player = player
+        return view
+    }
+
+    func updateNSView(_ view: AVPlayerView, context: Context) {
+        if view.player !== player { view.player = player }
     }
 }
 

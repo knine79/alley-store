@@ -12,6 +12,11 @@
         var input = form.querySelector('input[type="file"]');
         if (!zone || !input) return;
 
+        // 고르거나 놓자마자 올리므로 "올리기" 는 스크립트가 없을 때만 쓴다. 남겨두면 아무것도
+        // 고르지 않은 채 누르게 되고, 브라우저가 "파일을 선택하세요" 풍선만 띄운다.
+        var actions = form.querySelector(".form-actions");
+        if (actions) actions.hidden = true;
+
         ["dragenter", "dragover"].forEach(function (type) {
             zone.addEventListener(type, function () {
                 zone.classList.add("dropzone-armed");
@@ -28,7 +33,8 @@
             // 올리는 동안 다시 놓으면 어느 것이 올라가는지 알 수 없게 된다.
             zone.classList.add("dropzone-locked");
             var title = zone.querySelector(".dropzone-title");
-            if (title) title.textContent = input.files.length + "장을 올리는 중입니다…";
+            // 동영상 상자는 한 개만 받아서 장 수를 세지 않는다 (`data-uploading`).
+            if (title) title.textContent = form.dataset.uploading || input.files.length + "장을 올리는 중입니다…";
             form.submit();
         });
     });

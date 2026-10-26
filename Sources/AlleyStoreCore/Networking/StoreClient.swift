@@ -95,6 +95,29 @@ struct StoreClient: Sendable {
         return data
     }
 
+    /// 앱 동영상을 틀 주소 (이슈 #73).
+    ///
+    /// 서버는 로그인을 확인한 뒤 잠깐 쓰는 스토리지 주소로 넘긴다(302). **넘김을 따라가지
+    /// 않고 그 주소만 받는다.** 따라가면 수십 MB 를 여기서 다 받게 된다. 받은 주소는
+    /// 플레이어에 넘기고, 플레이어가 필요한 구간만 청한다. 토큰을 붙일 필요도 없다.
+    func videoLocation(at url: URL) async throws -> URL {
+        guard Self.sameOrigin(url, server) else {
+            throw ClientError.malformedResponse
+        }
+        var request = URLRequest(url: url)
+        authorize(&request)
+        let (_, response) = try await URLSession.shared.data(for: request, delegate: RedirectStopper())
+        guard let http = response as? HTTPURLResponse else { throw ClientError.malformedResponse }
+        guard http.statusCode != 401 else { throw ClientError.unauthorized }
+        guard (300..<400).contains(http.statusCode),
+              let raw = http.value(forHTTPHeaderField: "Location"),
+              let location = URL(string: raw, relativeTo: url)?.absoluteURL
+        else {
+            throw ClientError.server(status: http.statusCode, reason: nil)
+        }
+        return location
+    }
+
     /// 같은 출처인지. 기본 포트는 적었든 안 적었든 같게 본다 (`https://a` 와 `https://a:443`).
     static func sameOrigin(_ lhs: URL, _ rhs: URL) -> Bool {
         func port(_ url: URL) -> Int? {
@@ -226,5 +249,17 @@ extension StoreClient {
             return nil
         }
         return url
+    }
+}
+
+/// 넘김(3xx)을 따라가지 않는다. 응답의 `Location` 만 필요할 때 쓴다.
+private final class RedirectStopper: NSObject, URLSessionTaskDelegate, Sendable {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest
+    ) async -> URLRequest? {
+        nil
     }
 }

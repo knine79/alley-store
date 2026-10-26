@@ -1,6 +1,7 @@
 import AlleyShared
 import AppKit
 import os
+import UserNotifications
 
 /// 커스텀 스킴 URL 을 Apple Event 로 받는다. 로그인 콜백(ADR-0068)과 앱 공유
 /// 링크(ADR-0072)가 이리로 온다.
@@ -24,10 +25,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         installURLHandler()
+        // 업데이트 알림을 눌러 앱이 켜졌으면 그 응답이 실행 직후에 온다. 그 전에 받을
+        // 자리를 걸어둬야 한다 (이슈 #74).
+        UNUserNotificationCenter.current().delegate = self
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installURLHandler()
+        BackgroundUpdateCheck.clearDeliveredNotice()
     }
 
     private func installURLHandler() {
@@ -92,5 +97,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             log.error("창을 열지 못했습니다 [\(error.localizedDescription, privacy: .public)]")
         }
+    }
+}
+
+/// 백그라운드 확인이 띄운 업데이트 알림을 받는다 (이슈 #74).
+///
+/// 누르면 앱이 켜지고, 켜질 때 하던 확인과 업데이트가 그대로 돈다
+/// (`CatalogView` 의 `checkForUpdatesNow`). 여기서는 창이 보이게만 한다. 앱이 떠 있는데 창을
+/// 닫아둔 채 알림을 누르면 아무것도 보이지 않는다.
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        await Self.showWindowIfNone()
     }
 }

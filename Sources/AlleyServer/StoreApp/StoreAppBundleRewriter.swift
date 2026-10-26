@@ -1,3 +1,4 @@
+import AlleyShared
 import Foundation
 import Vapor
 
@@ -11,6 +12,7 @@ import Vapor
 /// | 번들 이름 (`Alley Store.app`) | zip 항목의 경로를 갈아끼운다 |
 /// | 실행 파일 이름 | 같은 방법. **원본 이름은 `Contents/MacOS/` 에서 찾는다.** 번들 이름과 다르다 |
 /// | `Info.plist` | 설정값으로 새로 쓴다 |
+/// | 업데이트 확인 LaunchAgent plist | 새 번들 ID 와 실행 파일 이름으로 새로 쓴다 (`StoreAppUpdateCheck`) |
 /// | `AppIcon.icns` | 올린 PNG 를 담아 넣는다 (`ICNSWriter`) |
 /// | 임시 서명 | 통째로 버린다. 워커가 진짜 서명을 붙이며 다시 만든다 |
 ///
@@ -85,6 +87,7 @@ enum StoreAppBundleRewriter {
             if entry.name.contains("/_CodeSignature/") { continue }
             // 우리가 새로 쓰는 것들. 원본 것은 버린다.
             if entry.name == "\(source)/Contents/Info.plist" { continue }
+            if entry.name == "\(source)/\(StoreAppUpdateCheck.bundlePath)" { continue }
             if entry.name == "\(source)/Contents/Resources/AppIcon.icns" { continue }
             if Self.isAppleDoubleJunk(entry.name) { continue }
 
@@ -103,6 +106,18 @@ enum StoreAppBundleRewriter {
             ZipArchive.stored(
                 name: "\(destination)/Contents/Info.plist",
                 data: Data(infoPlist(branding).utf8)
+            )
+        )
+
+        // 원본의 것은 베이스 번들의 번들 ID 와 실행 파일 이름을 가리킨다. 그대로 두면
+        // launchd 가 없는 실행 파일을 찾고, 라벨은 다른 조직의 스토어 앱과 겹친다.
+        output.append(
+            ZipArchive.stored(
+                name: "\(destination)/\(StoreAppUpdateCheck.bundlePath)",
+                data: Data(StoreAppUpdateCheck.launchAgentPlist(
+                    bundleID: branding.bundleID,
+                    executable: executableName(for: branding.appName)
+                ).utf8)
             )
         )
 

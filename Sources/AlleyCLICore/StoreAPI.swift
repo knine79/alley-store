@@ -98,6 +98,21 @@ public struct StoreAPI: Sendable {
         return try await perform(request, as: AppDTO.self)
     }
 
+    /// 동영상을 올린다. 있던 것은 갈아끼운다 (이슈 #73). 형식·크기·길이는 서버가 본다.
+    public func setVideo(_ video: Data, ofApp id: UUID) async throws -> AppDTO {
+        var request = authorized(APIPath.appVideo(ofApp: id))
+        request.httpMethod = "PUT"
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.httpBody = video
+        return try await perform(request, as: AppDTO.self)
+    }
+
+    public func removeVideo(ofApp id: UUID) async throws -> AppDTO {
+        var request = authorized(APIPath.appVideo(ofApp: id))
+        request.httpMethod = "DELETE"
+        return try await perform(request, as: AppDTO.self)
+    }
+
     /// 스크린샷 원본. 로그인한 요청에만 내주므로 토큰을 붙여 받는다 (ADR-0071).
     public func screenshot(_ screenshotID: UUID, ofApp id: UUID) async throws -> Data {
         try await load(authorized(APIPath.appScreenshot(id, id: screenshotID))).data
