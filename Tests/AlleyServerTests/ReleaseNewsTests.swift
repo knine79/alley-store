@@ -63,22 +63,40 @@ struct ReleaseNewsMessageTests {
         #expect(headline.hasSuffix(String(repeating: "가", count: 300) + "…"))
     }
 
-    @Test("릴리즈 노트는 다섯 줄까지만 싣는다")
-    func notesCutAtFiveLines() {
-        let notes = (1...7).map { "- 고친 것 \($0)" }.joined(separator: "\n")
-        #expect(ReleaseNews.excerpt(of: notes) == (1...5).map { "- 고친 것 \($0)" }.joined(separator: "\n") + "…")
+    @Test("릴리즈 노트는 열다섯 줄까지만 싣는다")
+    func notesCutAtLineLimit() {
+        let notes = (1...17).map { "- 고친 것 \($0)" }.joined(separator: "\n")
+        #expect(ReleaseNews.excerpt(of: notes) == .init(
+            text: (1...15).map { "- 고친 것 \($0)" }.joined(separator: "\n") + "…",
+            isCut: true
+        ))
     }
 
-    @Test("릴리즈 노트는 300자까지만 싣는다")
+    @Test("릴리즈 노트는 1000자까지만 싣는다")
     func notesCutAtCharacterLimit() throws {
-        let excerpt = try #require(ReleaseNews.excerpt(of: String(repeating: "가", count: 400)))
-        #expect(excerpt.count == ReleaseNews.noteCharacterLimit + 1)
-        #expect(excerpt.hasSuffix("…"))
+        let excerpt = try #require(ReleaseNews.excerpt(of: String(repeating: "가", count: 1200)))
+        #expect(excerpt.text.count == ReleaseNews.noteCharacterLimit + 1)
+        #expect(excerpt.text.hasSuffix("…"))
+        #expect(excerpt.isCut)
+    }
+
+    /// `&` 는 `&amp;` 다섯 자가 된다. 사람이 쓴 길이로 세면 블록이 3000자를 넘는다.
+    @Test("글자 수는 Slack 에 넣을 때 바뀐 길이로 센다")
+    func notesCutByEscapedLength() throws {
+        let excerpt = try #require(ReleaseNews.excerpt(of: String(repeating: "&", count: 1000)))
+        #expect(excerpt.text == String(repeating: "&", count: ReleaseNews.noteCharacterLimit / 5) + "…")
     }
 
     @Test("짧은 릴리즈 노트는 그대로 싣는다")
     func shortNotesUntouched() {
-        #expect(ReleaseNews.excerpt(of: "- 하나\n\n- 둘") == "- 하나\n- 둘")
+        #expect(ReleaseNews.excerpt(of: "- 하나\n\n- 둘") == .init(text: "- 하나\n- 둘", isCut: false))
+    }
+
+    @Test("잘렸으면 링크에 전체 릴리즈 노트가 있다고 적는다")
+    func linkSaysNotesContinue() {
+        let notes = (1...17).map { "- 고친 것 \($0)" }.joined(separator: "\n")
+        #expect(compose(first: false, notes: notes).blocks.last
+            == .section("<https://store.example.com/a/abc|전체 릴리즈 노트는 Alley Store에서 보기>"))
     }
 
     /// 앱 이름의 `<` 가 링크로 읽히면 글이 깨진다.

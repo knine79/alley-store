@@ -13,8 +13,12 @@ import Vapor
 /// 거절해도 채널에 이유를 적고 넘어간다 (`Notifier` 와 같은 규칙).
 enum ReleaseNews {
     /// 릴리즈 노트에서 실을 만큼. 채널은 읽으라고 올리는 곳이지 변경 기록이 아니다.
-    static let noteLineLimit = 5
-    static let noteCharacterLimit = 300
+    ///
+    /// 처음에는 5줄, 300자였다. 항목 서너 개에서 끊겨 무엇이 바뀌었는지 알 수 없다는
+    /// 말을 들었다 (이슈 #76). 글자 수는 Slack 이 바꾼 뒤의 길이로 센다. `&` 하나가
+    /// `&amp;` 다섯 자가 되므로, 사람이 쓴 길이로 세면 블록 한도(3000자)를 넘을 수 있다.
+    static let noteLineLimit = 15
+    static let noteCharacterLimit = 1000
     /// 소개는 한 줄이어야 하지만 길이를 막는 곳이 없다. Slack 블록 하나는 3000자를
     /// 넘으면 통째로 거절된다.
     static let summaryCharacterLimit = 300
@@ -193,22 +197,33 @@ enum ReleaseNews {
             .context("\(store) 출시 소식"),
             .section(headline),
         ]
-        if let notes = excerpt(of: releaseNotes) {
+        let notes = excerpt(of: releaseNotes)
+        if let notes {
             blocks.append(.section(
-                notes.split(separator: "\n", omittingEmptySubsequences: false)
+                notes.text.split(separator: "\n", omittingEmptySubsequences: false)
                     .map { "> \(escaped(String($0)))" }
                     .joined(separator: "\n")
             ))
         }
-        blocks.append(.section("<\(link)|\(store)에서 보기>"))
+        // 잘렸다는 표시가 … 하나뿐이면 나머지가 링크 너머에 있는 줄 모른다.
+        let label = notes?.isCut == true ? "전체 릴리즈 노트는 \(store)에서 보기" : "\(store)에서 보기"
+        blocks.append(.section("<\(link)|\(label)>"))
 
         return Message(text: title, blocks: blocks)
     }
 
+    /// 릴리즈 노트에서 실은 앞부분.
+    struct Excerpt: Equatable, Sendable {
+        var text: String
+        /// 다 싣지 못했는가. 그러면 `text` 끝에 … 가 붙어 있다.
+        var isCut: Bool
+    }
+
     /// 릴리즈 노트 앞부분. 비었으면 nil.
     ///
-    /// 줄 수와 글자 수 중 먼저 닿는 쪽에서 자르고, 잘랐으면 … 를 붙인다.
-    static func excerpt(of notes: String?) -> String? {
+    /// 줄 수와 글자 수 중 먼저 닿는 쪽에서 자르고, 잘랐으면 … 를 붙인다. 글자 수는
+    /// Slack 에 넣을 때 바뀐 길이로 센다 (`noteCharacterLimit`).
+    static func excerpt(of notes: String?) -> Excerpt? {
         guard let notes = notes?.trimmingCharacters(in: .whitespacesAndNewlines),
               !notes.isEmpty
         else { return nil }
@@ -217,13 +232,17 @@ enum ReleaseNews {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         var kept = lines.prefix(noteLineLimit).joined(separator: "\n")
-        var truncated = lines.count > noteLineLimit
-        if kept.count > noteCharacterLimit {
-            kept = String(kept.prefix(noteCharacterLimit))
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            truncated = true
+        var isCut = lines.count > noteLineLimit
+
+        var length = 0
+        if let end = kept.indices.first(where: { index in
+            length += escaped(String(kept[index])).count
+            return length > noteCharacterLimit
+        }) {
+            kept = String(kept[..<end]).trimmingCharacters(in: .whitespacesAndNewlines)
+            isCut = true
         }
-        return truncated ? kept + "…" : kept
+        return Excerpt(text: isCut ? kept + "…" : kept, isCut: isCut)
     }
 
     /// Slack mrkdwn 에서 뜻을 갖는 세 글자를 바꾼다. 앱 이름에 `<` 가 있으면 링크로 읽힌다.
