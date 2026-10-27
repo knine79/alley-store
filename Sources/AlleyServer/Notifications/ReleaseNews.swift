@@ -13,10 +13,14 @@ import Vapor
 /// 거절해도 채널에 이유를 적고 넘어간다 (`Notifier` 와 같은 규칙).
 enum ReleaseNews {
     /// 릴리즈 노트에서 실을 만큼. 채널은 읽으라고 올리는 곳이지 변경 기록이 아니다.
-    static let noteLineLimit = 5
-    static let noteCharacterLimit = 300
+    ///
+    /// 처음에는 5줄, 300자였다. 항목 서너 개에서 끊겨 무엇이 바뀌었는지 알 수 없다는
+    /// 말을 들었다 (이슈 #76). 길이는 `slackLength(of:)` 로 센다. 줄마다 붙는 `> ` 와
+    /// 끝의 … 는 세지 않는다. 열다섯 줄이면 서른한 자라 블록 한도(3000자)까지는 멀다.
+    static let noteLineLimit = 15
+    static let noteCharacterLimit = 1000
     /// 소개는 한 줄이어야 하지만 길이를 막는 곳이 없다. Slack 블록 하나는 3000자를
-    /// 넘으면 통째로 거절된다.
+    /// 넘으면 통째로 거절된다. 길이는 릴리즈 노트와 같이 센다.
     static let summaryCharacterLimit = 300
 
     /// 올릴 글.
@@ -183,32 +187,40 @@ enum ReleaseNews {
 
         var headline = "*\(title)*"
         if let summary = summary?.trimmingCharacters(in: .whitespacesAndNewlines), !summary.isEmpty {
-            let cut = summary.count > summaryCharacterLimit
-                ? String(summary.prefix(summaryCharacterLimit)) + "…"
-                : summary
-            headline += "\n\(escaped(cut))"
+            let cut = prefix(of: summary, slackLength: summaryCharacterLimit)
+            headline += "\n\(escaped(cut.isCut ? cut.text + "…" : cut.text))"
         }
 
         var blocks: [SlackBlock] = [
             .context("\(store) 출시 소식"),
             .section(headline),
         ]
-        if let notes = excerpt(of: releaseNotes) {
+        let notes = excerpt(of: releaseNotes)
+        if let notes {
             blocks.append(.section(
-                notes.split(separator: "\n", omittingEmptySubsequences: false)
+                notes.text.split(separator: "\n", omittingEmptySubsequences: false)
                     .map { "> \(escaped(String($0)))" }
                     .joined(separator: "\n")
             ))
         }
-        blocks.append(.section("<\(link)|\(store)에서 보기>"))
+        // 잘렸다는 표시가 … 하나뿐이면 나머지가 링크 너머에 있는 줄 모른다.
+        let label = notes?.isCut == true ? "전체 릴리즈 노트는 \(store)에서 보기" : "\(store)에서 보기"
+        blocks.append(.section("<\(link)|\(label)>"))
 
         return Message(text: title, blocks: blocks)
+    }
+
+    /// 릴리즈 노트에서 실은 앞부분.
+    struct Excerpt: Equatable, Sendable {
+        var text: String
+        /// 다 싣지 못했는가. 그러면 `text` 끝에 … 가 붙어 있다.
+        var isCut: Bool
     }
 
     /// 릴리즈 노트 앞부분. 비었으면 nil.
     ///
     /// 줄 수와 글자 수 중 먼저 닿는 쪽에서 자르고, 잘랐으면 … 를 붙인다.
-    static func excerpt(of notes: String?) -> String? {
+    static func excerpt(of notes: String?) -> Excerpt? {
         guard let notes = notes?.trimmingCharacters(in: .whitespacesAndNewlines),
               !notes.isEmpty
         else { return nil }
@@ -216,14 +228,32 @@ enum ReleaseNews {
         let lines = notes.split(separator: "\n", omittingEmptySubsequences: true)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        var kept = lines.prefix(noteLineLimit).joined(separator: "\n")
-        var truncated = lines.count > noteLineLimit
-        if kept.count > noteCharacterLimit {
-            kept = String(kept.prefix(noteCharacterLimit))
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            truncated = true
+        let kept = prefix(of: lines.prefix(noteLineLimit).joined(separator: "\n"), slackLength: noteCharacterLimit)
+        let isCut = kept.isCut || lines.count > noteLineLimit
+        return Excerpt(text: isCut ? kept.text + "…" : kept.text, isCut: isCut)
+    }
+
+    /// Slack 에 넣었을 때 `limit` 안에 드는 앞부분. 돌려주는 글은 아직 바꾸기 전이다.
+    static func prefix(of text: String, slackLength limit: Int) -> (text: String, isCut: Bool) {
+        var length = 0
+        guard let end = text.indices.first(where: { index in
+            length += slackLength(of: text[index])
+            return length > limit
+        }) else { return (text, false) }
+        return (String(text[..<end]).trimmingCharacters(in: .whitespacesAndNewlines), true)
+    }
+
+    /// 한 글자가 Slack 블록 한도에서 차지하는 길이.
+    ///
+    /// `escaped(_:)` 가 바꾼 뒤의 길이다. `&` 는 `&amp;` 다섯 자가 된다. 그 밖의 글자는
+    /// UTF-16 단위로 센다. 보이는 글자 하나로 세면 가족 이모지(11)나 macOS 파일 이름에서
+    /// 붙여 넣은 한글(자모가 갈라져 한 글자에 2~3)이 한도를 몇 배로 넘는다.
+    static func slackLength(of character: Character) -> Int {
+        switch character {
+        case "&": 5
+        case "<", ">": 4
+        default: character.utf16.count
         }
-        return truncated ? kept + "…" : kept
     }
 
     /// Slack mrkdwn 에서 뜻을 갖는 세 글자를 바꾼다. 앱 이름에 `<` 가 있으면 링크로 읽힌다.
