@@ -87,6 +87,34 @@ struct ReleaseNewsMessageTests {
         #expect(excerpt.text == String(repeating: "&", count: ReleaseNews.noteCharacterLimit / 5) + "…")
     }
 
+    /// 보이는 글자 하나가 Slack 에서는 여러 자일 수 있다. 가장 나쁜 경우에도 블록이 한도 안이어야 한다.
+    @Test("릴리즈 노트 블록은 가장 긴 글자로 채워도 3000자를 넘지 않는다", arguments: [
+        "👨‍👩‍👧‍👦",
+        "가".decomposedStringWithCanonicalMapping,
+        "&",
+    ])
+    func notesBlockStaysUnderSlackLimit(character: String) throws {
+        let line = String(repeating: character, count: 200)
+        let notes = Array(repeating: line, count: 20).joined(separator: "\n")
+        let blocks = compose(first: false, notes: notes).blocks
+        guard case .section(let section) = blocks[2] else {
+            Issue.record("세 번째 블록이 릴리즈 노트가 아닙니다")
+            return
+        }
+        #expect(section.utf16.count <= 3000)
+        #expect(section.hasSuffix("…"))
+    }
+
+    @Test("소개도 Slack 에 넣을 때 바뀐 길이로 자른다")
+    func summaryCutByEscapedLength() {
+        let message = compose(first: true, summary: String(repeating: "&", count: 300))
+        guard case .section(let headline) = message.blocks[1] else {
+            Issue.record("두 번째 블록이 본문이 아닙니다")
+            return
+        }
+        #expect(headline.hasSuffix("\n" + String(repeating: "&amp;", count: ReleaseNews.summaryCharacterLimit / 5) + "…"))
+    }
+
     @Test("짧은 릴리즈 노트는 그대로 싣는다")
     func shortNotesUntouched() {
         #expect(ReleaseNews.excerpt(of: "- 하나\n\n- 둘") == .init(text: "- 하나\n- 둘", isCut: false))
