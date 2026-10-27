@@ -344,6 +344,9 @@ enum WeeklyDigest {
             var count: Int
         }
 
+        /// 주간인가 월간인가. 기간 말고는 글의 몇 낱말만 가른다. 기본값을 두지 않는다.
+        /// 빠뜨리면 월간 기간에 주간 글이 붙는다.
+        var cadence: Cadence
         var storeName: String
         var periodLabel: String
         var downloads: Int
@@ -366,8 +369,6 @@ enum WeeklyDigest {
         var lowRatedOverflow: Int = 0
         var idle: [Idle] = []
         var idleOverflow: Int = 0
-        /// 주간인가 월간인가. 기간 말고는 글의 몇 낱말만 가른다.
-        var cadence: Cadence = .weekly
 
         /// 소식으로 전할 것이 하나도 없는 기간.
         var isQuiet: Bool {
@@ -415,6 +416,7 @@ enum WeeklyDigest {
             """
         ).first()
         var report = Report(
+            cadence: period.cadence,
             storeName: storeName,
             periodLabel: period.label,
             downloads: try totals?.decode(column: "downloads", as: Int.self) ?? 0,
@@ -422,7 +424,6 @@ enum WeeklyDigest {
             people: try totals?.decode(column: "people", as: Int.self) ?? 0,
             previousPeople: try totals?.decode(column: "previous_people", as: Int.self) ?? 0
         )
-        report.cadence = period.cadence
 
         // 앱별 다운로드. 그 기간과 직전 기간.
         struct PerApp: Decodable { var app_id: UUID; var current: Int; var previous: Int }
@@ -448,7 +449,7 @@ enum WeeklyDigest {
             .filter { $0.count >= period.cadence.surgeMinimum && $0.count >= $0.previous * surgeRatio }
             .sorted { $0.count > $1.count }
 
-        // 출시. 그 주에 나온 버전 중 앱마다 가장 높은 빌드.
+        // 출시. 그 기간에 나온 버전 중 앱마다 가장 높은 빌드.
         struct Released: Decodable { var app_id: UUID; var short_version: String; var build_number: Int }
         let released = try await sql.raw(
             """
@@ -457,7 +458,7 @@ enum WeeklyDigest {
             ORDER BY build_number DESC
             """
         ).all(decoding: Released.self)
-        // 그 주 전에 나온 적이 있는 앱. 출시를 철회하면 출시 시각이 지워져서 알린 시각도 본다.
+        // 그 기간 전에 나온 적이 있는 앱. 출시를 철회하면 출시 시각이 지워져서 알린 시각도 본다.
         struct AppIDRow: Decodable { var app_id: UUID }
         let earlier = Set(try await sql.raw(
             """
@@ -476,7 +477,7 @@ enum WeeklyDigest {
                 report.updatedApps.append(release)
             } else {
                 report.newApps.append(release)
-                // 처음 앱을 낸 개발자: 그 사람의 다른 앱이 그 주 전에 나온 적이 없다.
+                // 처음 앱을 낸 개발자: 그 사람의 다른 앱이 그 기간 전에 나온 적이 없다.
                 let ownerID = app.$owner.id
                 let hasEarlier = byID.values.contains { other in
                     other.$owner.id == ownerID && other.id.map(earlier.contains) == true
@@ -497,9 +498,9 @@ enum WeeklyDigest {
             """
         ).first(decoding: CountRow.self)?.count ?? 0
 
-        // 평균은 누적이다. 한 주 별점만으로는 몇 명 되지 않는다. 피드백은 버전마다
+        // 평균은 누적이다. 그 기간 별점만으로는 몇 명 되지 않는다. 피드백은 버전마다
         // 하나라 한 사람이 여러 번 남길 수 있다. "몇 명" 은 사람을 센다. 다만 "별점이 높은 앱" 은
-        // 그 주에 별점이 새로 들어온 앱 가운데서 고른다. 아니면 같은 앱이 매주 나온다.
+        // 그 기간에 별점이 새로 들어온 앱 가운데서 고른다. 아니면 같은 앱이 매번 나온다.
         struct RatingRow: Decodable { var app_id: UUID; var average: Double; var count: Int; var recent: Int }
         let ratings = try await sql.raw(
             """
@@ -511,7 +512,7 @@ enum WeeklyDigest {
             HAVING COUNT(DISTINCT user_id) >= \(bind: ratingMinimumCount)
             """
         ).all(decoding: RatingRow.self)
-        // 스토어 앱을 먼저 거른 뒤에 고른다. 거꾸로 하면 스토어 앱이 1위인 주에 아무것도 안 나온다.
+        // 스토어 앱을 먼저 거른 뒤에 고른다. 거꾸로 하면 스토어 앱이 1위인 기간에 아무것도 안 나온다.
         report.bestRated = ratings
             .filter { $0.average >= highRating && $0.recent > 0 }
             .sorted { ($0.average, $0.count) > ($1.average, $1.count) }
@@ -524,7 +525,7 @@ enum WeeklyDigest {
         report.lowRated = Array(lowRated.prefix(listLimit))
         report.lowRatedOverflow = max(0, lowRated.count - listLimit)
 
-        // 서명 실패. 그 주에 실패로 끝난 버전을 갈래별로 센다. 한 버전을 세 번 다시 시도해
+        // 서명 실패. 그 기간에 실패로 끝난 버전을 갈래별로 센다. 한 버전을 세 번 다시 시도해
         // 세 번 실패해도 고칠 것은 하나라 한 건이다.
         struct FailureRow: Decodable { var failure_code: String?; var count: Int }
         let failures = try await sql.raw(

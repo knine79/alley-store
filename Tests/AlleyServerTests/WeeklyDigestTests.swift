@@ -76,7 +76,7 @@ struct WeeklyDigestTests {
     @Test("조용한 주에는 한 줄만 보낸다")
     func quietWeek() {
         let messages = WeeklyDigest.compose(
-            .init(storeName: "Alley Store", periodLabel: "10월 5일 ~ 10월 11일",
+            .init(cadence: .weekly, storeName: "Alley Store", periodLabel: "10월 5일 ~ 10월 11일",
                   downloads: 0, previousDownloads: 3, people: 0, previousPeople: 2)
         )
         #expect(messages.newsletter.title == "📰 Alley Store 주간 소식 (10월 5일 ~ 10월 11일)")
@@ -87,7 +87,7 @@ struct WeeklyDigestTests {
     @Test("소식은 항목마다 묶고 증감은 화살표로 적는다")
     func newsletterSections() throws {
         var report = WeeklyDigest.Report(
-            storeName: "Alley Store", periodLabel: "10월 5일 ~ 10월 11일",
+            cadence: .weekly, storeName: "Alley Store", periodLabel: "10월 5일 ~ 10월 11일",
             downloads: 128, previousDownloads: 96, people: 54, previousPeople: 57
         )
         report.newApps = [.init(app: ref("클립보드"), version: "1.0", summary: "기록을 관리합니다")]
@@ -112,7 +112,7 @@ struct WeeklyDigestTests {
     @Test("운영 지표는 따로 한 통으로 보내고 해결되지 않은 실패에 링크를 단다")
     func operationsMessage() throws {
         var report = WeeklyDigest.Report(
-            storeName: "Alley Store", periodLabel: "10월 5일 ~ 10월 11일",
+            cadence: .weekly, storeName: "Alley Store", periodLabel: "10월 5일 ~ 10월 11일",
             downloads: 1, previousDownloads: 1, people: 1, previousPeople: 1
         )
         report.failureCount = 5
@@ -134,19 +134,17 @@ struct WeeklyDigestTests {
     @Test("월간 소식은 기간을 달로 적는다")
     func monthlyWording() throws {
         var quiet = WeeklyDigest.Report(
-            storeName: "Alley Store", periodLabel: "9월",
+            cadence: .monthly, storeName: "Alley Store", periodLabel: "9월",
             downloads: 0, previousDownloads: 0, people: 0, previousPeople: 0
         )
-        quiet.cadence = .monthly
         let quietMessages = WeeklyDigest.compose(quiet)
         #expect(quietMessages.newsletter.title == "📰 Alley Store 월간 소식 (9월)")
         #expect(quietMessages.newsletter.body == "조용한 한 달이었습니다. 새로 나온 앱도 받아간 사람도 없었습니다.")
 
         var report = WeeklyDigest.Report(
-            storeName: "Alley Store", periodLabel: "9월",
+            cadence: .monthly, storeName: "Alley Store", periodLabel: "9월",
             downloads: 120, previousDownloads: 90, people: 40, previousPeople: 42
         )
-        report.cadence = .monthly
         report.surging = [.init(app: ref("메모장"), count: 60, previous: 20)]
         report.idle = [.init(app: ref("계산기"), reason: "90일 넘게 새 버전이 없습니다")]
         let messages = WeeklyDigest.compose(report)
@@ -245,7 +243,7 @@ struct WeeklyDigestTests {
             await WeeklyDigest.run(on: app, now: first.addingTimeInterval(3600), timeZone: Self.seoul, notifier: notifier)
 
             // 월간을 켜지 않은 관리자(기본 꺼짐)는 받지 않는다.
-            #expect(other.notifyMonthlyDigest == false)
+            #expect(try await User.find(try other.requireID(), on: app.db)?.notifyMonthlyDigest == false)
             #expect(dm.endpoints == ["admin@example.com"])
             let message = try #require(dm.messages.first)
             #expect(message.title == "📰 Alley Store 월간 소식 (10월)")
@@ -358,7 +356,7 @@ struct WeeklyDigestTests {
     @Test("사람이 쓴 글의 링크 표시 문자는 지운다")
     func stripsMarkersFromUserText() throws {
         var report = WeeklyDigest.Report(
-            storeName: "Alley Store", periodLabel: "10월 5일 ~ 10월 11일",
+            cadence: .weekly, storeName: "Alley Store", periodLabel: "10월 5일 ~ 10월 11일",
             downloads: 1, previousDownloads: 0, people: 1, previousPeople: 0
         )
         report.newApps = [.init(
@@ -431,11 +429,27 @@ struct WeeklyDigestTests {
         }
     }
 
+    @Test("월간 소식 칸은 이미 있던 사용자에게도 꺼진 채로 붙는다")
+    func monthlyColumnDefaultsToOff() async throws {
+        try await withMigratedApp { app in
+            // 마이그레이션 전에 있던 줄은 모델의 기본값을 거치지 않는다. 열의 기본값이 정한다.
+            struct Row: Decodable { var column_default: String? }
+            let sql = try #require(app.db as? any SQLDatabase)
+            let row = try await sql.raw(
+                """
+                SELECT column_default FROM information_schema.columns
+                WHERE table_name = 'users' AND column_name = 'notify_monthly_digest'
+                """
+            ).first(decoding: Row.self)
+            #expect(row?.column_default == "false")
+        }
+    }
+
     @Test("관리자가 월간 소식을 켜면 저장된다")
     func savesMonthlyChoice() async throws {
         try await withMigratedApp { app in
             let (admin, adminToken) = try await app.makeUser(email: "admin@example.com", role: .admin)
-            #expect(admin.notifyMonthlyDigest == false)
+            #expect(try await User.find(try admin.requireID(), on: app.db)?.notifyMonthlyDigest == false)
 
             try await app.testing().test(
                 .POST, "/me/notifications",
