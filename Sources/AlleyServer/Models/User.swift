@@ -97,6 +97,13 @@ public final class User: Model, @unchecked Sendable {
     @Field(key: "notify_weekly_digest")
     public var notifyWeeklyDigest: Bool
 
+    /// 스토어 월간 소식을 받을지 (이슈 #77, ADR-0081). **관리자에게만 뜻이 있다.**
+    ///
+    /// 기본은 꺼짐이다. 주간과 같은 것을 한 달치로 모은 글이라, 둘 다 켜져 있으면 같은
+    /// 소식을 두 번 읽는다. 주간이 드문드문한 스토어의 관리자가 골라 켠다.
+    @Field(key: "notify_monthly_digest")
+    public var notifyMonthlyDigest: Bool
+
     /// 나에게 오는 알림을 무엇으로 받을지. **여럿 고를 수 있다.**
     ///
     /// **개인이 정한다.** Slack 을 안 쓰는 사람이 있고, 봇 토큰을 받지 못한 스토어도
@@ -145,6 +152,7 @@ public final class User: Model, @unchecked Sendable {
         notifySigningFailure: Bool = true,
         notifyFeedback: Bool = true,
         notifyWeeklyDigest: Bool = true,
+        notifyMonthlyDigest: Bool = false,
         notifyVia: Set<NotificationChannelKind> = [.slackDirectMessage]
     ) {
         self.id = id
@@ -158,6 +166,7 @@ public final class User: Model, @unchecked Sendable {
         self.notifySigningFailure = notifySigningFailure
         self.notifyFeedback = notifyFeedback
         self.notifyWeeklyDigest = notifyWeeklyDigest
+        self.notifyMonthlyDigest = notifyMonthlyDigest
         self.notifyViaName = NotificationChannelKind.personal
             .filter(notifyVia.contains)
             .map(\.rawValue)
@@ -446,6 +455,23 @@ public struct AddWeeklyDigestPreferenceToUser: AsyncMigration {
     public func revert(on database: any Database) async throws {
         try await database.schema(User.schema)
             .deleteField("notify_weekly_digest")
+            .update()
+    }
+}
+
+/// 스토어 월간 소식을 받을지 정하는 칸 (이슈 #77, ADR-0081). 기본은 꺼짐이다.
+public struct AddMonthlyDigestPreferenceToUser: AsyncMigration {
+    public init() {}
+
+    public func prepare(on database: any Database) async throws {
+        try await database.schema(User.schema)
+            .field("notify_monthly_digest", .bool, .required, .sql(.default(false)))
+            .update()
+    }
+
+    public func revert(on database: any Database) async throws {
+        try await database.schema(User.schema)
+            .deleteField("notify_monthly_digest")
             .update()
     }
 }

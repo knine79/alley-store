@@ -59,9 +59,10 @@ public func configure(_ app: Application, config: AppConfig) async throws {
             await UserTokenExpiryNotice.run(on: application)
         }
     )
-    // 관리자에게 스토어 주간 소식을 보낸다 (ADR-0076). 한 시간마다 보낼 때가 됐는지 본다.
+    // 관리자에게 스토어 주간·월간 소식을 보낸다 (ADR-0076, ADR-0081). 한 시간마다 보낼
+    // 때가 됐는지 본다.
     app.lifecycle.use(
-        PeriodicSweep(name: "스토어 주간 소식", interval: WeeklyDigest.checkInterval) { application in
+        PeriodicSweep(name: "스토어 소식", interval: WeeklyDigest.checkInterval) { application in
             await WeeklyDigest.run(on: application)
         }
     )
@@ -216,6 +217,7 @@ private func configureMigrations(_ app: Application) {
 
     // 앱 상세에 동영상을 둔다 (이슈 #73, ADR-0079).
     app.migrations.add(AddAppVideo())
+    app.migrations.add(AddMonthlyDigestPreferenceToUser())
 }
 
 /// 미들웨어 스택.

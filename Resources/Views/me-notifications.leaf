@@ -69,6 +69,16 @@
                     </span>
                 </span>
             </label>
+            <label class="choice">
+                <input type="checkbox" name="monthlyDigest" #if(monthlyDigest):checked#endif>
+                <span>
+                    <span class="choice-name">스토어 월간 소식</span>
+                    <span class="choice-note">
+                        매달 1일 아침, 지난달의 스토어 소식과 운영 지표를 보냅니다.
+                        스토어 관리자에게만 갑니다.
+                    </span>
+                </span>
+            </label>
             #endif
 
             <!-- **끌 수 없는 것도 같은 목록에 세운다.** 체크박스 둘만 있으면 그것이
