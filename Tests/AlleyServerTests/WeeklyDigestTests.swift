@@ -8,8 +8,8 @@ import VaporTesting
 
 @testable import AlleyServer
 
-/// 스토어 주간 소식 (이슈 #65, ADR-0076).
-@Suite("스토어 주간 소식")
+/// 스토어 주간·월간 소식 (이슈 #65, #77, ADR-0076, ADR-0081).
+@Suite("스토어 주간·월간 소식")
 struct WeeklyDigestTests {
     private static let seoul = TimeZone(identifier: "Asia/Seoul")!
 
@@ -39,6 +39,34 @@ struct WeeklyDigestTests {
         #expect(WeeklyDigest.dueWeek(at: Self.at(2026, 10, 14, 10, 30), in: Self.seoul) == nil)
     }
 
+    @Test("매달 1일 오전 10시가 지나면 지난달을 묶는다")
+    func dueOnFirstOfMonth() throws {
+        let month = try #require(WeeklyDigest.dueMonth(at: Self.at(2026, 11, 1, 10, 30), in: Self.seoul))
+        #expect(month.cadence == .monthly)
+        #expect(month.start == Self.at(2026, 10, 1, 0))
+        #expect(month.end == Self.at(2026, 11, 1, 0))
+        #expect(month.previousStart == Self.at(2026, 9, 1, 0))
+        #expect(month.key == "2026-10")
+        #expect(month.label == "10월")
+    }
+
+    @Test("월간도 보낼 때 전이거나 하루가 지났으면 보내지 않는다")
+    func monthNotDueOutsideWindow() {
+        #expect(WeeklyDigest.dueMonth(at: Self.at(2026, 11, 1, 9, 59), in: Self.seoul) == nil)
+        #expect(WeeklyDigest.dueMonth(at: Self.at(2026, 11, 2, 10, 1), in: Self.seoul) == nil)
+        #expect(WeeklyDigest.dueMonth(at: Self.at(2026, 10, 31, 10, 30), in: Self.seoul) == nil)
+    }
+
+    /// 1월 1일에는 지난해 12월을 묶는다.
+    @Test("해가 바뀌는 달도 지난달을 묶는다")
+    func monthAcrossYear() throws {
+        let month = try #require(WeeklyDigest.dueMonth(at: Self.at(2027, 1, 1, 10, 30), in: Self.seoul))
+        #expect(month.start == Self.at(2026, 12, 1, 0))
+        #expect(month.previousStart == Self.at(2026, 11, 1, 0))
+        #expect(month.key == "2026-12")
+        #expect(month.label == "12월")
+    }
+
     // MARK: - 글
 
     private func ref(_ name: String) -> WeeklyDigest.Report.AppRef {
@@ -48,7 +76,7 @@ struct WeeklyDigestTests {
     @Test("조용한 주에는 한 줄만 보낸다")
     func quietWeek() {
         let messages = WeeklyDigest.compose(
-            .init(storeName: "Alley Store", weekLabel: "10월 5일 ~ 10월 11일",
+            .init(storeName: "Alley Store", periodLabel: "10월 5일 ~ 10월 11일",
                   downloads: 0, previousDownloads: 3, people: 0, previousPeople: 2)
         )
         #expect(messages.newsletter.title == "📰 Alley Store 주간 소식 (10월 5일 ~ 10월 11일)")
@@ -59,7 +87,7 @@ struct WeeklyDigestTests {
     @Test("소식은 항목마다 묶고 증감은 화살표로 적는다")
     func newsletterSections() throws {
         var report = WeeklyDigest.Report(
-            storeName: "Alley Store", weekLabel: "10월 5일 ~ 10월 11일",
+            storeName: "Alley Store", periodLabel: "10월 5일 ~ 10월 11일",
             downloads: 128, previousDownloads: 96, people: 54, previousPeople: 57
         )
         report.newApps = [.init(app: ref("클립보드"), version: "1.0", summary: "기록을 관리합니다")]
@@ -84,7 +112,7 @@ struct WeeklyDigestTests {
     @Test("운영 지표는 따로 한 통으로 보내고 해결되지 않은 실패에 링크를 단다")
     func operationsMessage() throws {
         var report = WeeklyDigest.Report(
-            storeName: "Alley Store", weekLabel: "10월 5일 ~ 10월 11일",
+            storeName: "Alley Store", periodLabel: "10월 5일 ~ 10월 11일",
             downloads: 1, previousDownloads: 1, people: 1, previousPeople: 1
         )
         report.failureCount = 5
@@ -101,6 +129,31 @@ struct WeeklyDigestTests {
         #expect(body.contains("아직 해결되지 않은 것:\n• <https://store.example.com/a/기록기|기록기> 2.4 (51) - entitlements 문제"))
         #expect(body.contains("*👎 별점이 낮은 앱*\n• <https://store.example.com/a/레거시|레거시> ★2.1 (7명)"))
         #expect(body.contains("*💤 쉬고 있는 앱*\n• <https://store.example.com/a/계산기|계산기> - 90일 넘게 새 버전이 없습니다"))
+    }
+
+    @Test("월간 소식은 기간을 달로 적는다")
+    func monthlyWording() throws {
+        var quiet = WeeklyDigest.Report(
+            storeName: "Alley Store", periodLabel: "9월",
+            downloads: 0, previousDownloads: 0, people: 0, previousPeople: 0
+        )
+        quiet.cadence = .monthly
+        let quietMessages = WeeklyDigest.compose(quiet)
+        #expect(quietMessages.newsletter.title == "📰 Alley Store 월간 소식 (9월)")
+        #expect(quietMessages.newsletter.body == "조용한 한 달이었습니다. 새로 나온 앱도 받아간 사람도 없었습니다.")
+
+        var report = WeeklyDigest.Report(
+            storeName: "Alley Store", periodLabel: "9월",
+            downloads: 120, previousDownloads: 90, people: 40, previousPeople: 42
+        )
+        report.cadence = .monthly
+        report.surging = [.init(app: ref("메모장"), count: 60, previous: 20)]
+        report.idle = [.init(app: ref("계산기"), reason: "90일 넘게 새 버전이 없습니다")]
+        let messages = WeeklyDigest.compose(report)
+        let body = NotificationMarkup.mrkdwn(try #require(messages.newsletter.body))
+        #expect(body.contains("*📊 이번 달 숫자*\n다운로드 120회 ▲30 · 받아간 사람 40명 ▼2"))
+        #expect(body.contains("60회 (지난달 20회의 3배)"))
+        #expect(messages.operations?.title == "🛠 Alley Store 월간 운영 지표 (9월)")
     }
 
     @Test("메일에서는 링크가 글 뒤에 주소로 붙는다")
@@ -173,6 +226,51 @@ struct WeeklyDigestTests {
             await WeeklyDigest.run(on: app, now: Self.at(2026, 10, 12, 10, 30), timeZone: Self.seoul, notifier: notifier)
 
             #expect(dm.messages.isEmpty)
+        }
+    }
+
+    @Test("월간 소식은 켠 관리자에게만 매달 한 번 보낸다")
+    func sendsMonthlyOnlyToOptedIn() async throws {
+        try await withMigratedApp { app in
+            let fixture = try await seed(on: app)
+            let (other, _) = try await app.makeUser(email: "other@example.com", role: .admin)
+            fixture.admin.notifyMonthlyDigest = true
+            try await fixture.admin.save(on: app.db)
+            let dm = RecordingChannel(kind: .slackDirectMessage)
+            let notifier = Notifier(database: app.db, channels: [dm], logger: app.logger)
+            // 2026년 11월 1일은 일요일이라 주간은 가지 않는다.
+            let first = Self.at(2026, 11, 1, 10, 30)
+
+            await WeeklyDigest.run(on: app, now: first, timeZone: Self.seoul, notifier: notifier)
+            await WeeklyDigest.run(on: app, now: first.addingTimeInterval(3600), timeZone: Self.seoul, notifier: notifier)
+
+            // 월간을 켜지 않은 관리자(기본 꺼짐)는 받지 않는다.
+            #expect(other.notifyMonthlyDigest == false)
+            #expect(dm.endpoints == ["admin@example.com"])
+            let message = try #require(dm.messages.first)
+            #expect(message.title == "📰 Alley Store 월간 소식 (10월)")
+            let body = NotificationMarkup.plain(try #require(message.body))
+            #expect(body.contains("다운로드 3회 ▲3 · 받아간 사람 1명 ▲1"))
+            #expect(body.contains("👋 처음 앱을 낸 개발자\n• 홍길동 - 클립보드"))
+        }
+    }
+
+    /// 2026년 6월 1일은 월요일이다. 차지하는 이름이 달라 서로 막지 않는다.
+    @Test("1일이 월요일이면 주간과 월간이 따로 간다")
+    func weeklyAndMonthlyOnSameDay() async throws {
+        try await withMigratedApp { app in
+            let fixture = try await seed(on: app)
+            fixture.admin.notifyMonthlyDigest = true
+            try await fixture.admin.save(on: app.db)
+            let dm = RecordingChannel(kind: .slackDirectMessage)
+            let notifier = Notifier(database: app.db, channels: [dm], logger: app.logger)
+
+            await WeeklyDigest.run(on: app, now: Self.at(2026, 6, 1, 10, 30), timeZone: Self.seoul, notifier: notifier)
+
+            #expect(dm.messages.map(\.title) == [
+                "📰 Alley Store 주간 소식 (5월 25일 ~ 5월 31일)",
+                "📰 Alley Store 월간 소식 (5월)",
+            ])
         }
     }
 
@@ -260,7 +358,7 @@ struct WeeklyDigestTests {
     @Test("사람이 쓴 글의 링크 표시 문자는 지운다")
     func stripsMarkersFromUserText() throws {
         var report = WeeklyDigest.Report(
-            storeName: "Alley Store", weekLabel: "10월 5일 ~ 10월 11일",
+            storeName: "Alley Store", periodLabel: "10월 5일 ~ 10월 11일",
             downloads: 1, previousDownloads: 0, people: 1, previousPeople: 0
         )
         report.newApps = [.init(
@@ -305,9 +403,11 @@ struct WeeklyDigestTests {
 
             try await app.testing().test(.GET, "/me/notifications", headers: .sessionCookie(adminToken)) {
                 #expect($0.body.string.contains("스토어 주간 소식"))
+                #expect($0.body.string.contains("스토어 월간 소식"))
             }
             try await app.testing().test(.GET, "/me/notifications", headers: .sessionCookie(devToken)) {
                 #expect(!$0.body.string.contains("스토어 주간 소식"))
+                #expect(!$0.body.string.contains("스토어 월간 소식"))
             }
         }
     }
@@ -328,6 +428,24 @@ struct WeeklyDigestTests {
 
             #expect(try await User.find(try admin.requireID(), on: app.db)?.notifyWeeklyDigest == false)
             #expect(try await User.find(try developer.requireID(), on: app.db)?.notifyWeeklyDigest == true)
+        }
+    }
+
+    @Test("관리자가 월간 소식을 켜면 저장된다")
+    func savesMonthlyChoice() async throws {
+        try await withMigratedApp { app in
+            let (admin, adminToken) = try await app.makeUser(email: "admin@example.com", role: .admin)
+            #expect(admin.notifyMonthlyDigest == false)
+
+            try await app.testing().test(
+                .POST, "/me/notifications",
+                headers: .form(cookie: adminToken),
+                beforeRequest: { try $0.content.encode(["monthlyDigest": "on"], as: .urlEncodedForm) }
+            ) { #expect($0.status == .ok) }
+
+            let saved = try #require(try await User.find(try admin.requireID(), on: app.db))
+            #expect(saved.notifyMonthlyDigest == true)
+            #expect(saved.notifyWeeklyDigest == false)
         }
     }
 }

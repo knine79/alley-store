@@ -4,7 +4,10 @@ import Foundation
 import SQLKit
 import Vapor
 
-/// 지난 한 주의 스토어 소식을 모아 관리자에게 보낸다 (이슈 #65, ADR-0076).
+/// 지난 한 주(또는 한 달)의 스토어 소식을 모아 관리자에게 보낸다 (이슈 #65, ADR-0076).
+///
+/// 월간은 같은 글을 한 달치로 묶은 것이다 (이슈 #77, ADR-0081). 모으는 것도 쓰는 것도
+/// 같고, 기간과 몇 낱말만 다르다. 관리자마다 주간과 월간을 따로 켠다.
 ///
 /// **두 통으로 나눠 보낸다.** 하나는 공용 채널에 그대로 옮겨 붙일 소식이고, 하나는
 /// 관리자만 볼 운영 지표다. 한 통에 섞으면 옮길 때마다 운영 지표를 지워야 하고, 한 번
@@ -13,10 +16,10 @@ import Vapor
 /// 스토어가 공용 채널에 직접 올리지 않는다. 사람이 한 번 보고 다듬어 전하는 편이
 /// 숫자만 늘어놓은 봇 글보다 읽힌다.
 enum WeeklyDigest {
-    /// 얼마나 자주 볼지. 보낼 때(월요일 오전 10시)를 놓치지 않을 만큼만.
+    /// 얼마나 자주 볼지. 보낼 때(월요일, 매달 1일 오전 10시)를 놓치지 않을 만큼만.
     static let checkInterval: Duration = .seconds(3600)
 
-    /// 월요일 몇 시에 보낼지. 서버 시간대 기준이다.
+    /// 월요일(월간은 1일) 몇 시에 보낼지. 서버 시간대 기준이다.
     static let sendHour = 10
     /// 보낼 때를 지나 이만큼 안에서만 보낸다. 서버가 그 사이 내내 꺼져 있었으면 그
     /// 주는 건너뛴다. 수요일에 지난주 소식이 오면 소식이 아니다.
@@ -26,9 +29,7 @@ enum WeeklyDigest {
 
     /// 많이 받은 앱을 몇 개까지 싣나.
     static let topCount = 3
-    /// 갑자기 많이 받은 앱: 그 주에 이만큼 이상이면서
-    static let surgeMinimum = 10
-    /// 지난주의 이 배 이상.
+    /// 갑자기 많이 받은 앱: 그 기간에 `Cadence.surgeMinimum` 이상이면서 직전 기간의 이 배 이상.
     static let surgeRatio = 2
     /// 별점 평균을 믿으려면 몇 명은 남겨야 한다.
     static let ratingMinimumCount = 3
@@ -42,9 +43,73 @@ enum WeeklyDigest {
     /// 스토어에서 쉬고 있는 앱이 첫 주부터 수백 줄이 되면 아무도 읽지 않는다.
     static let listLimit = 10
 
+    // MARK: - 주기
+
+    /// 소식을 묶는 주기. 관리자마다 따로 켠다 (`User.notifyWeeklyDigest`, `notifyMonthlyDigest`).
+    enum Cadence: CaseIterable, Equatable, Sendable {
+        case weekly
+        case monthly
+
+        /// 제목에 들어가는 이름.
+        var name: String {
+            switch self {
+            case .weekly: "주간"
+            case .monthly: "월간"
+            }
+        }
+
+        /// 묶은 기간을 가리키는 말.
+        var current: String {
+            switch self {
+            case .weekly: "이번 주"
+            case .monthly: "이번 달"
+            }
+        }
+
+        /// 견주는 직전 기간을 가리키는 말.
+        var previous: String {
+            switch self {
+            case .weekly: "지난주"
+            case .monthly: "지난달"
+            }
+        }
+
+        /// 전할 것이 없는 기간의 첫 문장. 받침에 따라 "였"과 "이었"이 갈려서 통째로 둔다.
+        var quietOpening: String {
+            switch self {
+            case .weekly: "조용한 한 주였습니다."
+            case .monthly: "조용한 한 달이었습니다."
+            }
+        }
+
+        /// 갑자기 많이 받은 앱으로 치려면 그 기간에 몇 번 이상 받아야 하나. 월간은 주간의
+        /// 네 배다. 한 달은 네 주가 조금 넘는다.
+        var surgeMinimum: Int {
+            switch self {
+            case .weekly: 10
+            case .monthly: 40
+            }
+        }
+
+        /// 이 주기를 켠 관리자.
+        func recipients(on database: any Database) async throws -> [User] {
+            let query = User.query(on: database)
+                .filter(\.$role == .admin)
+                .filter(\.$deactivatedAt == nil)
+            switch self {
+            case .weekly: query.filter(\.$notifyWeeklyDigest == true)
+            case .monthly: query.filter(\.$notifyMonthlyDigest == true)
+            }
+            return try await query.all()
+        }
+    }
+
     // MARK: - 돌리기
 
-    /// 보낼 때가 됐으면 한 주를 모아 보낸다. 이미 보낸 주는 다시 보내지 않는다.
+    /// 보낼 때가 된 주기마다 그 기간을 모아 보낸다. 이미 보낸 기간은 다시 보내지 않는다.
+    ///
+    /// 매달 1일이 월요일이면 주간과 월간이 같은 시간에 따로 간다. 둘을 켠 관리자는 두 통을
+    /// 받는다. 켠 사람이 고른 것이다.
     ///
     /// `notifier` 와 `timeZone` 은 시험이 넣는다.
     static func run(
@@ -53,33 +118,38 @@ enum WeeklyDigest {
         timeZone: TimeZone = .current,
         notifier: Notifier? = nil
     ) async {
-        guard let week = dueWeek(at: now, in: timeZone) else { return }
+        for cadence in Cadence.allCases {
+            guard let period = due(cadence, at: now, in: timeZone) else { continue }
+            await send(period, on: application, now: now, notifier: notifier)
+        }
+    }
+
+    private static func send(
+        _ period: Period, on application: Application, now: Date, notifier: Notifier?
+    ) async {
+        let name = period.cadence.name
         let database = application.db
         let logger = application.logger
 
-        // **먼저 차지한다.** 서버가 여러 대이거나 다시 떠도 한 주에 한 번만 간다.
-        guard await claim(week, on: database, logger: logger) else { return }
+        // **먼저 차지한다.** 서버가 여러 대이거나 다시 떠도 한 기간에 한 번만 간다.
+        guard await claim(period, on: database, logger: logger) else { return }
 
         let report: Report
         do {
-            report = try await gather(week, now: now, on: database, baseURL: application.alleyConfig.publicBaseURL)
+            report = try await gather(period, now: now, on: database, baseURL: application.alleyConfig.publicBaseURL)
         } catch {
-            logger.error("주간 소식을 모으지 못했습니다: \(error)")
+            logger.error("\(name) 소식을 모으지 못했습니다: \(error)")
             // 모으지 못했으면 보낸 것으로 치지 않는다. 다음 시간에 다시 해본다.
-            await unclaim(week, on: database, logger: logger)
+            await unclaim(period, on: database, logger: logger)
             return
         }
 
         let recipients: [User]
         do {
-            recipients = try await User.query(on: database)
-                .filter(\.$role == .admin)
-                .filter(\.$deactivatedAt == nil)
-                .filter(\.$notifyWeeklyDigest == true)
-                .all()
+            recipients = try await period.cadence.recipients(on: database)
         } catch {
-            logger.error("주간 소식을 받을 관리자를 읽지 못했습니다: \(error)")
-            await unclaim(week, on: database, logger: logger)
+            logger.error("\(name) 소식을 받을 관리자를 읽지 못했습니다: \(error)")
+            await unclaim(period, on: database, logger: logger)
             return
         }
 
@@ -99,101 +169,142 @@ enum WeeklyDigest {
         // 있다. 내려놓으면 다음 시간에 다시 해본다(보낼 때부터 하루 안에서만). 한 사람에게라도
         // 갔으면 그대로 둔다. 다시 보내면 받은 사람에게 두 번 간다.
         if delivered == 0, !recipients.isEmpty {
-            logger.warning("주간 소식이 아무 관리자에게도 닿지 않았습니다. 다음 시간에 다시 보냅니다 [\(week.label)]")
-            await unclaim(week, on: database, logger: logger)
+            logger.warning("\(name) 소식이 아무 관리자에게도 닿지 않았습니다. 다음 시간에 다시 보냅니다 [\(period.label)]")
+            await unclaim(period, on: database, logger: logger)
             return
         }
-        logger.notice("스토어 주간 소식 [\(week.label), 받은 관리자 \(delivered)/\(recipients.count)명]")
+        logger.notice("스토어 \(name) 소식 [\(period.label), 받은 관리자 \(delivered)/\(recipients.count)명]")
     }
 
     // MARK: - 언제
 
-    /// 묶을 한 주. 월요일 0시부터 다음 월요일 0시 전까지다.
-    struct Week: Equatable {
+    /// 묶을 기간. 주간은 월요일 0시부터 다음 월요일 0시 전까지, 월간은 1일 0시부터 다음
+    /// 달 1일 0시 전까지다.
+    struct Period: Equatable {
+        var cadence: Cadence
         var start: Date
         var end: Date
-        /// 지난주. 증감을 견줄 때 쓴다.
+        /// 직전 기간의 시작. 증감을 견줄 때 쓴다. 직전 기간은 여기서 `start` 전까지다.
         var previousStart: Date
-        /// 차지할 때 쓰는 이름. 그 주 월요일의 날짜다.
+        /// 차지할 때 쓰는 이름. 주간은 그 주 월요일(`2026-10-05`), 월간은 그 달(`2026-09`)이라
+        /// 한 테이블에 함께 적어도 겹치지 않는다.
         var key: String
-        /// 사람이 읽는 기간. `10월 5일 ~ 10월 11일`
+        /// 사람이 읽는 기간. 주간은 `10월 5일 ~ 10월 11일`, 월간은 `9월`.
         var label: String
     }
 
+    /// 지금 보낼 그 주기의 기간. 보낼 때가 아니면 nil.
+    static func due(_ cadence: Cadence, at now: Date, in timeZone: TimeZone) -> Period? {
+        switch cadence {
+        case .weekly: dueWeek(at: now, in: timeZone)
+        case .monthly: dueMonth(at: now, in: timeZone)
+        }
+    }
+
     /// 지금 보낼 주. 보낼 때가 아니면 nil.
-    static func dueWeek(at now: Date, in timeZone: TimeZone) -> Week? {
-        var calendar = Calendar(identifier: .iso8601)
-        calendar.timeZone = timeZone
+    static func dueWeek(at now: Date, in timeZone: TimeZone) -> Period? {
+        let calendar = calendar(in: timeZone)
         guard let thisMonday = calendar.dateInterval(of: .weekOfYear, for: now)?.start,
-              // 경과 시간으로 더하지 않는다. 그 사이 서머타임이 바뀌면 9시나 11시가 된다.
-              let sendAt = calendar.date(bySettingHour: sendHour, minute: 0, second: 0, of: thisMonday),
-              now >= sendAt, now.timeIntervalSince(sendAt) < sendWindow,
+              isSendTime(on: thisMonday, now: now, calendar: calendar),
               let start = calendar.date(byAdding: .day, value: -7, to: thisMonday),
               let previousStart = calendar.date(byAdding: .day, value: -14, to: thisMonday),
               let lastDay = calendar.date(byAdding: .day, value: -1, to: thisMonday)
         else { return nil }
 
-        let keyFormat = DateFormatter()
-        keyFormat.calendar = calendar
-        keyFormat.timeZone = timeZone
-        keyFormat.locale = Locale(identifier: "en_US_POSIX")
-        keyFormat.dateFormat = "yyyy-MM-dd"
-
-        let dayFormat = DateFormatter()
-        dayFormat.calendar = calendar
-        dayFormat.timeZone = timeZone
-        dayFormat.locale = Locale(identifier: "ko_KR")
-        dayFormat.dateFormat = "M월 d일"
-
-        return Week(
+        let day = format("M월 d일", calendar: calendar)
+        return Period(
+            cadence: .weekly,
             start: start,
             end: thisMonday,
             previousStart: previousStart,
-            key: keyFormat.string(from: start),
-            label: "\(dayFormat.string(from: start)) ~ \(dayFormat.string(from: lastDay))"
+            key: format("yyyy-MM-dd", calendar: calendar, locale: "en_US_POSIX").string(from: start),
+            label: "\(day.string(from: start)) ~ \(day.string(from: lastDay))"
         )
     }
 
-    /// 그 주를 차지한다. 다른 서버가 먼저 차지했으면 false.
+    /// 지금 보낼 달. 매달 1일 보낼 때가 지나면 지난달이다. 아니면 nil.
+    static func dueMonth(at now: Date, in timeZone: TimeZone) -> Period? {
+        let calendar = calendar(in: timeZone)
+        guard let thisMonth = calendar.dateInterval(of: .month, for: now)?.start,
+              isSendTime(on: thisMonth, now: now, calendar: calendar),
+              let start = calendar.date(byAdding: .month, value: -1, to: thisMonth),
+              let previousStart = calendar.date(byAdding: .month, value: -2, to: thisMonth)
+        else { return nil }
+
+        return Period(
+            cadence: .monthly,
+            start: start,
+            end: thisMonth,
+            previousStart: previousStart,
+            key: format("yyyy-MM", calendar: calendar, locale: "en_US_POSIX").string(from: start),
+            label: format("M월", calendar: calendar).string(from: start)
+        )
+    }
+
+    /// 지금이 그날 보낼 때부터 `sendWindow` 안인가.
+    private static func isSendTime(on day: Date, now: Date, calendar: Calendar) -> Bool {
+        // 경과 시간으로 더하지 않는다. 그 사이 서머타임이 바뀌면 9시나 11시가 된다.
+        guard let sendAt = calendar.date(bySettingHour: sendHour, minute: 0, second: 0, of: day) else {
+            return false
+        }
+        return now >= sendAt && now.timeIntervalSince(sendAt) < sendWindow
+    }
+
+    private static func calendar(in timeZone: TimeZone) -> Calendar {
+        var calendar = Calendar(identifier: .iso8601)
+        calendar.timeZone = timeZone
+        return calendar
+    }
+
+    private static func format(_ pattern: String, calendar: Calendar, locale: String = "ko_KR") -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = Locale(identifier: locale)
+        formatter.dateFormat = pattern
+        return formatter
+    }
+
+    /// 그 기간을 차지한다. 다른 서버가 먼저 차지했으면 false.
     ///
     /// 데이터베이스 오류는 "이미 보냄" 과 다르다. 로그에 남겨야 테이블이 없다는 것 같은
     /// 일을 알아챈다.
-    private static func claim(_ week: Week, on database: any Database, logger: Logger) async -> Bool {
+    private static func claim(_ period: Period, on database: any Database, logger: Logger) async -> Bool {
         guard let sql = database as? any SQLDatabase else {
-            logger.error("주간 소식은 SQL 데이터베이스가 있어야 보냅니다. 보내지 않습니다.")
+            logger.error("스토어 소식은 SQL 데이터베이스가 있어야 보냅니다. 보내지 않습니다.")
             return false
         }
         do {
             let rows = try await sql.raw(
                 """
                 INSERT INTO \(ident: CreateWeeklyDigestRun.schema) (week, sent_at)
-                VALUES (\(bind: week.key), now())
+                VALUES (\(bind: period.key), now())
                 ON CONFLICT (week) DO NOTHING
                 RETURNING week
                 """
             ).all()
             return !rows.isEmpty
         } catch {
-            logger.error("주간 소식을 보낼 주를 적지 못했습니다 [\(week.key)]: \(error)")
+            logger.error("\(period.cadence.name) 소식을 보낼 기간을 적지 못했습니다 [\(period.key)]: \(error)")
             return false
         }
     }
 
-    /// 차지한 것을 내려놓는다. 못 내려놓으면 그 주는 보내지 않은 채로 남는다.
-    private static func unclaim(_ week: Week, on database: any Database, logger: Logger) async {
+    /// 차지한 것을 내려놓는다. 못 내려놓으면 그 기간은 보내지 않은 채로 남는다.
+    private static func unclaim(_ period: Period, on database: any Database, logger: Logger) async {
         guard let sql = database as? any SQLDatabase else { return }
         do {
             try await sql.raw(
-                "DELETE FROM \(ident: CreateWeeklyDigestRun.schema) WHERE week = \(bind: week.key)"
+                "DELETE FROM \(ident: CreateWeeklyDigestRun.schema) WHERE week = \(bind: period.key)"
             ).run()
         } catch {
-            logger.error("주간 소식 기록을 지우지 못했습니다. 이 주는 가지 않습니다 [\(week.key)]: \(error)")
+            logger.error("\(period.cadence.name) 소식 기록을 지우지 못했습니다. 이 기간은 가지 않습니다 [\(period.key)]: \(error)")
         }
     }
 
     // MARK: - 모으기
 
-    /// 한 주에 일어난 일. 글을 쓰는 쪽(`compose`)은 데이터베이스를 모른다.
+    /// 그 기간에 일어난 일. 글을 쓰는 쪽(`compose`)은 데이터베이스를 모른다.
     struct Report: Equatable {
         struct AppRef: Equatable {
             var name: String
@@ -234,7 +345,7 @@ enum WeeklyDigest {
         }
 
         var storeName: String
-        var weekLabel: String
+        var periodLabel: String
         var downloads: Int
         var previousDownloads: Int
         var people: Int
@@ -255,8 +366,10 @@ enum WeeklyDigest {
         var lowRatedOverflow: Int = 0
         var idle: [Idle] = []
         var idleOverflow: Int = 0
+        /// 주간인가 월간인가. 기간 말고는 글의 몇 낱말만 가른다.
+        var cadence: Cadence = .weekly
 
-        /// 소식으로 전할 것이 하나도 없는 주.
+        /// 소식으로 전할 것이 하나도 없는 기간.
         var isQuiet: Bool {
             downloads == 0 && newApps.isEmpty && updatedApps.isEmpty && feedbackCount == 0
         }
@@ -267,10 +380,10 @@ enum WeeklyDigest {
     }
 
     static func gather(
-        _ week: Week, now: Date, on database: any Database, baseURL: String
+        _ period: Period, now: Date, on database: any Database, baseURL: String
     ) async throws -> Report {
         guard let sql = database as? any SQLDatabase else {
-            throw Abort(.internalServerError, reason: "주간 소식은 SQL 데이터베이스가 있어야 모읍니다.")
+            throw Abort(.internalServerError, reason: "스토어 소식은 SQL 데이터베이스가 있어야 모읍니다.")
         }
         let base = baseURL.trimmingSuffix("/")
         // 스토어 앱은 모든 항목에서 뺀다. 스스로 업데이트하는 앱이라 소식이 아니다.
@@ -293,32 +406,33 @@ enum WeeklyDigest {
         let totals = try await sql.raw(
             """
             SELECT
-              COUNT(d.id) FILTER (WHERE d.created_at >= \(bind: week.start) AND d.created_at < \(bind: week.end)) AS downloads,
-              COUNT(DISTINCT d.user_id) FILTER (WHERE d.created_at >= \(bind: week.start) AND d.created_at < \(bind: week.end)) AS people,
-              COUNT(d.id) FILTER (WHERE d.created_at >= \(bind: week.previousStart) AND d.created_at < \(bind: week.start)) AS previous_downloads,
-              COUNT(DISTINCT d.user_id) FILTER (WHERE d.created_at >= \(bind: week.previousStart) AND d.created_at < \(bind: week.start)) AS previous_people
+              COUNT(d.id) FILTER (WHERE d.created_at >= \(bind: period.start) AND d.created_at < \(bind: period.end)) AS downloads,
+              COUNT(DISTINCT d.user_id) FILTER (WHERE d.created_at >= \(bind: period.start) AND d.created_at < \(bind: period.end)) AS people,
+              COUNT(d.id) FILTER (WHERE d.created_at >= \(bind: period.previousStart) AND d.created_at < \(bind: period.start)) AS previous_downloads,
+              COUNT(DISTINCT d.user_id) FILTER (WHERE d.created_at >= \(bind: period.previousStart) AND d.created_at < \(bind: period.start)) AS previous_people
             FROM downloads d JOIN versions v ON v.id = d.version_id
             WHERE \(bind: storeAppID)::uuid IS NULL OR v.app_id <> \(bind: storeAppID)
             """
         ).first()
         var report = Report(
             storeName: storeName,
-            weekLabel: week.label,
+            periodLabel: period.label,
             downloads: try totals?.decode(column: "downloads", as: Int.self) ?? 0,
             previousDownloads: try totals?.decode(column: "previous_downloads", as: Int.self) ?? 0,
             people: try totals?.decode(column: "people", as: Int.self) ?? 0,
             previousPeople: try totals?.decode(column: "previous_people", as: Int.self) ?? 0
         )
+        report.cadence = period.cadence
 
-        // 앱별 다운로드. 이번 주와 지난주.
+        // 앱별 다운로드. 그 기간과 직전 기간.
         struct PerApp: Decodable { var app_id: UUID; var current: Int; var previous: Int }
         let perApp = try await sql.raw(
             """
             SELECT v.app_id,
-              COUNT(d.id) FILTER (WHERE d.created_at >= \(bind: week.start) AND d.created_at < \(bind: week.end)) AS current,
-              COUNT(d.id) FILTER (WHERE d.created_at >= \(bind: week.previousStart) AND d.created_at < \(bind: week.start)) AS previous
+              COUNT(d.id) FILTER (WHERE d.created_at >= \(bind: period.start) AND d.created_at < \(bind: period.end)) AS current,
+              COUNT(d.id) FILTER (WHERE d.created_at >= \(bind: period.previousStart) AND d.created_at < \(bind: period.start)) AS previous
             FROM downloads d JOIN versions v ON v.id = d.version_id
-            WHERE d.created_at >= \(bind: week.previousStart) AND d.created_at < \(bind: week.end)
+            WHERE d.created_at >= \(bind: period.previousStart) AND d.created_at < \(bind: period.end)
             GROUP BY v.app_id
             """
         ).all(decoding: PerApp.self)
@@ -331,7 +445,7 @@ enum WeeklyDigest {
                 .prefix(topCount)
         )
         report.surging = counts
-            .filter { $0.count >= surgeMinimum && $0.count >= $0.previous * surgeRatio }
+            .filter { $0.count >= period.cadence.surgeMinimum && $0.count >= $0.previous * surgeRatio }
             .sorted { $0.count > $1.count }
 
         // 출시. 그 주에 나온 버전 중 앱마다 가장 높은 빌드.
@@ -339,7 +453,7 @@ enum WeeklyDigest {
         let released = try await sql.raw(
             """
             SELECT app_id, short_version, build_number FROM versions
-            WHERE state = 'released' AND released_at >= \(bind: week.start) AND released_at < \(bind: week.end)
+            WHERE state = 'released' AND released_at >= \(bind: period.start) AND released_at < \(bind: period.end)
             ORDER BY build_number DESC
             """
         ).all(decoding: Released.self)
@@ -348,7 +462,7 @@ enum WeeklyDigest {
         let earlier = Set(try await sql.raw(
             """
             SELECT DISTINCT app_id FROM versions
-            WHERE released_at < \(bind: week.start) OR announced_at < \(bind: week.start)
+            WHERE released_at < \(bind: period.start) OR announced_at < \(bind: period.start)
             """
         ).all(decoding: AppIDRow.self).map(\.app_id))
 
@@ -378,7 +492,7 @@ enum WeeklyDigest {
         report.feedbackCount = try await sql.raw(
             """
             SELECT COUNT(*) AS count FROM feedback
-            WHERE created_at >= \(bind: week.start) AND created_at < \(bind: week.end)
+            WHERE created_at >= \(bind: period.start) AND created_at < \(bind: period.end)
               AND (\(bind: storeAppID)::uuid IS NULL OR app_id <> \(bind: storeAppID))
             """
         ).first(decoding: CountRow.self)?.count ?? 0
@@ -391,7 +505,7 @@ enum WeeklyDigest {
             """
             SELECT app_id, AVG(rating)::float8 AS average,
               COUNT(DISTINCT user_id) AS count,
-              COUNT(rating) FILTER (WHERE created_at >= \(bind: week.start) AND created_at < \(bind: week.end)) AS recent
+              COUNT(rating) FILTER (WHERE created_at >= \(bind: period.start) AND created_at < \(bind: period.end)) AS recent
             FROM feedback
             WHERE rating IS NOT NULL GROUP BY app_id
             HAVING COUNT(DISTINCT user_id) >= \(bind: ratingMinimumCount)
@@ -417,7 +531,7 @@ enum WeeklyDigest {
             """
             SELECT j.failure_code, COUNT(DISTINCT j.version_id) AS count FROM signing_jobs j
             JOIN versions v ON v.id = j.version_id
-            WHERE j.state = 'failed' AND j.finished_at >= \(bind: week.start) AND j.finished_at < \(bind: week.end)
+            WHERE j.state = 'failed' AND j.finished_at >= \(bind: period.start) AND j.finished_at < \(bind: period.end)
               AND (\(bind: storeAppID)::uuid IS NULL OR v.app_id <> \(bind: storeAppID))
             GROUP BY j.failure_code ORDER BY count DESC
             """
@@ -427,7 +541,7 @@ enum WeeklyDigest {
             """
             SELECT COUNT(DISTINCT j.version_id) AS count FROM signing_jobs j
             JOIN versions v ON v.id = j.version_id
-            WHERE j.state = 'failed' AND j.finished_at >= \(bind: week.start) AND j.finished_at < \(bind: week.end)
+            WHERE j.state = 'failed' AND j.finished_at >= \(bind: period.start) AND j.finished_at < \(bind: period.end)
               AND (\(bind: storeAppID)::uuid IS NULL OR v.app_id <> \(bind: storeAppID))
             """
         ).first(decoding: VersionCount.self)?.count ?? 0
@@ -518,13 +632,14 @@ enum WeeklyDigest {
             return ""
         }
 
-        let title = "📰 \(human(report.storeName)) 주간 소식 (\(report.weekLabel))"
+        let cadence = report.cadence
+        let title = "📰 \(human(report.storeName)) \(cadence.name) 소식 (\(report.periodLabel))"
         var sections: [String] = []
         if report.isQuiet {
-            sections.append("조용한 한 주였습니다. 새로 나온 앱도 받아간 사람도 없었습니다.")
+            sections.append("\(cadence.quietOpening) 새로 나온 앱도 받아간 사람도 없었습니다.")
         } else {
             sections.append(
-                M.strong("📊 이번 주 숫자")
+                M.strong("📊 \(cadence.current) 숫자")
                     + "\n다운로드 \(report.downloads)회\(delta(report.downloads, report.previousDownloads))"
                     + " · 받아간 사람 \(report.people)명\(delta(report.people, report.previousPeople))"
             )
@@ -547,8 +662,8 @@ enum WeeklyDigest {
             if !report.surging.isEmpty {
                 sections.append(M.strong("📈 갑자기 많이 받은 앱") + report.surging.map { row in
                     let detail = row.previous == 0
-                        ? "지난주 0회"
-                        : "지난주 \(row.previous)회의 \(row.count / row.previous)배"
+                        ? "\(cadence.previous) 0회"
+                        : "\(cadence.previous) \(row.previous)회의 \(row.count / row.previous)배"
                     return "\n• \(link(row.app)) \(row.count)회 (\(detail))"
                 }.joined())
             }
@@ -595,15 +710,20 @@ enum WeeklyDigest {
                 "\n• \(link($0.app)) - \($0.reason)"
             }.joined() + overflow(report.idleOverflow))
         }
+        // 주간은 처음부터 "운영 지표" 였다. 월간만 이름을 붙여 둘이 한 대화에 와도 가른다.
+        let operationsName = cadence == .weekly ? "운영 지표" : "\(cadence.name) 운영 지표"
         let operations = NotificationMessage(
-            title: "🛠 \(human(report.storeName)) 운영 지표 (\(report.weekLabel))",
+            title: "🛠 \(human(report.storeName)) \(operationsName) (\(report.periodLabel))",
             body: ops.joined(separator: "\n\n")
         )
         return (newsletter, operations)
     }
 }
 
-/// 주간 소식을 보낸 주를 적는 테이블 (ADR-0076). 한 주에 한 번만 보내려고 둔다.
+/// 스토어 소식을 보낸 기간을 적는 테이블 (ADR-0076). 한 기간에 한 번만 보내려고 둔다.
+///
+/// 월간도 여기에 적는다 (ADR-0081). 열 이름은 `week` 그대로지만 월간은 `2026-09` 처럼
+/// 달을 적어 주간(`2026-10-05`)과 겹치지 않는다.
 ///
 /// 서버가 여러 대여도 먼저 이 행을 넣은 쪽만 보낸다. 관리자마다 따로 적지 않는다. 한
 /// 사람이 못 받았다고 다시 보내면 받은 사람에게 두 번 간다. 모델 없이 SQL 로만 쓴다.
