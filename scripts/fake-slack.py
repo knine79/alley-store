@@ -35,9 +35,9 @@ def answer(method, query, body):
     if method == "conversations.list":
         return {"ok": True, "channels": CHANNELS, "response_metadata": {"next_cursor": ""}}
     if method == "conversations.info":
-        wanted = query.get("channel", [""])[0]
+        requested = query.get("channel", [""])[0]
         for channel in CHANNELS:
-            if channel["id"] == wanted:
+            if channel["id"] == requested:
                 return {"ok": True, "channel": channel}
         return {"ok": False, "error": "channel_not_found"}
     if method == "conversations.members":
