@@ -54,7 +54,7 @@
 <p class="notice notice-error">#(error)</p>
 #endif
 #if(saved):
-<p class="notice notice-ok">저장했습니다.</p>
+<p class="notice notice-ok" data-toast>저장했습니다.</p>
 #endif
 #if(built):
 <p class="notice notice-ok">

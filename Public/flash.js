@@ -9,9 +9,13 @@
  * 그려진 뒤에 주소에서 걷어낸다. 화면에는 그대로 있고, 다시 불러오면 없다.
  * 주소만 바꾸므로 뒤로 가기 기록도 늘어나지 않는다 (`replaceState`).
  *
- * 잘 됐다는 줄은 몇 초 뒤 스스로 비켜준다. 읽고 나면 할 일이 없는 문장이고, 남아
- * 있으면 다음에 본 화면이 방금 한 일의 결과인지 헷갈린다. **오류는 남긴다.** 그쪽은
- * 읽고 나서 할 일이 있고, 사라지면 무엇이 잘못됐는지 다시 알아낼 방법이 없다.
+ * `data-toast` 가 붙은 줄은 토스트로 옮긴다. "저장했습니다" 처럼 읽고 나면 할 일이
+ * 없는 한 줄이다. 화면 위쪽 구석에 떴다가 몇 초 뒤 비켜주고, 마우스나 초점이 머무는
+ * 동안은 기다린다. 제자리에 두면 아래 내용을 밀어내고, 사라질 때 내용이 덜컥 올라온다.
+ *
+ * **나머지 줄은 남긴다.** 오류는 읽고 나서 할 일이 있다. 발급한 토큰이나 다음에 할 일을
+ * 적은 안내도 그렇다. 사라지면 다시 알아낼 방법이 없다. 스크립트가 없으면 토스트도
+ * 제자리에 그대로 남는다.
  */
 (function () {
     "use strict";
@@ -19,7 +23,7 @@
     /** 서버가 한 번만 쓰라고 붙이는 것들. */
     var ONE_SHOT = ["saved", "error", "built", "released", "announced", "sent", "announce_failed"];
 
-    /** 잘 됐다는 줄이 화면에 머무는 시간. 한 문장을 읽고도 남는 길이다. */
+    /** 토스트가 머무는 시간. 한 문장을 읽고도 남는 길이다. */
     var LINGER_MS = 6000;
 
     function stripQuery() {
@@ -40,17 +44,46 @@
         );
     }
 
-    function fadeOut(notice) {
-        window.setTimeout(function () {
+    function toast(notice, stack) {
+        notice.classList.add("toast");
+        stack.appendChild(notice);
+
+        var timer = null;
+        var paused = false;
+        function leave() {
             notice.classList.add("notice-leaving");
-            // 다 사라진 뒤에 자리까지 없앤다. 먼저 없애면 아래 내용이 덜컥 올라온다.
-            window.setTimeout(function () {
-                notice.hidden = true;
-            }, 400);
-        }, LINGER_MS);
+            window.setTimeout(function () { notice.remove(); }, 400);
+        }
+        function wait() {
+            if (timer) window.clearTimeout(timer);
+            timer = window.setTimeout(function () { if (!paused) leave(); }, LINGER_MS);
+        }
+        // 읽는 중에는 기다린다. 손을 떼면 처음부터 다시 센다.
+        function pause() { paused = true; if (timer) window.clearTimeout(timer); }
+        function resume() { paused = false; wait(); }
+        notice.addEventListener("mouseenter", pause);
+        notice.addEventListener("mouseleave", resume);
+        notice.addEventListener("focusin", pause);
+        notice.addEventListener("focusout", resume);
+        wait();
     }
 
     stripQuery();
-    // `notice-stay` 는 남긴다. 어디에 무엇이 나갔는지처럼, 다시 볼 일이 있는 결과다.
-    document.querySelectorAll(".notice-ok:not(.notice-stay)").forEach(fadeOut);
+    var toasts = document.querySelectorAll("[data-toast]");
+    if (toasts.length) {
+        var stack = document.createElement("div");
+        stack.className = "toast-stack";
+        // 화면 읽기 프로그램이 옮겨진 줄을 읽어 준다.
+        stack.setAttribute("role", "status");
+        stack.setAttribute("aria-live", "polite");
+        // 머리 막대 바로 아래에 둔다. 좁은 화면에서는 메뉴가 두 줄이 되어 높이가 바뀌므로
+        // 띄우는 순간에 잰다. 머리 막대는 따라 내려오지 않아서, 스크롤하면 위로 붙는다.
+        var chrome = document.querySelector(".chrome");
+        if (chrome) {
+            var below = Math.max(chrome.getBoundingClientRect().bottom, 0);
+            stack.style.top = "calc(" + Math.round(below) + "px + var(--space-3))";
+        }
+        document.body.appendChild(stack);
+        toasts.forEach(function (notice) { toast(notice, stack); });
+    }
 })();

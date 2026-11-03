@@ -36,7 +36,7 @@
 </div>
 
 <!-- 방금 출시하고 돌아왔으면 공유 링크를 크게 건넨다 (이슈 #64). 출시하고 "팀에 어떻게
-     알리지" 를 고민하는 자리가 여기다. `notice-ok` 가 아니라 상자로 둔다. 그쪽은 몇 초
+     알리지" 를 고민하는 자리가 여기다. 토스트가 아니라 상자로 둔다. 토스트는 몇 초
      뒤 사라지는데, 이것은 복사할 것이 있어 남아야 한다. 주소의 표시는 `flash.js` 가
      걷어내서 새로고침하면 사라진다. -->
 #if(justReleased):
@@ -55,12 +55,10 @@
 </div>
 #endif
 
-<!-- 나중에 보낸 출시 소식의 결과 (이슈 #81). 성공도 사라지지 않는다(`notice-stay`).
-     사람들에게 나간 글이라 어디에 올라갔는지 다시 볼 일이 있고, 몇 초 만에 사라지면
-     보냈는지조차 놓친다. 주소의 표시는 `flash.js` 가 걷어내 새로고침하면 사라진다.
-     채널마다의 이유는 출시 소식 알림 섹션의 채널 목록에 있다. -->
+<!-- 나중에 보낸 출시 소식의 결과 (이슈 #81). 잘 됐으면 토스트로 띄우고, 못 보냈으면
+     제자리에 남긴다. 채널마다의 이유는 출시 소식 알림 섹션의 채널 목록에 있다. -->
 #if(justAnnounced):
-<p class="notice notice-ok notice-stay">#(justAnnounced.channels) 에 #(app.name) #(justAnnounced.versionName) 출시 소식을 올렸습니다.</p>
+<p class="notice notice-ok" data-toast>#(justAnnounced.channels) 에 #(app.name) #(justAnnounced.versionName) 출시 소식을 올렸습니다.</p>
 #endif
 #if(announceFailed):
 <p class="notice notice-error">출시 소식을 한 채널에도 보내지 못했습니다. 출시 소식 알림에서 채널별 이유를 확인하세요.</p>
