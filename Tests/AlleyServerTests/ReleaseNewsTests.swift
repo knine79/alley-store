@@ -398,6 +398,158 @@ struct ReleaseNewsDeliveryTests {
         }
     }
 
+    // MARK: 나중에 보내기 (이슈 #81)
+
+    /// 나중에 보내기를 누른다. 돌아온 상태와 주소를 준다.
+    private func announceOnWeb(
+        _ fixture: Fixture, versionID: UUID? = nil, send: Bool = true, on app: Application
+    ) async throws -> (HTTPStatus, String) {
+        var result: (HTTPStatus, String) = (.internalServerError, "")
+        try await app.testing().test(
+            .POST,
+            "/apps/\(fixture.appID.uuidString)/versions/\((versionID ?? fixture.versionID).uuidString)/announce",
+            headers: .form(cookie: fixture.token),
+            beforeRequest: { request in
+                try request.content.encode(["send": send ? "1" : ""], as: .urlEncodedForm)
+            }
+        ) { response in
+            result = (response.status, response.headers.first(name: .location) ?? "")
+        }
+        return result
+    }
+
+    private func detail(_ path: String, _ fixture: Fixture, on app: Application) async throws -> String {
+        var html = ""
+        try await app.testing().test(.GET, path, headers: .sessionCookie(fixture.token)) { response in
+            #expect(response.status == .ok)
+            html = response.body.string
+        }
+        return html
+    }
+
+    /// 채널을 늦게 등록한 앱도 첫 출시 소식을 보낼 수 있어야 한다.
+    @Test("알리지 않고 출시한 최신 출시본은 나중에 소식을 보낸다")
+    func announcesLater() async throws {
+        try await withMigratedApp(overrides: botEnv) { app in
+            let stub = SlackAPIStub()
+            let fixture = try await seed(on: app, stub: stub)
+            try await releaseOnWeb(fixture, announce: false, on: app)
+
+            let before = try await detail("/apps/\(fixture.appID.uuidString)", fixture, on: app)
+            #expect(before.contains("/versions/\(fixture.versionID.uuidString)/announce"))
+            #expect(before.contains("id=\"announce-dialog\""))
+
+            let (status, location) = try await announceOnWeb(fixture, on: app)
+            #expect(status == .seeOther)
+            #expect(location.contains("sent=\(fixture.versionID.uuidString)"))
+            #expect(location.contains("announced=team-clip"))
+
+            #expect(stub.posts.count == 1)
+            // 앞서 출시한 다른 버전이 없으니 새 앱으로 알린다.
+            #expect(stub.posts.first?.contains("출시되었습니다") == true)
+            let stored = try #require(try await Version.find(fixture.versionID, on: app.db))
+            #expect(stored.announcedAt != nil)
+
+            let after = try await detail(location, fixture, on: app)
+            #expect(after.contains("#team-clip 에 클립보드 매니저 1.0 출시 소식을 올렸습니다."))
+            // 한 버전은 한 번만 알린다. 단추도 사라진다.
+            #expect(!after.contains("/versions/\(fixture.versionID.uuidString)/announce"))
+            #expect(try await announceOnWeb(fixture, on: app).0 == .conflict)
+            #expect(stub.posts.count == 1)
+        }
+    }
+
+    /// 채널을 늦게 등록하는 앱이 이 단추로 등록하러 간다. 단추가 없으면 흐름이 막힌다.
+    @Test("채널이 없어도 앱 관리자에게는 단추와 등록하러 가는 팝업이 있다")
+    func announceButtonWithoutChannelsForManager() async throws {
+        try await withMigratedApp(overrides: botEnv) { app in
+            let stub = SlackAPIStub()
+            let fixture = try await seed(on: app, stub: stub, channel: false)
+            try await releaseOnWeb(fixture, announce: false, on: app)
+
+            let html = try await detail("/apps/\(fixture.appID.uuidString)", fixture, on: app)
+            #expect(html.contains("/versions/\(fixture.versionID.uuidString)/announce"))
+            #expect(html.contains("출시 소식을 올릴 채널이 없습니다. 채널을 등록하면 이 창이 다시 뜹니다."))
+            #expect(!html.contains("value=\"send\""))
+        }
+    }
+
+    /// 스크립트 없이 폼이 그대로 오면 사람이 확인하지 않은 것이다.
+    @Test("확인 없이 온 나중에 보내기는 보내지 않는다")
+    func announceLaterNeedsConfirmation() async throws {
+        try await withMigratedApp(overrides: botEnv) { app in
+            let stub = SlackAPIStub()
+            let fixture = try await seed(on: app, stub: stub)
+            try await releaseOnWeb(fixture, announce: false, on: app)
+
+            #expect(try await announceOnWeb(fixture, send: false, on: app).0 == .seeOther)
+            #expect(stub.posts.isEmpty)
+        }
+    }
+
+    /// 옛 버전의 소식이 뒤늦게 올라가면 사람들이 받는 버전과 글이 어긋난다.
+    @Test("가장 최근 출시본이 아니면 나중에 보내지 않는다")
+    func announceLaterOnlyLatest() async throws {
+        try await withMigratedApp(overrides: botEnv) { app in
+            let stub = SlackAPIStub()
+            let fixture = try await seed(on: app, stub: stub, state: .released)
+            let newer = try await app.seedVersion(
+                appID: fixture.appID, short: "1.1", build: 2, state: .released, by: fixture.owner
+            )
+
+            #expect(try await announceOnWeb(fixture, on: app).0 == .conflict)
+            #expect(stub.posts.isEmpty)
+
+            let html = try await detail("/apps/\(fixture.appID.uuidString)", fixture, on: app)
+            #expect(!html.contains("/versions/\(fixture.versionID.uuidString)/announce"))
+            #expect(html.contains("/versions/\(try newer.requireID().uuidString)/announce"))
+        }
+    }
+
+    @Test("출시하지 않은 버전은 나중에 보내지 않는다")
+    func announceLaterOnlyReleased() async throws {
+        try await withMigratedApp(overrides: botEnv) { app in
+            let stub = SlackAPIStub()
+            let fixture = try await seed(on: app, stub: stub)
+
+            #expect(try await announceOnWeb(fixture, on: app).0 == .conflict)
+            #expect(stub.posts.isEmpty)
+        }
+    }
+
+    @Test("나중에 보내다 한 곳에도 못 보내면 그렇다고 말하고 다시 보낼 수 있다")
+    func announceLaterFailure() async throws {
+        try await withMigratedApp(overrides: botEnv) { app in
+            let stub = SlackAPIStub(post: #"{"ok":false,"error":"not_in_channel"}"#)
+            let fixture = try await seed(on: app, stub: stub)
+            try await releaseOnWeb(fixture, announce: false, on: app)
+
+            let (status, location) = try await announceOnWeb(fixture, on: app)
+            #expect(status == .seeOther)
+            #expect(location.contains("announce_failed=\(fixture.versionID.uuidString)"))
+
+            let html = try await detail(location, fixture, on: app)
+            #expect(html.contains("출시 소식을 한 채널에도 보내지 못했습니다."))
+            #expect(html.contains("/versions/\(fixture.versionID.uuidString)/announce"))
+        }
+    }
+
+    @Test("스토어 앱은 나중에도 알리지 않는다")
+    func storeAppIsNotAnnouncedLater() async throws {
+        try await withMigratedApp(overrides: botEnv) { app in
+            let stub = SlackAPIStub()
+            let fixture = try await seed(on: app, stub: stub, state: .released)
+            let settings = try await StoreAppSettings.loadOrSeed(
+                on: app.db, config: app.alleyConfig, logger: app.logger
+            )
+            settings.$app.id = fixture.appID
+            try await settings.save(on: app.db)
+
+            #expect(try await announceOnWeb(fixture, on: app).0 == .conflict)
+            #expect(stub.posts.isEmpty)
+        }
+    }
+
     /// 웹에만 있던 검사가 API 에도 걸린다. 출시가 한 곳을 지나게 됐다.
     @Test("API 도 번들 ID 가 확정되지 않은 앱은 출시하지 않는다")
     func apiRefusesPendingBundleID() async throws {
@@ -455,6 +607,65 @@ struct ReleaseChannelRegistrationTests {
             // 같은 채널을 두 번 넣어도 한 줄이다.
             #expect(try await add("team-clip", token: token, appID: appID, on: app) == .seeOther)
             #expect(try await ReleaseChannel.query(on: app.db).count() == 1)
+        }
+    }
+
+    /// 팝업에서 등록하러 왔으면, 넣은 뒤 하던 버전의 팝업으로 돌아간다 (이슈 #81).
+    @Test("팝업에서 등록하러 왔으면 하던 버전을 들고 돌아간다")
+    func returnsToResumedVersion() async throws {
+        try await withMigratedApp(overrides: botEnv) { app in
+            let stub = SlackAPIStub(list: #"{"ok":true,"channels":[{"id":"C0123456789","name":"team-clip","is_member":true}]}"#)
+            let (token, appID) = try await seed(on: app, stub: stub)
+            let versionID = UUID()
+
+            var location = ""
+            try await app.testing().test(
+                .POST, "/apps/\(appID.uuidString)/release-channels",
+                headers: .form(cookie: token),
+                beforeRequest: {
+                    try $0.content.encode(
+                        ["channel": "team-clip", "resume": versionID.uuidString], as: .urlEncodedForm
+                    )
+                }
+            ) { response in
+                #expect(response.status == .seeOther)
+                location = response.headers.first(name: .location) ?? ""
+            }
+            #expect(location == "/apps/\(appID.uuidString)?resume=\(versionID.uuidString)#release-news")
+
+            // UUID 가 아니면 주소에 싣지 않는다.
+            try await app.testing().test(
+                .POST, "/apps/\(appID.uuidString)/release-channels",
+                headers: .form(cookie: token),
+                beforeRequest: {
+                    try $0.content.encode(["channel": "team-clip", "resume": "x\"><b>"], as: .urlEncodedForm)
+                }
+            ) { response in
+                #expect(response.headers.first(name: .location) == "/apps/\(appID.uuidString)#release-news")
+            }
+        }
+    }
+
+    /// 실패한 뒤 다시 넣어 성공해도 하던 버전으로 돌아가야 한다.
+    @Test("등록에 실패해도 하던 버전을 채널 칸에 남긴다")
+    func keepsResumeAfterFailure() async throws {
+        try await withMigratedApp(overrides: botEnv) { app in
+            let stub = SlackAPIStub(list: #"{"ok":true,"channels":[{"id":"C0123456789","name":"team-clip","is_member":false}]}"#)
+            let (token, appID) = try await seed(on: app, stub: stub)
+            let versionID = UUID()
+
+            try await app.testing().test(
+                .POST, "/apps/\(appID.uuidString)/release-channels",
+                headers: .form(cookie: token),
+                beforeRequest: {
+                    try $0.content.encode(
+                        ["channel": "team-clip", "resume": versionID.uuidString], as: .urlEncodedForm
+                    )
+                }
+            ) { response in
+                #expect(response.status == .conflict)
+                #expect(response.body.string.contains("name=\"resume\" value=\"\(versionID.uuidString)\""))
+            }
         }
     }
 
@@ -580,6 +791,9 @@ struct ReleaseChannelRegistrationTests {
                 #expect(html.contains("name=\"channel\""))
                 #expect(html.contains("/invite @alley"))
                 #expect(html.contains("data-release=\"1.0\""))
+                #expect(html.contains("data-release-version=\""))
+                // 출시 전이니 나중에 보낼 것이 없다.
+                #expect(!html.contains("출시 소식 보내기"))
                 #expect(html.contains("/release-confirm.js"))
             }
         }

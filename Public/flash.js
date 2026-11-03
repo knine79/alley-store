@@ -17,7 +17,7 @@
     "use strict";
 
     /** 서버가 한 번만 쓰라고 붙이는 것들. */
-    var ONE_SHOT = ["saved", "error", "built", "released", "announced"];
+    var ONE_SHOT = ["saved", "error", "built", "released", "announced", "sent", "announce_failed"];
 
     /** 잘 됐다는 줄이 화면에 머무는 시간. 한 문장을 읽고도 남는 길이다. */
     var LINGER_MS = 6000;

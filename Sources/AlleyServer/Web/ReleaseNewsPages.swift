@@ -16,6 +16,9 @@ struct ReleaseNewsContext: Encodable {
     var addAction: String
     /// 채널을 넣다 막혔을 때 그 자리에 띄울 말.
     var error: String?
+    /// 팝업에서 채널을 등록하러 왔다면 하던 버전의 ID (이슈 #81). 등록에 실패해 화면을
+    /// 다시 그려도 채널 칸에 남아, 다음 시도가 성공하면 그 버전의 팝업을 다시 띄운다.
+    var resume: String?
     /// 출시할 때 팝업을 띄울까. 스토어 앱은 알리지 않으므로 띄우지 않는다.
     var asksOnRelease: Bool
 }
@@ -26,6 +29,7 @@ extension ReleaseNewsContext {
         isStoreApp: Bool,
         canManage: Bool,
         error: String?,
+        resume: UUID? = nil,
         on request: Request
     ) async throws -> ReleaseNewsContext {
         let appID = try app.requireID()
@@ -51,6 +55,7 @@ extension ReleaseNewsContext {
             channelList: channels.map { "#\($0.name)" }.joined(separator: ", "),
             addAction: "/apps/\(appID.uuidString)/release-channels",
             error: error,
+            resume: resume?.uuidString,
             asksOnRelease: !isStoreApp
         )
     }
@@ -58,6 +63,8 @@ extension ReleaseNewsContext {
 
 struct ReleaseChannelFormValues: Content {
     var channel: String?
+    /// 팝업에서 등록하러 왔으면 하던 버전의 ID.
+    var resume: String?
 }
 
 extension AppPagesController {
@@ -73,18 +80,21 @@ extension AppPagesController {
         try app.requireManageAccess(for: user)
         let appID = try app.requireID()
 
+        let values = try? request.content.decode(ReleaseChannelFormValues.self)
+        let input = values?.channel ?? ""
+        // UUID 가 아니면 버린다. 돌아가는 주소에 그대로 싣는다.
+        let resume = values?.resume.flatMap(UUID.init(uuidString:))
+
         guard let bot = request.application.slackBot else {
             return try await releaseNewsError(
                 "Slack 봇이 연결되어 있지 않아 출시 소식을 보낼 수 없습니다.",
-                status: .conflict, on: request
+                status: .conflict, resume: resume, on: request
             )
         }
-
-        let input = (try? request.content.decode(ReleaseChannelFormValues.self))?.channel ?? ""
         guard !input.trimmingCharacters(in: .whitespaces).isEmpty else {
             return try await releaseNewsError(
                 "채널 이름이 비어 있습니다. #team-releases 처럼 적으세요.",
-                status: .badRequest, on: request
+                status: .badRequest, resume: resume, on: request
             )
         }
 
@@ -92,14 +102,14 @@ extension AppPagesController {
         do {
             channel = try await bot.findChannel(input)
         } catch let error as SlackBot.BotError {
-            return try await releaseNewsError(error.description, status: .badRequest, on: request)
+            return try await releaseNewsError(error.description, status: .badRequest, resume: resume, on: request)
         }
 
         guard channel.isMember else {
             let handle = await request.application.slackBotHandle().map { "@\($0)" } ?? "스토어 봇"
             return try await releaseNewsError(
                 "#\(channel.name) 에 \(handle) 봇이 없습니다. 채널에서 /invite \(handle) 를 보낸 뒤 다시 추가하세요.",
-                status: .conflict, on: request
+                status: .conflict, resume: resume, on: request
             )
         }
 
@@ -111,11 +121,11 @@ extension AppPagesController {
             guard try await bot.isMember(userID: person, of: channel.id) else {
                 return try await releaseNewsError(
                     "#\(channel.name) 에 들어가 있는 사람만 등록할 수 있습니다. 채널에 들어간 뒤 다시 추가하세요.",
-                    status: .forbidden, on: request
+                    status: .forbidden, resume: resume, on: request
                 )
             }
         } catch let error as SlackBot.BotError {
-            return try await releaseNewsError(error.description, status: .badRequest, on: request)
+            return try await releaseNewsError(error.description, status: .badRequest, resume: resume, on: request)
         }
 
         let exists = try await ReleaseChannel.query(on: request.db)
@@ -133,7 +143,9 @@ extension AppPagesController {
                 "출시 소식 채널 추가 [\(app.bundleID), #\(channel.name), 등록: \(user.email)]"
             )
         }
-        return request.redirect(to: "/apps/\(appID.uuidString)#release-news")
+        // 팝업에서 왔으면 하던 버전의 팝업을 다시 띄운다 (`release-confirm.js`).
+        let query = resume.map { "?resume=\($0.uuidString)" } ?? ""
+        return request.redirect(to: "/apps/\(appID.uuidString)\(query)#release-news")
     }
 
     @Sendable
@@ -160,9 +172,12 @@ extension AppPagesController {
     private func releaseNewsError(
         _ message: String,
         status: HTTPResponseStatus,
+        resume: UUID? = nil,
         on request: Request
     ) async throws -> Response {
-        let view = try await renderDetail(on: request, issuedToken: nil, releaseNewsError: message)
+        let view = try await renderDetail(
+            on: request, issuedToken: nil, releaseNewsError: message, releaseNewsResume: resume
+        )
         return htmlResponse(view, status: status)
     }
 }

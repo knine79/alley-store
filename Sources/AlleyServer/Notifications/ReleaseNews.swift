@@ -131,11 +131,14 @@ enum ReleaseNews {
     }
 
     /// 이 버전에 "알렸다" 를 적는다. 이미 적혀 있으면 false.
+    ///
+    /// 시각은 데이터베이스의 `now()` 가 아니라 이 서버의 시계로 적는다. 채널의
+    /// `lastSentAt` 이 이 서버의 시계라, 앱 상세가 둘을 견줘 "올렸습니다" 를 띄운다.
     private static func claim(versionID: UUID, on database: any Database) async -> Bool {
         guard let sql = database as? any SQLDatabase else { return false }
         let rows = try? await sql.raw(
             """
-            UPDATE versions SET announced_at = now()
+            UPDATE versions SET announced_at = \(bind: Date())
             WHERE id = \(bind: versionID) AND announced_at IS NULL
             RETURNING id
             """

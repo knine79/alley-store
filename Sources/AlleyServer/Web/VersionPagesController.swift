@@ -21,6 +21,7 @@ struct VersionPagesController: RouteCollection, Sendable {
         pages.post(":versionID", "confirm", use: submitConfirm)
         pages.post(":versionID", "release", use: release)
         pages.post(":versionID", "unrelease", use: unrelease)
+        pages.post(":versionID", "announce", use: announce)
         pages.post(":versionID", "retry", use: retry)
     }
 
@@ -144,15 +145,38 @@ struct VersionPagesController: RouteCollection, Sendable {
             let announced = try await VersionRelease.release(version, announce: announce, on: request)
             var query = "released=\(try version.requireID().uuidString)"
             if !announced.isEmpty {
-                // 쉼표로 잇는다. Slack 채널 이름에는 쉼표가 들어갈 수 없다(소문자, 숫자,
-                // `-`, `_` 뿐이다). 쿼리에서 뜻을 갖는 `& + =` 만 퍼센트로 바꾼다.
-                var allowed = CharacterSet.urlQueryAllowed
-                allowed.remove(charactersIn: "&+=")
-                let joined = announced.joined(separator: ",")
-                query += "&announced=\(joined.addingPercentEncoding(withAllowedCharacters: allowed) ?? joined)"
+                query += "&announced=\(Self.queryList(announced))"
             }
             return query
         }
+    }
+
+    /// 알리지 않고 출시한 버전의 소식을 보낸다 (이슈 #81, ADR-0082).
+    ///
+    /// 팝업에서 "보내기" 를 눌러야 `send=1` 이 온다. 스크립트가 없어 팝업 없이 폼이
+    /// 그대로 오면 보내지 않고 돌아간다. 출시와 같은 규칙이다. 사람이 확인하지 않은
+    /// 글이 채널에 올라가면 안 된다.
+    @Sendable
+    func announce(request: Request) async throws -> Response {
+        let values = try? request.content.decode(AnnounceFormValues.self)
+        return try await changeRelease(on: request) { version in
+            guard values?.send == "1" else { return nil }
+            let versionID = try version.requireID().uuidString
+            let announced = try await VersionRelease.announceLater(version, on: request)
+            guard !announced.isEmpty else { return "announce_failed=\(versionID)" }
+            return "sent=\(versionID)&announced=\(Self.queryList(announced))"
+        }
+    }
+
+    /// 채널 이름들을 쉼표로 이어 쿼리에 싣는다.
+    ///
+    /// Slack 채널 이름에는 쉼표가 들어갈 수 없다(소문자, 숫자, `-`, `_` 뿐이다). 쿼리에서
+    /// 뜻을 갖는 `& + =` 만 퍼센트로 바꾼다.
+    private static func queryList(_ names: [String]) -> String {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "&+=")
+        let joined = names.joined(separator: ",")
+        return joined.addingPercentEncoding(withAllowedCharacters: allowed) ?? joined
     }
 
     /// 출시 철회. 배포 가능하지만 비공개인 `ready` 로 돌아간다.
@@ -302,6 +326,11 @@ struct VersionConfirmContext: Encodable {
     var versionID: String
     /// 브라우저가 값이 올 때까지 폴링할 경로.
     var versionPath: String
+}
+
+/// 나중에 보내기 폼. 팝업에서 "보내기" 를 누르면 `send=1` 이 온다.
+struct AnnounceFormValues: Content {
+    var send: String?
 }
 
 /// 출시 폼. 팝업에서 "출시하고 알리기" 를 누르면 `announce=1` 이 함께 온다.

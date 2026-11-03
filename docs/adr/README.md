@@ -82,13 +82,14 @@
 | [0072](0072-share-apps-through-a-web-page-and-the-custom-scheme.md) | 앱 공유 링크는 웹 페이지가 받고 커스텀 스킴으로 스토어 앱을 부른다 | 수락됨 | 2026-10-02 |
 | [0073](0073-store-app-updates-apps-without-asking.md) | 스토어 앱이 다른 앱도 묻지 않고 업데이트하고, 그것만 사람이 끌 수 있다 | 일부 대체됨(ADR-0074) | 2026-10-06 |
 | [0074](0074-ask-once-to-quit-and-update-running-apps.md) | 실행 중인 앱은 버전마다 한 번 종료하고 업데이트할지 묻는다 | 수락됨 | 2026-10-06 |
-| [0075](0075-announce-releases-to-app-channels-through-the-bot.md) | 출시 소식은 출시할 때마다 사람이 고르고, 스토어 봇이 앱의 채널에 올린다 | 수락됨 | 2026-10-07 |
+| [0075](0075-announce-releases-to-app-channels-through-the-bot.md) | 출시 소식은 출시할 때마다 사람이 고르고, 스토어 봇이 앱의 채널에 올린다 | 일부 대체됨(ADR-0082) | 2026-10-07 |
 | [0076](0076-weekly-store-digest-goes-to-admins-by-dm.md) | 스토어 주간 소식은 관리자에게 DM 두 통으로 보내고, 사람이 다듬어 전한다 | 수락됨 | 2026-10-07 |
 | [0077](0077-mcp-edits-app-details-and-screenshots.md) | MCP 로 앱 상세의 글과 스크린샷을 고친다 | 수락됨 | 2026-10-13 |
 | [0078](0078-connection-failures-show-as-a-banner.md) | 스토어 앱의 연결 실패는 얼럿이 아니라 사라지지 않는 배너로 알린다 | 수락됨 | 2026-10-12 |
 | [0079](0079-app-video-goes-through-a-presigned-redirect.md) | 앱 동영상은 하나만 두고, 로그인 확인 뒤 스토리지 주소로 넘겨 튼다 | 수락됨 | 2026-10-26 |
 | [0080](0080-store-app-checks-updates-through-a-bundled-launch-agent.md) | 스토어 앱이 꺼져 있을 때의 업데이트 확인은 번들 안 LaunchAgent 가 같은 실행 파일로 한다 | 수락됨 | 2026-10-26 |
 | [0081](0081-monthly-store-digest-is-a-separate-opt-in.md) | 스토어 월간 소식은 주간과 따로 켜는 칸으로 두고, 같은 글을 한 달치로 묶는다 | 수락됨 | 2026-10-27 |
+| [0082](0082-send-release-news-later-for-the-latest-release.md) | 알리지 않고 출시한 가장 최근 출시본은 나중에 소식을 보낼 수 있다 | 수락됨 | 2026-11-03 |
 
 ## 언제 쓰나
 

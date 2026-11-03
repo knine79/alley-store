@@ -58,6 +58,33 @@ enum VersionRelease {
         )
     }
 
+    /// 알리지 않고 출시한 버전의 소식을 나중에 보낸다 (이슈 #81, ADR-0082).
+    ///
+    /// **가장 최근 출시본만 받는다.** 옛 버전의 소식이 뒤늦게 올라가면 사람들이 받는
+    /// 버전과 글이 어긋난다. 이미 알린 버전은 `ReleaseNews.announce` 가 한 번 더 막는다.
+    /// 돌려주는 것은 실제로 올린 채널 이름들이다. 비어 있으면 한 곳에도 못 보냈다.
+    static func announceLater(_ version: Version, on request: Request) async throws -> [String] {
+        guard version.state == .released else {
+            throw Abort(.conflict, reason: "출시된 버전만 출시 소식을 보낼 수 있습니다.")
+        }
+        guard version.announcedAt == nil else {
+            throw Abort(.conflict, reason: "이미 출시 소식을 보낸 버전입니다.")
+        }
+        let latest = try await App.latestReleasedVersion(ofApp: version.$app.id, on: request.db)
+        guard try latest?.requireID() == version.requireID() else {
+            throw Abort(.conflict, reason: "가장 최근에 출시한 버전만 출시 소식을 보낼 수 있습니다.")
+        }
+        guard try await request.storeAppSettings().$app.id != version.$app.id else {
+            throw Abort(.conflict, reason: "스토어 앱은 출시 소식을 보내지 않습니다.")
+        }
+        return await ReleaseNews.announce(
+            version,
+            of: version.app,
+            isFirstRelease: try await ReleaseNews.isFirstRelease(of: version, on: request.db),
+            on: request
+        )
+    }
+
     /// 출시 철회. 배포 가능하지만 비공개인 `ready` 로 돌아간다. 저장은 부르는 쪽이 한다.
     ///
     /// 알린 시각(`announcedAt`)은 지우지 않는다. 다시 출시해도 같은 소식이 두 번

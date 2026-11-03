@@ -55,6 +55,15 @@
 </div>
 #endif
 
+<!-- 나중에 보낸 출시 소식의 결과 (이슈 #81). 잘 됐으면 몇 초 뒤 사라지고, 못 보냈으면
+     남는다. 채널마다의 이유는 출시 소식 알림 섹션의 채널 목록에 있다. -->
+#if(justAnnounced):
+<p class="notice notice-ok">#(justAnnounced.channels) 에 #(app.name) #(justAnnounced.versionName) 출시 소식을 올렸습니다.</p>
+#endif
+#if(announceFailed):
+<p class="notice notice-error">출시 소식을 한 채널에도 보내지 못했습니다. 출시 소식 알림에서 채널별 이유를 확인하세요.</p>
+#endif
+
 #if(app.isPending):
 <p class="notice notice-warn">
     <strong>아직 확인 중입니다.</strong> 올린 파일을 열어 번들 ID 를 읽으면 이 앱이
@@ -178,6 +187,18 @@
                 #if(canUpload):
                 <td class="table-tight">
                     #if(version.isReleased):
+                    <!-- 알리지 않고 출시한 가장 최근 출시본만 (ADR-0082). 봇이 없으면 보낼 수
+                         없고, 채널이 없는데 등록할 권한도 없으면 눌러도 할 일이 없다.
+                         스크립트가 없으면 `send` 가 비어 있어 보내지 않는다. -->
+                    #if(version.canAnnounce):#if(releaseNews.botReady):#if(count(releaseNews.channels) > 0 || canManage):
+                    <form class="row-form" method="post"
+                          action="/apps/#(app.id)/versions/#(version.id)/announce"
+                          data-announce="#(version.shortVersion)" data-announce-build="#(version.buildNumber)"
+                          data-release-version="#(version.id)">
+                        <input type="hidden" name="send" value="">
+                        <button class="button" type="submit">출시 소식 보내기</button>
+                    </form>
+                    #endif#endif#endif
                     <form class="row-form" method="post"
                           action="/apps/#(app.id)/versions/#(version.id)/unrelease">
                         <button class="button" type="submit">철회</button>
@@ -187,7 +208,7 @@
                          묻지 않고 출시하고, 그때는 알리지 않는다. -->
                     <form class="row-form" method="post"
                           action="/apps/#(app.id)/versions/#(version.id)/release"
-                          #if(releaseNews.asksOnRelease):data-release="#(version.shortVersion)" data-release-build="#(version.buildNumber)"#endif>
+                          #if(releaseNews.asksOnRelease):data-release="#(version.shortVersion)" data-release-build="#(version.buildNumber)" data-release-version="#(version.id)"#endif>
                         <input type="hidden" name="announce" value="">
                         <button class="button button-primary" type="submit">출시</button>
                     </form>
@@ -575,7 +596,9 @@
     </div>
     #endif
 
-    <form class="form" method="post" action="#(releaseNews.addAction)">
+    <form class="form" method="post" action="#(releaseNews.addAction)" id="release-channel-form">
+        <!-- 팝업에서 등록하러 왔으면 하던 버전. 등록에 성공하면 그 팝업이 다시 뜬다 (이슈 #81). -->
+        <input type="hidden" name="resume" value="#(releaseNews.resume)">
         <label class="field">
             <span class="field-label">Slack 채널</span>
             <input class="input" type="text" name="channel" required placeholder="#team-releases"
@@ -868,6 +891,34 @@
         #endif
     </form>
 </dialog>
+
+<!-- 알리지 않고 출시한 버전의 소식을 보낼지 묻는 팝업 (이슈 #81, ADR-0082).
+     `data-announce` 가 붙은 폼이 쓴다. 봇이 없으면 단추가 없으므로 여기도 없다.
+     취소가 먼저인 것은 위 팝업과 같다. -->
+#if(releaseNews.botReady):
+<dialog class="modal" id="announce-dialog" aria-labelledby="announce-title">
+    <form method="dialog">
+        <h2 class="modal-title" id="announce-title">출시 소식을 보낼까요?</h2>
+        #if(count(releaseNews.channels) == 0):
+        <div class="modal-body">
+            <p>출시 소식을 올릴 채널이 없습니다. 채널을 등록하면 이 창이 다시 뜹니다.</p>
+        </div>
+        <div class="modal-actions">
+            <button class="button" type="submit" value="cancel">취소</button>
+            <button class="button button-primary" type="submit" value="setup">채널 등록하러 가기</button>
+        </div>
+        #else:
+        <div class="modal-body">
+            <p>#(app.name) <span data-announce-full></span> 는 출시됐지만 아직 알리지 않았습니다. #(releaseNews.channelList) 에 출시 소식을 올립니다.</p>
+        </div>
+        <div class="modal-actions">
+            <button class="button" type="submit" value="cancel">취소</button>
+            <button class="button button-primary" type="submit" value="send">보내기</button>
+        </div>
+        #endif
+    </form>
+</dialog>
+#endif
 
 <script src="/release-confirm.js?v=#(page.assetVersion)" defer></script>
 #endif#endif
