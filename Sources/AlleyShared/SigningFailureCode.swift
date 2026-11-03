@@ -18,6 +18,9 @@ public enum SigningFailureCode: String, Codable, Sendable, CaseIterable, Equatab
 
     /// 서명 identity 가 워커 키체인에 없거나 만료됐다.
     case signingIdentityUnavailable = "signing_identity_unavailable"
+    /// identity 는 있는데 워커가 그 개인 키를 쓰지 못한다. 키체인이 워커의 세션에서
+    /// 잠겼거나, 키 접근 제어가 codesign 을 막는다. 번들과는 상관없다 (이슈 #83).
+    case signingKeyInaccessible = "signing_key_inaccessible"
     /// `codesign` 이 실패했는데 identity 문제는 아니다. 번들 자체에 문제가 있다.
     case codesignFailed = "codesign_failed"
     /// entitlements 가 없거나(JIT 누락), 프로필이 필요한 권한인데 프로필이 없다.
@@ -67,8 +70,8 @@ public enum SigningFailureCode: String, Codable, Sendable, CaseIterable, Equatab
         switch self {
         case .transferFailed, .appleServiceUnavailable, .timedOut:
             return true
-        case .signingIdentityUnavailable, .codesignFailed, .entitlementsRejected,
-             .bundleLayoutInvalid, .bundleIdentifierMismatch, .unsignedCodeRemains,
+        case .signingIdentityUnavailable, .signingKeyInaccessible, .codesignFailed,
+             .entitlementsRejected, .bundleLayoutInvalid, .bundleIdentifierMismatch, .unsignedCodeRemains,
              .notarizationRejected, .unknown:
             return false
         }
@@ -102,6 +105,7 @@ public enum SigningFailureGuidance {
     public static func title(_ code: SigningFailureCode) -> String {
         switch code {
         case .signingIdentityUnavailable: return "서명 identity 문제"
+        case .signingKeyInaccessible: return "워커가 서명 키를 쓰지 못함"
         case .codesignFailed: return "서명 실패"
         case .entitlementsRejected: return "entitlements 문제"
         case .bundleLayoutInvalid: return "번들 구조 문제"
@@ -149,6 +153,15 @@ public enum SigningFailureGuidance {
             return """
                 워커 머신 키체인의 Developer ID 인증서를 확인하세요. 만료일은 관리 > 앱 서명에서 \
                 봅니다. 인증서를 새로 받았다면 워커 설정의 서명 identity 이름도 맞춰야 합니다.
+                """
+        case .signingKeyInaccessible:
+            // 번들을 고치라고 하면 안 된다. 번들은 멀쩡하고, 다시 올려도 같다.
+            // ssh 로 푼 잠금이 워커에 닿지 않는다는 것까지 적는다. 처음 겪는 사람은
+            // 거의 반드시 그렇게 풀고 나서 왜 안 되는지 헤맨다.
+            return """
+                번들 문제가 아닙니다. 워커 맥이 서명 키를 쓰지 못합니다. 그 맥의 화면에서 \
+                키체인 접근으로 로그인 키체인을 열고, 업데이트나 암호를 묻는 창이 떠 있으면 \
+                먼저 닫은 뒤 다시 시도하세요. ssh 로 푼 잠금은 워커가 도는 세션에 닿지 않습니다.
                 """
         case .codesignFailed:
             return """

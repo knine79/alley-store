@@ -67,6 +67,16 @@ struct FailureClassificationTests {
                 from: "The specified item could not be found in the keychain."
             ) == .signingIdentityUnavailable
         )
+        // 키체인이 잠겨 키에 닿지 못한 것은 번들 문제가 아니다 (이슈 #83).
+        #expect(
+            SigningPipeline.codesignCode(
+                from: "도구.app: replacing existing signature\n도구.app: errSecInternalComponent"
+            ) == .signingKeyInaccessible
+        )
+        #expect(
+            SigningPipeline.codesignCode(from: "User interaction is not allowed.")
+                == .signingKeyInaccessible
+        )
         // 번들 쪽 문제는 identity 와 섞이지 않아야 한다.
         #expect(
             SigningPipeline.codesignCode(from: "resource fork, Finder information, or similar detritus not allowed")
