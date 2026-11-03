@@ -737,6 +737,8 @@ private struct PlayerView: NSViewRepresentable {
         let view = AVPlayerView()
         view.controlsStyle = .inline
         view.allowsPictureInPicturePlayback = false
+        // 기본값이 꺼짐이다. 켜지 않으면 220pt 칸 밖으로 키울 길이 없다 (이슈 #80).
+        view.showsFullScreenToggleButton = true
         view.player = player
         return view
     }
