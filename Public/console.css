@@ -1700,7 +1700,7 @@ textarea.input {
     color: #b23c3c;
 }
 
-/* 잘 됐다는 줄이 물러나는 중. 자리는 마지막에 없앤다 (`flash.js`). */
+/* 토스트가 물러나는 중. 다 사라진 뒤에 없앤다 (`flash.js`). */
 .notice-leaving {
     opacity: 0;
     transition: opacity 0.35s ease;
@@ -1715,6 +1715,43 @@ textarea.input {
 .notice-ok {
     border-color: var(--ok-border);
     color: var(--ok-text);
+}
+
+/* ── 토스트 ──────────────────────────────────────────────
+   `data-toast` 가 붙은 줄을 `flash.js` 가 여기로 옮긴다. 오른쪽 위 구석에 띄워 내용을
+   밀어내지 않는다. 머리 막대 아래로 내리는 것은 `flash.js` 가 높이를 재서 한다.
+   팝업(`dialog`)은 최상위 층이라 늘 이것보다 위다. */
+.toast-stack {
+    position: fixed;
+    top: var(--space-5);
+    right: var(--space-5);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-2);
+    max-width: min(24rem, calc(100vw - 2 * var(--space-5)));
+    pointer-events: none;
+}
+
+.toast {
+    margin: 0;
+    box-shadow: var(--shadow-2);
+    pointer-events: auto;
+    animation: toast-in 0.2s ease-out;
+}
+
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateY(-0.5rem);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .toast {
+        animation: none;
+    }
 }
 
 /* 막지는 않지만 나중에 실패할 수 있다고 알리는 자리.
@@ -1972,6 +2009,15 @@ textarea.input {
     align-items: center;
     gap: var(--space-2);
     margin: 0;
+}
+
+/* 한 칸에 폼이 둘 이상이면 나란히 둔다 ("출시 소식 보내기" 와 "철회").
+   폼마다 블록이라 그냥 두면 위아래로 붙어 쌓이고, 폭이 달라 들쭉날쭉하다.
+   줄바꿈하지 않는다. 칸이 `width: 1%` 라 줄바꿈을 허락하면 가장 좁게 접혀 다시 쌓인다. */
+.row-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
 }
 
 /* ── 팝업 ───────────────────────────────────────────────

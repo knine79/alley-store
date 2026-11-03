@@ -297,7 +297,8 @@ struct AppPagesController: RouteCollection, Sendable {
         portalError: String? = nil,
         portalNotice: String? = nil,
         memberError: String? = nil,
-        releaseNewsError: String? = nil
+        releaseNewsError: String? = nil,
+        releaseNewsResume: UUID? = nil
     ) async throws -> View {
         let user = try request.requireUser()
         let app = try await request.findApp()
@@ -448,6 +449,41 @@ struct AppPagesController: RouteCollection, Sendable {
             )
         }
 
+        // 나중에 보낸 출시 소식 (이슈 #81). `justReleased` 와 같은 이유로 주소를 그대로
+        // 믿지 않는다. 이 앱의 버전이고 방금(10분 안) 알린 것이며, 그 뒤에 실제로 보낸
+        // 채널만 남긴다.
+        var justAnnounced: JustAnnouncedRow?
+        if canUpload,
+           let sentID = request.query[UUID.self, at: "sent"],
+           let version = versions.first(where: { $0.id == sentID }),
+           let announcedAt = version.announcedAt,
+           Date().timeIntervalSince(announcedAt) < 600
+        {
+            let claimed = Set(
+                (request.query[String.self, at: "announced"] ?? "")
+                    .split(separator: ",")
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+            )
+            let delivered = try await ReleaseChannel.query(on: request.db)
+                .filter(\.$app.$id == app.requireID())
+                .filter(\.$lastSentAt >= announcedAt)
+                .sort(\.$name)
+                .all()
+                .map(\.name)
+                .filter(claimed.contains)
+            if !delivered.isEmpty {
+                justAnnounced = JustAnnouncedRow(
+                    versionName: version.shortVersion,
+                    channels: delivered.map { "#\($0)" }.joined(separator: ", ")
+                )
+            }
+        }
+        // 한 곳에도 못 보냈으면 알린 시각이 비어 있다. 비어 있을 때만 실패를 말한다.
+        let announceFailed = canUpload
+            && request.query[UUID.self, at: "announce_failed"].map { failedID in
+                versions.contains { $0.id == failedID && $0.announcedAt == nil }
+            } == true
+
         var releaseNews: ReleaseNewsContext?
         if canUpload {
             releaseNews = try await ReleaseNewsContext.make(
@@ -455,9 +491,19 @@ struct AppPagesController: RouteCollection, Sendable {
                 isStoreApp: isStoreApp,
                 canManage: canManage,
                 error: releaseNewsError,
+                resume: releaseNewsResume,
                 on: request
             )
         }
+
+        // "출시 소식 보내기" 를 띄울 버전. 알리지 않은 가장 최근 출시본 하나뿐이다
+        // (ADR-0082). 스토어 앱은 알리지 않는다.
+        let announceableID: UUID? = canUpload && !isStoreApp
+            ? versions
+                .filter { $0.state == .released }
+                .max { $0.buildNumber < $1.buildNumber }
+                .flatMap { $0.announcedAt == nil ? $0.id : nil }
+            : nil
 
         // 실패한 버전은 로그가 있어야 올린 사람이 스스로 고칠 수 있다.
         // 올릴 권한이 없는 사람에게는 보여줄 이유가 없다. 워커 환경이 드러난다.
@@ -516,7 +562,8 @@ struct AppPagesController: RouteCollection, Sendable {
                         // 스토어 앱은 출시된 것만. 스토어 앱이 없는 사람에게 이것이
                         // 유일한 길이라 출시 전 것까지 열 이유가 없다.
                         isDownloadable: canUpload
-                            || (isStoreApp && version.state.isPubliclyVisible)
+                            || (isStoreApp && version.state.isPubliclyVisible),
+                        canAnnounce: announceableID != nil && version.id == announceableID
                     )
                 },
                 members: members,
@@ -536,6 +583,8 @@ struct AppPagesController: RouteCollection, Sendable {
                 releaseNews: releaseNews,
                 shareURL: shareURL,
                 justReleased: justReleased,
+                justAnnounced: justAnnounced,
+                announceFailed: announceFailed,
                 feedback: feedback,
                 canUpload: canUpload,
                 canManage: canManage,
@@ -1290,6 +1339,8 @@ struct VersionRow: Encodable {
     /// 상태 머신에 물어본다. 화면이 조건을 따로 갖고 있으면 규칙이 바뀔 때 한쪽만
     /// 남아서, 눌리는데 서버가 거절하는 버튼이 된다.
     var canRelease: Bool
+    /// "출시 소식 보내기" 를 띄울까. 알리지 않은 가장 최근 출시본만 true 다 (ADR-0082).
+    var canAnnounce: Bool
     var releaseNotes: String?
     var fileSize: String?
     var createdAt: DisplayDate
@@ -1336,7 +1387,8 @@ struct VersionRow: Encodable {
         version: Version,
         report: SigningJob.Report? = nil,
         downloadCount: Int? = nil,
-        isDownloadable: Bool = false
+        isDownloadable: Bool = false,
+        canAnnounce: Bool = false
     ) throws {
         self.id = try version.requireID().uuidString
         self.shortVersion = version.shortVersion
@@ -1345,6 +1397,7 @@ struct VersionRow: Encodable {
         self.stateName = version.state.displayName
         self.isReleased = version.state.isPubliclyVisible
         self.canRelease = version.state.canTransition(to: .released)
+        self.canAnnounce = canAnnounce
         self.releaseNotes = version.releaseNotes
         self.fileSize = version.bestArtifact?.fileSize.map(ByteCount.humanReadable)
         self.createdAt = DateStyle.day.display(from: version.createdAt ?? Date())
@@ -1522,6 +1575,12 @@ struct JustReleasedRow: Encodable {
     var announcedTo: String?
 }
 
+struct JustAnnouncedRow: Encodable {
+    var versionName: String
+    /// 올린 채널들. `#a, #b` 처럼 이어 붙였다.
+    var channels: String
+}
+
 struct AppDetailContext: Encodable {
     var page: PageContext
     var app: AppRow
@@ -1556,6 +1615,10 @@ struct AppDetailContext: Encodable {
     var shareURL: String?
     /// 방금 출시하고 돌아왔으면 그 버전. 한 번만 크게 보여준다 (이슈 #64).
     var justReleased: JustReleasedRow?
+    /// 방금 나중에 보낸 출시 소식. 한 번만 보여준다 (이슈 #81).
+    var justAnnounced: JustAnnouncedRow?
+    /// 방금 보내려던 출시 소식이 한 채널에도 가지 못했나.
+    var announceFailed: Bool
     var feedback: [FeedbackRow]
     /// 지금 사람이 피드백을 남길 수 있는 버전들. 받아본 것만 들어온다.
     /// 익명 체크박스를 띄울지. 스토어 설정에서 온다.

@@ -23,6 +23,12 @@ public struct AppConfig: Sendable {
     ///
     /// 없으면 사람에게 보내는 알림만 조용히 건너뛴다. 앱 채널로 가는 알림은 그대로다.
     public var slackBotToken: String?
+    /// Slack 봇이 부를 API 주소. 비우면 `https://slack.com/api` 다.
+    ///
+    /// **로컬에서 출시 소식을 눌러 보려고 둔다.** 진짜 봇 토큰 없이 가짜 Slack 을 띄워
+    /// 채널 등록부터 보내기까지 지나 본다(`scripts/fake-slack.py`). loopback 주소만
+    /// 받는다. 다른 곳을 가리키면 봇 토큰이 그곳으로 간다.
+    public var slackAPIBaseURL: String? = nil
     /// 메일 보내기. 설정하지 않으면 그 길만 꺼진다.
     public var smtp: SMTPConfig?
     /// 사용자와 워커가 접근하는 서버의 공개 주소. 콜백 URL 구성에 쓴다.
@@ -341,6 +347,22 @@ extension AppConfig {
             return raw
         }
 
+        /// 가짜 Slack 주소는 이 기계 안만 가리키게 한다.
+        func validatedSlackAPIBaseURL() throws -> String? {
+            guard let raw = optional("SLACK_API_BASE_URL") else { return nil }
+            let loopback = ["localhost", "127.0.0.1", "::1", "[::1]"]
+            guard let host = URLComponents(string: raw)?.host?.lowercased(),
+                  loopback.contains(host)
+            else {
+                throw LoadError.invalid(
+                    key: "SLACK_API_BASE_URL",
+                    reason: "로컬 시험용이라 loopback 주소만 받습니다. 예: http://127.0.0.1:8090/api "
+                        + "다른 곳을 가리키면 봇 토큰이 그곳으로 갑니다. 운영에서는 비워 두세요."
+                )
+            }
+            return raw.hasSuffix("/") ? String(raw.dropLast()) : raw
+        }
+
         /// 세션 토큰을 서명하는 키가 충분히 긴지 본다.
         ///
         /// HMAC-SHA256 을 쓴다(`configureJWT`). RFC 2104 는 키를 해시 출력 길이 이상으로
@@ -452,6 +474,7 @@ extension AppConfig {
             ),
             appStoreConnect: appStoreConnectConfig(),
             slackBotToken: optional("SLACK_BOT_TOKEN"),
+            slackAPIBaseURL: try validatedSlackAPIBaseURL(),
             smtp: smtpConfig(),
             publicBaseURL: try validatedPublicBaseURL(),
             // 기본 사흘. presigned 업로드 URL 의 기본 수명(1시간)의 일흔두 배라
