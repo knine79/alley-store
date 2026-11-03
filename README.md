@@ -262,6 +262,26 @@ OIDC_CLIENT_SECRET=alley-dev-secret
 
 데이터를 볼륨에 두지 않아서 내리면 계정도 함께 사라집니다.
 
+#### 출시 소식을 Slack 없이 시험하려면
+
+진짜 봇 토큰 없이 채널 등록부터 출시 소식 보내기까지 눌러 보려면 가짜 Slack 을
+띄웁니다. 글은 어디에도 가지 않고 그 터미널에 찍힙니다.
+
+```bash
+python3 scripts/fake-slack.py
+```
+
+`.env` 에 두 줄을 넣고 서버를 다시 띄웁니다. 채널은 `#releases`, `#team-a` 가 있고,
+`#no-bot` 은 봇이 없어 등록이 막히는 채널입니다.
+
+```bash
+SLACK_BOT_TOKEN=xoxb-fake
+SLACK_API_BASE_URL=http://127.0.0.1:8090/api
+```
+
+`SLACK_API_BASE_URL` 은 loopback 주소만 받습니다. 다른 곳을 가리키면 봇 토큰이
+그곳으로 가기 때문입니다. 사람에게 가는 DM 은 이 주소를 따르지 않아 실패합니다.
+
 `docker compose up` 으로 서버까지 컨테이너로 띄우면 compose 가 `DATABASE_URL` 과
 `S3_ENDPOINT` 를 컨테이너 이름으로 덮어쓰므로 `.env` 는 그대로 두면 됩니다. 그 이름은
 브라우저가 풀지 못하므로 `S3_PUBLIC_ENDPOINT` 도 함께 채워집니다 (로컬 기본값은

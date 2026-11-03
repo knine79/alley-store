@@ -17,10 +17,13 @@ import Vapor
 public struct SlackBot: Sendable {
     private let client: any Client
     private let token: String
+    /// `https://slack.com/api`. 로컬 시험에서만 바꾼다 (`AppConfig.slackAPIBaseURL`).
+    private let apiBase: String
 
-    public init(client: any Client, token: String) {
+    public init(client: any Client, token: String, apiBase: String? = nil) {
         self.client = client
         self.token = token
+        self.apiBase = apiBase ?? "https://slack.com/api"
     }
 
     /// 봇이 찾은 채널.
@@ -149,7 +152,7 @@ public struct SlackBot: Sendable {
     public func post(text: String, blocks: [SlackBlock], to channelID: String) async throws {
         let response: ClientResponse
         do {
-            response = try await client.post(URI(string: "https://slack.com/api/chat.postMessage")) {
+            response = try await client.post(URI(string: "\(apiBase)/chat.postMessage")) {
                 $0.timeout = Self.timeout
                 $0.headers.bearerAuthorization = .init(token: token)
                 $0.headers.contentType = .json
@@ -184,7 +187,7 @@ public struct SlackBot: Sendable {
     private func get(_ method: String, query: String) async throws -> ClientResponse {
         let suffix = query.isEmpty ? "" : "?\(query)"
         do {
-            return try await client.get(URI(string: "https://slack.com/api/\(method)\(suffix)")) {
+            return try await client.get(URI(string: "\(apiBase)/\(method)\(suffix)")) {
                 $0.timeout = Self.timeout
                 $0.headers.bearerAuthorization = .init(token: token)
             }
@@ -361,7 +364,9 @@ public enum SlackBlock: Codable, Sendable, Equatable {
 extension Application {
     /// 스토어의 Slack 봇. 봇 토큰이 없으면 nil 이다.
     var slackBot: SlackBot? {
-        alleyConfig.slackBotToken.map { SlackBot(client: client, token: $0) }
+        alleyConfig.slackBotToken.map {
+            SlackBot(client: client, token: $0, apiBase: alleyConfig.slackAPIBaseURL)
+        }
     }
 
     /// 봇의 Slack 핸들. 한 번 물어보면 프로세스가 끝날 때까지 기억한다.

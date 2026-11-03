@@ -800,6 +800,24 @@ struct ReleaseChannelRegistrationTests {
     }
 }
 
+@Suite("가짜 Slack 주소")
+struct SlackAPIBaseURLTests {
+    @Test("loopback 주소만 받고 끝의 / 는 뗀다")
+    func acceptsLoopback() throws {
+        let config = try TestSupport.config(overrides: ["SLACK_API_BASE_URL": "http://127.0.0.1:8090/api/"])
+        #expect(config.slackAPIBaseURL == "http://127.0.0.1:8090/api")
+        #expect(try TestSupport.config().slackAPIBaseURL == nil)
+    }
+
+    /// 다른 곳을 가리키면 봇 토큰이 그곳으로 간다.
+    @Test("loopback 이 아니면 서버가 뜨지 않는다")
+    func refusesElsewhere() {
+        #expect(throws: (any Error).self) {
+            try TestSupport.config(overrides: ["SLACK_API_BASE_URL": "https://slack.example.com/api"])
+        }
+    }
+}
+
 /// Slack API 를 흉내낸다. 부른 주소와 보낸 본문을 기록하고 정해둔 본문을 돌려준다.
 final class SlackAPIStub: Client, @unchecked Sendable {
     private let responses: [String: String]
