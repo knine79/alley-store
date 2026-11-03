@@ -51,5 +51,6 @@
     }
 
     stripQuery();
-    document.querySelectorAll(".notice-ok").forEach(fadeOut);
+    // `notice-stay` 는 남긴다. 어디에 무엇이 나갔는지처럼, 다시 볼 일이 있는 결과다.
+    document.querySelectorAll(".notice-ok:not(.notice-stay)").forEach(fadeOut);
 })();
