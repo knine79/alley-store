@@ -16,6 +16,11 @@ struct SigningRetryPolicyTests {
             SigningRetryPolicy.verdict(reported: .signingIdentityUnavailable, attempt: 1)
                 == .giveUp
         )
+        // 잠긴 키체인은 사람이 워커 맥에서 열어야 풀린다. 혼자 다시 돌려도 같다.
+        #expect(
+            SigningRetryPolicy.verdict(reported: .signingKeyInaccessible, attempt: 1)
+                == .giveUp
+        )
     }
 
     @Test("다시 해볼 만한 갈래는 상한까지 되돌린다")

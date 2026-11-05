@@ -614,9 +614,19 @@ public struct SigningPipeline: Sendable {
     /// 틀린다. 인증서가 만료됐는데도 `codesignFailed` 로 분류되고, 화면에는 번들을
     /// 고치라는 엉뚱한 안내가 나간다. 다만 **둘 다 재시도하지 않는 갈래라 재시도
     /// 판단은 틀어지지 않는다.** 잘못돼도 잘못되는 것은 안내 문장 하나다. 이 성질이
-    /// 깨지지 않게, 두 코드 중 하나만 재시도 쪽으로 옮기는 일은 하지 말 것.
+    /// 깨지지 않게, 세 코드 중 하나만 재시도 쪽으로 옮기는 일은 하지 말 것.
     static func codesignCode(from output: String) -> SigningFailureCode {
         let lowered = output.lowercased()
+        // identity 는 찾았는데 개인 키를 쓰지 못했다. 키체인이 이 세션에서 잠겼거나,
+        // 암호 창을 띄울 수 없는 세션이다. 번들 문제로 분류하면 엉뚱한 곳을 고치게
+        // 된다 (이슈 #83).
+        let keyMarkers = [
+            "errsecinternalcomponent",
+            "user interaction is not allowed",
+        ]
+        if keyMarkers.contains(where: lowered.contains) {
+            return .signingKeyInaccessible
+        }
         let identityMarkers = [
             // 그 이름의 identity 가 키체인에 없다.
             "no identity found",
