@@ -2351,6 +2351,34 @@ textarea.input {
     word-break: break-word;
 }
 
+/* ── 지난 시도 (이슈 #85) ─────────────────────────────────── */
+
+/* 현재 시도는 버전 줄이 그대로 보여준다. 지난 시도는 여기 접어, 재시도 중에 직전
+   실패가 현재처럼 섞여 보이지 않게 나눈다. */
+.attempts {
+    margin-top: var(--space-3);
+}
+
+.attempts-head {
+    margin: 0 0 var(--space-1);
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+}
+
+/* 한 시도의 요약 줄. 번호·끝상태·갈래·시각을 한 줄에 둔다. */
+.attempt > summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+}
+
+/* 언제 끝났나. 맨 뒤로 민다. */
+.attempt-when {
+    margin-left: auto;
+    font-size: var(--font-xs);
+}
+
 /* ── 접어둔 이력 ─────────────────────────────────────────── */
 
 /* 폐기한 워커와 운영 토큰. 기록으로 남기되 지금 무엇이 도는지를 가리지 않는다. */

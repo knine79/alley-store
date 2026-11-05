@@ -127,7 +127,9 @@ enum MCPToolbox {
             description: """
                 한 버전의 서명이 어디까지 왔는지. **실패했으면 갈래(failureCode)와 \
                 무엇을 하면 되는지(whatToDo)가 함께 온다.** 올린 뒤 결과를 확인하거나, \
-                실패를 고칠 때 먼저 부른다.
+                실패를 고칠 때 먼저 부른다. 맨 위 값은 현재 시도를 말하고, 지난 시도는 \
+                attempts 에 시간순(마지막이 현재)으로 따로 온다. 재시도 중이면 맨 위는 \
+                "지금 어디까지", attempts 는 "전에 무엇이 막혔나" 다 — 둘을 섞지 않는다.
                 """,
             inputSchema: MCPTool.schema(required: ["version": "버전 id"])
         ),

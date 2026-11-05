@@ -273,6 +273,42 @@
                         <pre class="log-body">#(build.log)</pre>
                     </details>
                     #endif
+                    <!-- 지난 시도 (이슈 #85). 현재 시도는 위가 보여주고, 지난 것은 접어
+                         둔다. 재시도 중에 직전 실패가 현재처럼 섞여 보이던 것을 나눈다. -->
+                    #if(count(build.pastAttempts) > 0):
+                    <div class="attempts">
+                        <p class="attempts-head">지난 시도</p>
+                        #for(attempt in build.pastAttempts):
+                        <details class="log attempt">
+                            <summary>
+                                <span class="attempt-n">#(attempt.number)번째 시도</span>
+                                <span class="badge badge-#(attempt.state)">#(attempt.stateName)</span>
+                                #if(attempt.failureTitle):<span class="attempt-why">#(attempt.failureTitle)</span>#endif
+                                #if(attempt.finishedAt):<time class="attempt-when" datetime="#(attempt.finishedAt.iso)" data-date-only="#(attempt.finishedAt.dateOnly)">#(attempt.finishedAt.display)</time>#endif
+                            </summary>
+                            #if(attempt.isFailure):
+                            <div class="failure">
+                                #if(attempt.failureTitle):
+                                <p class="failure-head">
+                                    <strong class="failure-title">#(attempt.failureTitle)</strong>
+                                    <code class="failure-code">#(attempt.failureCode)</code>
+                                </p>
+                                #endif
+                                #if(attempt.failureReason):
+                                <p class="failure-reason">#(attempt.failureReason)</p>
+                                #endif
+                                #if(attempt.failureAdvice):
+                                <p class="failure-advice">#(attempt.failureAdvice)</p>
+                                #endif
+                            </div>
+                            #endif
+                            #if(attempt.log):
+                            <pre class="log-body">#(attempt.log)</pre>
+                            #endif
+                        </details>
+                        #endfor
+                    </div>
+                    #endif
                 </td>
                 <td class="table-tight">
                     #if(build.isReleased):

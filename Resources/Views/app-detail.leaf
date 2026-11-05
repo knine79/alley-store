@@ -310,6 +310,46 @@
                 </td>
             </tr>
             #endif
+            <!-- 지난 시도 (이슈 #85). 현재 시도는 위 줄이 그대로 보여주고, 지난 것은
+                 여기 접어 둔다. "N번째 시도" 를 펴면 그때의 상태·원인·로그를 본다.
+                 현재와 과거를 한 자리에 포개 두면 재시도 중에 직전 실패가 지금처럼
+                 읽혀서, 그 둘을 나눈다. 올릴 권한이 있는 사람에게만 채워진다. -->
+            #if(count(version.pastAttempts) > 0):
+            <tr class="attempts-row">
+                <td colspan="#if(canUpload):7#else:6#endif">
+                    <p class="attempts-head">지난 시도</p>
+                    #for(attempt in version.pastAttempts):
+                    <details class="log attempt">
+                        <summary>
+                            <span class="attempt-n">#(attempt.number)번째 시도</span>
+                            <span class="badge badge-#(attempt.state)">#(attempt.stateName)</span>
+                            #if(attempt.failureTitle):<span class="attempt-why">#(attempt.failureTitle)</span>#endif
+                            #if(attempt.finishedAt):<time class="attempt-when" datetime="#(attempt.finishedAt.iso)" data-date-only="#(attempt.finishedAt.dateOnly)">#(attempt.finishedAt.display)</time>#endif
+                        </summary>
+                        #if(attempt.isFailure):
+                        <div class="failure">
+                            #if(attempt.failureTitle):
+                            <p class="failure-head">
+                                <strong class="failure-title">#(attempt.failureTitle)</strong>
+                                <code class="failure-code">#(attempt.failureCode)</code>
+                            </p>
+                            #endif
+                            #if(attempt.failureReason):
+                            <p class="failure-reason">#(attempt.failureReason)</p>
+                            #endif
+                            #if(attempt.failureAdvice):
+                            <p class="failure-advice">#(attempt.failureAdvice)</p>
+                            #endif
+                        </div>
+                        #endif
+                        #if(attempt.log):
+                        <pre class="log-body">#(attempt.log)</pre>
+                        #endif
+                    </details>
+                    #endfor
+                </td>
+            </tr>
+            #endif
             #endfor
         </tbody>
     </table>

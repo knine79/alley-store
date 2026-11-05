@@ -137,44 +137,70 @@ extension SigningJob {
 }
 
 extension SigningJob {
-    /// 버전 상세에 함께 실을 것.
-    struct Report {
+    /// 한 시도의 결과. 화면과 API 가 시도별로 같은 것을 본다 (이슈 #85).
+    ///
+    /// 예전에는 버전당 하나로 접었다. 다시 올려 새 잡이 생긴 순간 그 잡에는 아직
+    /// 보고가 없어서, 접는 쪽은 "앞선 실패를 그대로 둔다" 를 골랐다. 그 결과 재시도
+    /// 중인데도 직전 실패가 현재처럼 떠서 상태가 섞여 보였다. 이제는 접지 않고
+    /// 시도별로 끊어, 화면·API 가 현재 시도만 현재로 보이고 지난 시도는 따로
+    /// 보여준다 (ADR-0083).
+    struct AttemptReport {
+        /// 시간순 1..N. 사람에게 보이는 "N번째 시도" 번호.
+        var number: Int
+        var state: SigningJobState
+        var phase: SigningPhase?
         var log: String?
         var failureCode: SigningFailureCode?
+        var failureReason: String?
+        var createdAt: Date?
+        var finishedAt: Date?
+
+        /// 지금 도는 시도인가. 큐에 있거나 돌고 있으면.
+        var isLive: Bool { state == .queued || state == .running }
     }
 
-    /// 한 버전의 가장 최근 보고.
-    ///
-    /// **화면과 API 가 같은 것을 봐야 한다.** 여기를 안 쓰고 `createdAt` 으로 정렬해
-    /// 최신 행을 집으면, 다시 올려서 새 잡이 생긴 순간 그 행에는 아직 아무 보고도
-    /// 없어서 실패 갈래가 nil 로 사라진다. 화면은 여전히 앞선 실패를 보여주는데
-    /// API 는 "실패한 적 없음" 이라고 답하게 된다.
-    static func latestReport(
+    /// 한 버전의 모든 시도를 시간순으로. 마지막이 현재 시도다.
+    static func attempts(
         ofVersion versionID: UUID,
         on database: any Database
-    ) async throws -> Report? {
-        try await latestReports(ofVersions: [versionID], on: database)[versionID]
+    ) async throws -> [AttemptReport] {
+        try await attempts(ofVersions: [versionID], on: database)[versionID] ?? []
     }
 
-    /// 버전마다 가장 최근 잡의 로그와 실패 갈래.
+    /// 버전마다 모든 시도를 시간순으로.
     ///
-    /// 버전별로 따로 조회하면 목록 화면에서 N+1 이 된다. 한 번에 읽어 접는다.
-    static func latestReports(
+    /// 버전별로 따로 조회하면 목록 화면에서 N+1 이 된다. 한 번에 읽어 나눈다.
+    /// 시도 번호는 잡의 `attempt` 필드가 아니라 **생성 순서**로 매긴다. 자동 재시도는
+    /// 같은 잡 행 안에서 `attempt` 를 올리므로, 그 값을 쓰면 번호가 띈다.
+    static func attempts(
         ofVersions versionIDs: [UUID],
         on database: any Database
-    ) async throws -> [UUID: Report] {
+    ) async throws -> [UUID: [AttemptReport]] {
         guard !versionIDs.isEmpty else { return [:] }
 
         let jobs = try await SigningJob.query(on: database)
             .filter(\.$version.$id ~~ versionIDs)
+            .sort(\.$createdAt, .ascending)
             .sort(\.$attempt, .ascending)
             .all()
 
-        return jobs.reduce(into: [:]) { result, job in
-            let log = (job.log?.isEmpty == false) ? job.log : nil
-            guard log != nil || job.failureCode != nil else { return }
-            // 시도 순으로 읽으므로 나중 것이 앞의 것을 덮는다.
-            result[job.$version.id] = Report(log: log, failureCode: job.failureCode)
+        var byVersion: [UUID: [SigningJob]] = [:]
+        for job in jobs {
+            byVersion[job.$version.id, default: []].append(job)
+        }
+        return byVersion.mapValues { versionJobs in
+            versionJobs.enumerated().map { index, job in
+                AttemptReport(
+                    number: index + 1,
+                    state: job.state,
+                    phase: job.phase,
+                    log: (job.log?.isEmpty == false) ? job.log : nil,
+                    failureCode: job.failureCode,
+                    failureReason: job.failureReason,
+                    createdAt: job.createdAt,
+                    finishedAt: job.finishedAt
+                )
+            }
         }
     }
 }

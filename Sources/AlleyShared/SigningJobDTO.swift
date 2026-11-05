@@ -380,6 +380,36 @@ public struct CreatedWorker: Codable, Sendable {
 }
 
 
+/// 한 시도가 어떻게 끝났는지 (이슈 #85).
+///
+/// 같은 버전을 여러 번 서명 시도하면 시도마다 결과가 다르다. 에이전트가 "지난
+/// 시도는 무엇 때문에 막혔나" 를 현재 상태와 섞지 않고 보도록, 시도별로 끊어 싣는다.
+/// 로그는 여기에도 싣지 않는다 (상위 DTO 와 같은 이유). 갈래와 안내만 준다.
+public struct SigningAttemptDTO: Codable, Sendable {
+    /// 시간순 1..N. 사람이 화면에서 보는 "N번째 시도" 와 같은 번호다.
+    public var number: Int
+    public var state: SigningJobState
+    /// 실패의 갈래. 그 시도가 실패로 끝났을 때만.
+    public var failureCode: SigningFailureCode?
+    public var failureReason: String?
+    /// 무엇을 하면 되는지. 실패 코드가 있을 때만.
+    public var whatToDo: String?
+
+    public init(
+        number: Int,
+        state: SigningJobState,
+        failureCode: SigningFailureCode? = nil,
+        failureReason: String? = nil,
+        whatToDo: String? = nil
+    ) {
+        self.number = number
+        self.state = state
+        self.failureCode = failureCode
+        self.failureReason = failureReason
+        self.whatToDo = whatToDo
+    }
+}
+
 /// 서명이 지금 어디까지 왔는지 (ADR-0060).
 ///
 /// **에이전트가 읽고 스스로 고치라고 내주는 값이다.** 화면은 실패 코드에 맞춰
@@ -388,6 +418,10 @@ public struct CreatedWorker: Codable, Sendable {
 ///
 /// 로그는 싣지 않는다. 수백 줄이 오는 일이 흔하고, 무엇을 할지 정하는 데 필요한
 /// 것은 코드와 안내문이다. 전문은 화면에서 본다.
+///
+/// 맨 위 칸들(`state`·`failureCode`·`whatToDo` 등)은 **현재 시도** 를 말한다. 지난
+/// 시도는 `attempts` 에 시간순으로 담는다. 재시도 중이면 맨 위는 "지금 어디까지" 를,
+/// `attempts` 는 "전에 무엇이 막혔나" 를 따로 보여준다 (이슈 #85).
 public struct SigningStatusDTO: Codable, Sendable {
     public var versionID: UUID
     public var state: VersionState
@@ -403,6 +437,8 @@ public struct SigningStatusDTO: Codable, Sendable {
     public var failureReason: String?
     /// 무엇을 하면 되는지. 실패 코드가 있을 때만.
     public var whatToDo: String?
+    /// 시도 이력. 시간순 1..N, 마지막이 현재 시도다. 한 번도 안 올렸으면 비어 있다.
+    public var attempts: [SigningAttemptDTO]
 
     public init(
         versionID: UUID,
@@ -412,7 +448,8 @@ public struct SigningStatusDTO: Codable, Sendable {
         attempt: Int? = nil,
         failureCode: SigningFailureCode? = nil,
         failureReason: String? = nil,
-        whatToDo: String? = nil
+        whatToDo: String? = nil,
+        attempts: [SigningAttemptDTO] = []
     ) {
         self.versionID = versionID
         self.state = state
@@ -422,6 +459,7 @@ public struct SigningStatusDTO: Codable, Sendable {
         self.failureCode = failureCode
         self.failureReason = failureReason
         self.whatToDo = whatToDo
+        self.attempts = attempts
     }
 }
 
