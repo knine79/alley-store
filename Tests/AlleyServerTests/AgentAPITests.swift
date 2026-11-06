@@ -29,6 +29,8 @@ struct AgentAPITests {
             version.failureReason = "entitlements 가 없습니다"
             try await version.save(on: app.db)
 
+            // 이 잡은 자동 재시도로 내부 attempt 가 2 까지 오른 한 행이다 (ADR-0018).
+            // 화면 번호는 그 값이 아니라 생성 순서로 매기므로, 잡 한 행이면 1 이다 (ADR-0083).
             let job = SigningJob(versionID: versionID, attempt: 2)
             job.state = .failed
             job.failureCode = .entitlementsRejected
@@ -41,7 +43,8 @@ struct AgentAPITests {
                 #expect(response.status == .ok)
                 let status = try response.content.decode(SigningStatusDTO.self)
                 #expect(status.failureCode == .entitlementsRejected)
-                #expect(status.attempt == 2)
+                // 내부 attempt(2)가 아니라 시도 순번(1)이다. 둘이 갈릴 수 있다 (ADR-0083).
+                #expect(status.attempt == 1)
                 // 버전에 남은 이유를 먼저 본다. 잡의 것으로 바꿔 쓰면 화면과 갈린다.
                 #expect(status.failureReason == "entitlements 가 없습니다")
                 // 화면용 한 문장이 아니라 무엇을 어떻게 하면 되는지가 와야 한다.
