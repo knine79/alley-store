@@ -507,8 +507,9 @@ struct AppPagesController: RouteCollection, Sendable {
 
         // 실패한 버전은 로그가 있어야 올린 사람이 스스로 고칠 수 있다.
         // 올릴 권한이 없는 사람에게는 보여줄 이유가 없다. 워커 환경이 드러난다.
-        let reports = canUpload
-            ? try await SigningJob.latestReports(
+        // 시도마다 끊어 읽어 현재 시도와 지난 시도를 나눠 보여준다 (이슈 #85).
+        let attemptsByVersion = canUpload
+            ? try await SigningJob.attempts(
                 ofVersions: versions.map { try $0.requireID() }, on: request.db
             )
             : [:]
@@ -557,7 +558,7 @@ struct AppPagesController: RouteCollection, Sendable {
                 versions: try versions.map { version in
                     try VersionRow(
                         version: version,
-                        report: reports[try version.requireID()],
+                        attempts: attemptsByVersion[try version.requireID()] ?? [],
                         downloadCount: perVersion[try version.requireID()],
                         // 스토어 앱은 출시된 것만. 스토어 앱이 없는 사람에게 이것이
                         // 유일한 길이라 출시 전 것까지 열 이유가 없다.
@@ -1364,6 +1365,9 @@ struct VersionRow: Encodable {
     var canRetry: Bool
     /// 권한이 모자라 실패했나. 그때만 재시도 자리에 entitlements 칸을 낸다 (ADR-0036).
     var needsEntitlements: Bool
+    /// 지난 시도들. 최근 것이 위로 온다. 현재 시도는 위 칸이 그리고, 지난 시도는
+    /// 접어서 "N번째 시도" 로 골라 본다 (이슈 #85). 재시도가 없었으면 비어 있다.
+    var pastAttempts: [SigningAttemptView]
     /// 이 버전을 받아간 횟수. 셀 수 없으면 nil.
     var downloadCount: Int?
     /// 무엇으로 서명했는지. 업로더가 준 entitlements 의 키를 한 줄씩 늘어놓는다.
@@ -1385,11 +1389,12 @@ struct VersionRow: Encodable {
 
     init(
         version: Version,
-        report: SigningJob.Report? = nil,
+        attempts: [SigningJob.AttemptReport] = [],
         downloadCount: Int? = nil,
         isDownloadable: Bool = false,
         canAnnounce: Bool = false
     ) throws {
+        let (current, past) = SigningJob.AttemptReport.split(attempts)
         self.id = try version.requireID().uuidString
         self.shortVersion = version.shortVersion
         self.buildNumber = version.buildNumber
@@ -1401,16 +1406,22 @@ struct VersionRow: Encodable {
         self.releaseNotes = version.releaseNotes
         self.fileSize = version.bestArtifact?.fileSize.map(ByteCount.humanReadable)
         self.createdAt = DateStyle.day.display(from: version.createdAt ?? Date())
-        self.failureReason = version.failureReason
-        self.log = report?.log
+        self.log = current?.log
+        // **끝난 실패만 실패로 그린다** (ADR-0083). 재시도로 생긴 새 잡은 아직 실패가
+        // 아니고, 자동 재시도 중인 잡에도 직전 전이의 갈래가 남을 수 있다. 버전이
+        // 실제로 failed 일 때만 현재 시도를 실패로 보여, 재시도 중에 직전 실패가
+        // 현재처럼 떠서 상태가 섞이던 것을 막는다 (이슈 #85).
+        let showsFailure = version.state == .failed
+        let currentCode = showsFailure ? current?.failureCode : nil
+        self.failureReason = showsFailure ? version.failureReason : nil
         // 코드를 그대로 내보내지 않는다. 사람이 읽는 문장과 함께만 보여준다 (ADR-0023).
-        self.failureTitle = report?.failureCode.map(SigningFailureGuidance.title)
-        self.failureAdvice = report?.failureCode.map(SigningFailureGuidance.whatToDo)
-        self.failureCode = report?.failureCode?.rawValue
+        self.failureTitle = currentCode.map(SigningFailureGuidance.title)
+        self.failureAdvice = currentCode.map(SigningFailureGuidance.whatToDo)
+        self.failureCode = currentCode?.rawValue
         self.hasFailure = self.failureTitle != nil || self.failureReason != nil
         self.canRetry = version.state == .failed
-        self.needsEntitlements = version.state == .failed
-            && report?.failureCode == .entitlementsRejected
+        self.needsEntitlements = showsFailure && currentCode == .entitlementsRejected
+        self.pastAttempts = past
         self.downloadCount = downloadCount
 
         let keys = version.entitlements.map(EntitlementsPlist.keys(of:)) ?? []

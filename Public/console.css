@@ -2351,6 +2351,53 @@ textarea.input {
     word-break: break-word;
 }
 
+/* ── 지난 시도 (이슈 #85) ─────────────────────────────────── */
+
+/* 현재 시도는 버전 줄이 그대로 보여준다. 지난 시도는 여기 접어, 재시도 중에 직전
+   실패가 현재처럼 섞여 보이지 않게 나눈다. */
+.attempts {
+    margin-top: var(--space-3);
+}
+
+.attempts-head {
+    margin: 0 0 var(--space-1);
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+}
+
+/* 한 시도의 요약 줄. 번호·끝상태·갈래·시각을 한 줄에 둔다. */
+.attempt > summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+}
+
+/* summary 를 flex 로 깔면 브라우저가 기본 펼침 삼각형을 지운다. 다른 로그
+   (.log summary)가 쓰는 기본 삼각형과 같은 모양을 직접 그려, 펼침 표시가
+   화면마다 다르지 않게 한다. */
+.attempt > summary::-webkit-details-marker {
+    display: none;
+}
+
+.attempt > summary::before {
+    content: "\25B6";
+    flex: none;
+    font-size: 0.75em;
+    line-height: 1;
+    transition: transform var(--ease);
+}
+
+.attempt[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+/* 언제 끝났나. 맨 뒤로 민다. */
+.attempt-when {
+    margin-left: auto;
+    font-size: var(--font-xs);
+}
+
 /* ── 접어둔 이력 ─────────────────────────────────────────── */
 
 /* 폐기한 워커와 운영 토큰. 기록으로 남기되 지금 무엇이 도는지를 가리지 않는다. */

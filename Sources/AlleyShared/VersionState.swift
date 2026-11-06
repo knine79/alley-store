@@ -90,4 +90,17 @@ public enum SigningJobState: String, Codable, Sendable, CaseIterable {
     case running
     case succeeded
     case failed
+
+    /// 시도 이력에서 그 시도가 어떻게 끝났는지 한마디로 (이슈 #85).
+    ///
+    /// 버전 상태(`VersionState.displayName`)와 다르다. 저것은 "이 버전이 지금 어디"
+    /// 이고, 이것은 "그 시도가 어떻게 끝났나" 다. 지난 시도 목록은 잡 상태로 말한다.
+    public var displayName: String {
+        switch self {
+        case .queued: return "서명 대기"
+        case .running: return "서명 중"
+        case .succeeded: return "완료"
+        case .failed: return "실패"
+        }
+    }
 }

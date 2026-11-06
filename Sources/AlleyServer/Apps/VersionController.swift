@@ -86,33 +86,41 @@ public struct VersionController: RouteCollection, Sendable {
         _ = try await request.requireUploadRights(to: version.app)
 
         let versionID = try version.requireID()
-        let running = try await SigningJob.query(on: request.db)
-            .filter(\.$version.$id == versionID)
-            .sort(\.$attempt, .descending)
-            .first()
-        // 화면과 같은 판정을 쓴다. `createdAt` 으로 집으면 다시 올린 직후의 빈 잡이
-        // 앞선 실패를 지운다.
-        let report = try await SigningJob.latestReport(ofVersion: versionID, on: request.db)
+        // 시도마다 끊어 읽는다. 마지막이 현재 시도다. 화면과 같은 모델을 쓴다 (이슈 #85).
+        let attempts = try await SigningJob.attempts(ofVersion: versionID, on: request.db)
+        let current = attempts.last
 
         // **끝난 실패만 실패로 말한다.** 워커가 옮기다 끊긴 것 같은 일시적 실패는
         // 서버가 큐로 되돌려 다시 시도하는데(ADR-0018), 그때도 잡에는 갈래가 남아
         // 있다. 그것을 그대로 내주면 에이전트가 아직 서명 중인 버전을 고치겠다고
         // 파일을 다시 올린다. 화면이 재시도 버튼을 `failed` 에서만 내는 것과 같은
-        // 기준이다.
+        // 기준이다. 지난 시도의 실패는 아래 `attempts` 가 시도별로 따로 싣는다.
         let isFinalFailure = version.state == .failed
-        let code = isFinalFailure ? report?.failureCode : nil
+        let code = isFinalFailure ? current?.failureCode : nil
 
         return SigningStatusDTO(
             versionID: versionID,
             state: version.state,
-            jobState: running?.state,
-            phase: running?.phaseName,
-            attempt: running?.attempt,
+            jobState: current?.state,
+            phase: current?.phase?.rawValue,
+            attempt: current.map(\.number),
             failureCode: code,
             // 버전에 남은 이유를 먼저 본다. 잡이 여러 번 돌면 마지막 것만 남고,
             // 사람에게 보여준 값과 같아야 한다.
-            failureReason: isFinalFailure ? (version.failureReason ?? running?.failureReason) : nil,
-            whatToDo: code.map(SigningFailureGuidance.forAgent)
+            failureReason: isFinalFailure ? (version.failureReason ?? current?.failureReason) : nil,
+            whatToDo: code.map(SigningFailureGuidance.forAgent),
+            attempts: attempts.map { report in
+                // 그 시도가 실패로 끝났을 때만 갈래·안내를 싣는다. 도는 중인 시도에
+                // 남은 직전 갈래를 실패로 내주지 않는다.
+                let failed = report.state == .failed ? report.failureCode : nil
+                return SigningAttemptDTO(
+                    number: report.number,
+                    state: report.state,
+                    failureCode: failed,
+                    failureReason: report.state == .failed ? report.failureReason : nil,
+                    whatToDo: failed.map(SigningFailureGuidance.forAgent)
+                )
+            }
         )
     }
 

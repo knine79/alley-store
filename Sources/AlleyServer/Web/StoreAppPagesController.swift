@@ -65,10 +65,13 @@ struct StoreAppPagesController: RouteCollection, Sendable {
                 .sort(\.$buildNumber, .descending)
                 .limit(Self.recentBuildCount)
                 .all()
-            let reports = try await SigningJob.latestReports(
+            // 시도마다 끊어 읽어 현재 시도와 지난 시도를 나눠 보여준다 (이슈 #85).
+            let attemptsByBuild = try await SigningJob.attempts(
                 ofVersions: builds.map { try $0.requireID() }, on: request.db
             )
-            rows = try builds.map { StoreAppBuildRow($0, report: reports[try $0.requireID()]) }
+            rows = try builds.map {
+                StoreAppBuildRow($0, attempts: attemptsByBuild[try $0.requireID()] ?? [])
+            }
         }
 
         return try await request.view.render(
@@ -388,13 +391,16 @@ struct StoreAppBuildRow: Encodable {
     var isReleased: Bool
     var canRelease: Bool
     var canRetry: Bool
-    /// 서명 워커가 남긴 로그. 실패했을 때만 펴 본다.
+    /// 서명 워커가 남긴 로그. 실패했을 때만 펴 본다. 현재 시도의 것이다.
     var log: String?
     var failureTitle: String?
     var failureAdvice: String?
     var failureCode: String?
+    /// 지난 시도들. 최근 것이 위로 온다. 현재 시도는 위 칸이 그린다 (이슈 #85).
+    var pastAttempts: [SigningAttemptView]
 
-    init(_ version: Version, report: SigningJob.Report? = nil) {
+    init(_ version: Version, attempts: [SigningJob.AttemptReport] = []) {
+        let (current, past) = SigningJob.AttemptReport.split(attempts)
         self.id = version.id?.uuidString ?? ""
         self.shortVersion = version.shortVersion
         self.buildNumber = version.buildNumber
@@ -403,11 +409,15 @@ struct StoreAppBuildRow: Encodable {
         self.isReleased = version.state.isPubliclyVisible
         self.canRelease = version.state.canTransition(to: .released)
         self.canRetry = version.state == .failed
-        self.log = report?.log
+        self.log = current?.log
+        // **끝난 실패만 실패로 그린다** (ADR-0083). 재시도 중인 잡에 남은 직전 갈래가
+        // 현재처럼 뜨지 않게, 버전이 실제로 failed 일 때만 현재를 실패로 보여준다.
+        let currentCode = version.state == .failed ? current?.failureCode : nil
         // 코드를 그대로 내보내지 않는다. 사람이 읽는 문장과 함께만 보여준다 (ADR-0023).
-        self.failureTitle = report?.failureCode.map(SigningFailureGuidance.title)
-        self.failureAdvice = report?.failureCode.map(SigningFailureGuidance.whatToDo)
-        self.failureCode = report?.failureCode?.rawValue
+        self.failureTitle = currentCode.map(SigningFailureGuidance.title)
+        self.failureAdvice = currentCode.map(SigningFailureGuidance.whatToDo)
+        self.failureCode = currentCode?.rawValue
+        self.pastAttempts = past
         // 방금 빌드한 것이 목록에 뜨는 화면이라 시각까지 보여준다. 날짜만으로는
         // 오늘 세 번 빌드했을 때 무엇이 방금 것인지 알 수 없다.
         self.createdAt = version.createdAt.map(DateStyle.minute.display(from:))
