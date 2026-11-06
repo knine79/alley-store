@@ -2373,6 +2373,25 @@ textarea.input {
     gap: var(--space-1);
 }
 
+/* summary 를 flex 로 깔면 브라우저가 기본 펼침 삼각형을 지운다. 다른 로그
+   (.log summary)가 쓰는 기본 삼각형과 같은 모양을 직접 그려, 펼침 표시가
+   화면마다 다르지 않게 한다. */
+.attempt > summary::-webkit-details-marker {
+    display: none;
+}
+
+.attempt > summary::before {
+    content: "\25B6";
+    flex: none;
+    font-size: 0.75em;
+    line-height: 1;
+    transition: transform var(--ease);
+}
+
+.attempt[open] > summary::before {
+    transform: rotate(90deg);
+}
+
 /* 언제 끝났나. 맨 뒤로 민다. */
 .attempt-when {
     margin-left: auto;
