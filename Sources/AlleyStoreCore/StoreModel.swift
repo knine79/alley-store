@@ -536,9 +536,27 @@ final class StoreModel {
     /// 자기 자신도 이 스토어로 배포한다(설계 문서 §5.4). 다른 앱과 같은 방식으로
     /// 찾되, 설치는 실행 중인 자기를 갈아끼우는 일이라 경로가 다르다.
     var selfUpdate: AppDTO? {
-        guard let entry = apps.first(where: isSelf) else { return nil }
-        return state(of: entry) == .updateAvailable ? entry : nil
+        guard let entry = apps.first(where: isSelf),
+              InstallState.compare(
+                  installed: runningSelf,
+                  released: entry.latestReleasedVersion
+              ) == .updateAvailable
+        else { return nil }
+        return entry
     }
+
+    /// 지금 도는 스토어 앱 자신. 번들 밖(`swift run`)이면 nil 이다.
+    ///
+    /// **깔린 앱 목록(`installed`)에서 찾지 않는다.** 목록은 같은 앱이 두 곳에 있으면
+    /// `/Applications` 쪽을 고른다. `~/Applications` 나 다운로드 폴더에서 띄운 스토어 앱이
+    /// `/Applications` 의 옛 사본을 보고 업데이트가 있다고 판단하면, 갈아끼우는 것은
+    /// 지금 도는 번들이라 다시 떠도 옛 사본은 그대로 남는다. 그러면 뜨자마자 또 받고
+    /// 또 종료한다. 운영에서 한 사람이 같은 버전을 몇 초 간격으로 수십~수백 번 받아간
+    /// 일이 이 모양이었다.
+    ///
+    /// 앱이 도는 동안 번들은 바뀌지 않는다. 갈아끼우면 앱이 새로 뜨므로 한 번만 읽는다.
+    let runningSelf: InstalledApp? = SelfUpdate.currentBundle()
+        .flatMap(InstalledApps.read(bundle:))
 
     /// 창이 열려 있는 동안 주기적으로 목록을 다시 읽고, 자기 새 버전이 있으면 스스로
     /// 갈아끼운다.
@@ -701,9 +719,16 @@ final class StoreModel {
     ///
     /// 못 바꾸는 자리면 시도하지 않는다. 시도하면 앱이 종료됐다가 옛 번들로 다시 뜨고,
     /// 주기마다 그것을 되풀이한다. 그 자리에서는 배너가 까닭과 할 일을 안내한다.
+    ///
+    /// **같은 출시본은 저절로 두 번 갈아끼우지 않는다.** 한 번 갈아끼웠는데 다시 떠서도
+    /// 옛 버전이면 교체가 어디선가 실패한 것이다(스크립트가 옛 번들을 되돌렸거나, 앞으로
+    /// 모를 다른 까닭). 그대로 두면 앱은 뜰 때마다 받고 종료하기를 끝없이 되풀이한다.
+    /// 배너는 남아 있으니 사람이 눌러 다시 시도할 수 있다.
     private func applySelfUpdateIfIdle() async {
         guard selfUpdateBlocker == nil, progress.isEmpty, runningUpdatePrompt.isEmpty,
-              let update = selfUpdate
+              let update = selfUpdate,
+              let version = update.latestReleasedVersion,
+              SelfUpdate.attemptedVersion() != version.id.uuidString
         else { return }
         await updateSelf(update)
     }
@@ -743,6 +768,8 @@ final class StoreModel {
             )
 
             progress[app.id] = .installing
+            // 종료되기 전에 남긴다. 다시 떠서도 이 버전이 아니면 저절로는 또 하지 않는다.
+            SelfUpdate.rememberAttempt(versionID: version.id)
             // 여기서부터는 되돌릴 수 없다. 앱이 곧 종료된다.
             try SelfUpdate.replaceAndRelaunch(with: unpacked)
         } catch StoreClient.ClientError.unauthorized {
