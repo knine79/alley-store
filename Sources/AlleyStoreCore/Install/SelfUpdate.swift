@@ -57,6 +57,17 @@ enum SelfUpdate {
         }
     }
 
+    /// 마지막으로 스스로 갈아끼우려 한 출시본의 버전 ID.
+    static let attemptedKey = "selfUpdateAttemptedVersion"
+
+    static func attemptedVersion(_ store: UserDefaults = .standard) -> String? {
+        store.string(forKey: attemptedKey)
+    }
+
+    static func rememberAttempt(versionID: UUID, _ store: UserDefaults = .standard) {
+        store.set(versionID.uuidString, forKey: attemptedKey)
+    }
+
     /// 지금 도는 앱의 번들 위치.
     ///
     /// `swift run` 으로 띄운 맨 실행 파일에는 번들이 없다. 그때는 nil 이다.

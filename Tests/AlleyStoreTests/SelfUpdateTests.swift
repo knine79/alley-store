@@ -154,3 +154,22 @@ struct SelfUpdateLocationTests {
         }
     }
 }
+
+@Suite("자기 업데이트 시도 기록")
+struct SelfUpdateAttemptTests {
+    @Test("처음에는 시도한 버전이 없다")
+    func emptyAtFirst() throws {
+        let store = try #require(UserDefaults(suiteName: "self-update-tests-\(UUID().uuidString)"))
+        #expect(SelfUpdate.attemptedVersion(store) == nil)
+    }
+
+    @Test("갈아끼우기 전에 남긴 버전을 다시 떠서 읽는다")
+    func remembersAttempt() throws {
+        // 같은 출시본을 저절로 또 갈아끼우지 않게 하는 근거다. 남긴 값을 못 읽으면
+        // 교체가 실패한 맥에서 앱이 뜰 때마다 받고 종료하기를 되풀이한다.
+        let store = try #require(UserDefaults(suiteName: "self-update-tests-\(UUID().uuidString)"))
+        let version = UUID()
+        SelfUpdate.rememberAttempt(versionID: version, store)
+        #expect(SelfUpdate.attemptedVersion(store) == version.uuidString)
+    }
+}
