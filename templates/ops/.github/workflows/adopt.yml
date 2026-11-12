@@ -53,8 +53,10 @@ jobs:
       # 워커 릴리스 업로드처럼 되돌릴 수 없는 단계가 이미 끝나 배포가 반만 남는다.
       - name: 제품 레포 변수 확인
         run: |
-          if [ -z "$PRODUCT_REPO" ]; then
-            echo "::error::레포 변수 PRODUCT_REPO 가 비어 있습니다. 예: gh variable set PRODUCT_REPO --body 소유자/alley-store" >&2
+          # 비었는지만 보면 URL 같은 엉뚱한 값이 통과해 같은 반쪽 배포가 난다.
+          # 서명 맥의 bash 는 3.2 지만 `=~` 는 쓸 수 있다.
+          if ! [[ "$PRODUCT_REPO" =~ ^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::레포 변수 PRODUCT_REPO 는 소유자/레포 형식이어야 합니다 (지금 값: '$PRODUCT_REPO'). 예: gh variable set PRODUCT_REPO --body 소유자/alley-store" >&2
             exit 1
           fi
 
