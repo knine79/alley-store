@@ -70,8 +70,8 @@ Alley 를 설치한 뒤에 하는 일입니다. 설치 절차는 [설치 가이�
 그때도 릴리스는 필요 없습니다. **CI 가 main 에 푸시할 때마다 이미 이미지를 올립니다.**
 
 ```
-ghcr.io/knine79/alley-store:main
-ghcr.io/knine79/alley-store:sha-<커밋 해시>
+ghcr.io/<소유자>/<레포>:main
+ghcr.io/<소유자>/<레포>:sha-<커밋 해시>
 ```
 
 운영 레포의 롤아웃 스크립트에 그 태그를 주면 됩니다. 태그·릴리스·`alley.lock` 수정·

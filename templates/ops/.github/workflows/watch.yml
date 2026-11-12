@@ -16,7 +16,7 @@ permissions:
   pull-requests: write
 
 env:
-  PRODUCT_REPO: knine79/alley-store
+  PRODUCT_REPO: <제품 소유자>/alley-store
 
 jobs:
   watch:

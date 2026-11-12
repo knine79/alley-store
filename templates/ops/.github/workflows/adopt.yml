@@ -213,7 +213,7 @@ jobs:
         if: ${{ hashFiles('scripts/rollout-server.sh') != '' }}
         run: |
           set -euo pipefail
-          IMAGE="ghcr.io/knine79/alley-store:${{ steps.lock.outputs.version }}"
+          IMAGE="ghcr.io/<제품 소유자>/alley-store:${{ steps.lock.outputs.version }}"
 
           # 10분. 이미지 빌드는 보통 5분 안쪽이고, 그보다 오래 걸리면 기다릴 것이
           # 아니라 그쪽 로그를 봐야 합니다.

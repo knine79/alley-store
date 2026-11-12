@@ -23,7 +23,7 @@
 set -euo pipefail
 
 TAG="${ALLEY_RELEASE_TAG:?ALLEY_RELEASE_TAG 가 필요합니다}"
-IMAGE="ghcr.io/knine79/alley-store:${TAG#v}"
+IMAGE="ghcr.io/<제품 소유자>/alley-store:${TAG#v}"
 
 echo "굴릴 이미지: $IMAGE"
 
