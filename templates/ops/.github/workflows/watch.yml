@@ -16,7 +16,8 @@ permissions:
   pull-requests: write
 
 env:
-  PRODUCT_REPO: <제품 소유자>/alley-store
+  # 받아 쓸 제품 레포. 조직 이름을 파일에 두지 않으려고 레포 변수로 받는다.
+  PRODUCT_REPO: ${{ vars.PRODUCT_REPO }}
 
 jobs:
   watch:
@@ -33,6 +34,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          : "${PRODUCT_REPO:?레포 변수 PRODUCT_REPO 를 넣으세요. 예: gh variable set PRODUCT_REPO --body 소유자/alley-store}"
           CURRENT=$(sed -n 's/^alley=//p' alley.lock | head -1)
           LATEST=$(gh release view --repo "$PRODUCT_REPO" --json tagName -q .tagName)
 

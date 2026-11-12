@@ -10,6 +10,7 @@
 #
 # 받는 값:
 #   ALLEY_RELEASE_TAG     예: v0.3.0
+#   PRODUCT_REPO          제품 레포. adopt.yml 이 레포 변수에서 물려준다
 #   ALLEY_REGISTRY_USER   레지스트리 사용자. 시크릿이 없으면 빈 값
 #   ALLEY_REGISTRY_TOKEN  레지스트리 토큰. 시크릿이 없으면 빈 값
 #
@@ -23,7 +24,8 @@
 set -euo pipefail
 
 TAG="${ALLEY_RELEASE_TAG:?ALLEY_RELEASE_TAG 가 필요합니다}"
-IMAGE="ghcr.io/<제품 소유자>/alley-store:${TAG#v}"
+PRODUCT_REPO="${PRODUCT_REPO:?PRODUCT_REPO 가 필요합니다 (ops 레포 변수)}"
+IMAGE="ghcr.io/$PRODUCT_REPO:${TAG#v}"
 
 echo "굴릴 이미지: $IMAGE"
 

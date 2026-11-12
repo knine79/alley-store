@@ -36,6 +36,11 @@ concurrency:
   group: alley-adopt
   cancel-in-progress: false
 
+env:
+  # 받아 쓸 제품 레포. 조직 이름을 파일에 두지 않으려고 레포 변수로 받는다.
+  # 서버 롤아웃 스크립트도 이 값을 물려받는다.
+  PRODUCT_REPO: ${{ vars.PRODUCT_REPO }}
+
 jobs:
   adopt:
     name: 빌드·서명·업로드
@@ -213,7 +218,8 @@ jobs:
         if: ${{ hashFiles('scripts/rollout-server.sh') != '' }}
         run: |
           set -euo pipefail
-          IMAGE="ghcr.io/<제품 소유자>/alley-store:${{ steps.lock.outputs.version }}"
+          : "${PRODUCT_REPO:?레포 변수 PRODUCT_REPO 를 넣으세요. 예: gh variable set PRODUCT_REPO --body 소유자/alley-store}"
+          IMAGE="ghcr.io/$PRODUCT_REPO:${{ steps.lock.outputs.version }}"
 
           # 10분. 이미지 빌드는 보통 5분 안쪽이고, 그보다 오래 걸리면 기다릴 것이
           # 아니라 그쪽 로그를 봐야 합니다.
