@@ -49,6 +49,15 @@ jobs:
     timeout-minutes: 90
 
     steps:
+      # 레포 변수를 가장 먼저 본다. 처음 쓰는 곳은 잡 후반이라, 거기서 실패하면
+      # 워커 릴리스 업로드처럼 되돌릴 수 없는 단계가 이미 끝나 배포가 반만 남는다.
+      - name: 제품 레포 변수 확인
+        run: |
+          if [ -z "$PRODUCT_REPO" ]; then
+            echo "::error::레포 변수 PRODUCT_REPO 가 비어 있습니다. 예: gh variable set PRODUCT_REPO --body 소유자/alley-store" >&2
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -218,8 +227,8 @@ jobs:
         if: ${{ hashFiles('scripts/rollout-server.sh') != '' }}
         run: |
           set -euo pipefail
-          : "${PRODUCT_REPO:?레포 변수 PRODUCT_REPO 를 넣으세요. 예: gh variable set PRODUCT_REPO --body 소유자/alley-store}"
-          IMAGE="ghcr.io/$PRODUCT_REPO:${{ steps.lock.outputs.version }}"
+          # ghcr 경로는 소문자만 받는다. 소유자에 대문자가 있으면 이미지를 영영 못 찾는다.
+          IMAGE="ghcr.io/$(printf '%s' "$PRODUCT_REPO" | tr '[:upper:]' '[:lower:]'):${{ steps.lock.outputs.version }}"
 
           # 10분. 이미지 빌드는 보통 5분 안쪽이고, 그보다 오래 걸리면 기다릴 것이
           # 아니라 그쪽 로그를 봐야 합니다.
