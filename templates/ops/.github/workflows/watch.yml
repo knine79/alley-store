@@ -15,10 +15,6 @@ permissions:
   contents: write
   pull-requests: write
 
-env:
-  # 받아 쓸 제품 레포. 조직 이름을 파일에 두지 않으려고 레포 변수로 받는다.
-  PRODUCT_REPO: ${{ vars.PRODUCT_REPO }}
-
 jobs:
   watch:
     name: 새 릴리스가 있나
@@ -28,13 +24,27 @@ jobs:
         with:
           submodules: recursive
 
+      # 제품 레포는 서브모듈 원격에서 읽는다. 따로 설정하는 값을 두면 서브모듈과 다른
+      # 레포를 가리켜도 알 수 없다 - 이 소스로 빌드하고 다른 레포의 이미지를 굴린다.
+      # 서브모듈은 이 레포에서 `git submodule add` 로 만드는 것이라 템플릿에 조직
+      # 이름이 들어가지 않는다. 뒤 단계와 롤아웃 스크립트는 `PRODUCT_REPO` 로 받는다.
+      - name: 제품 레포 확인
+        run: |
+          URL=$(git config -f .gitmodules submodule.product.url || true)
+          PRODUCT_REPO=$(printf '%s' "$URL" | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#/$##; s#\.git$##')
+          # 서명 맥의 bash 는 3.2 지만 `=~` 는 쓸 수 있다.
+          if ! [[ "$PRODUCT_REPO" =~ ^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::서브모듈 product 의 원격('$URL')에서 소유자/레포를 읽지 못했습니다. GitHub 주소여야 합니다." >&2
+            exit 1
+          fi
+          echo "PRODUCT_REPO=$PRODUCT_REPO" >> "$GITHUB_ENV"
+
       - name: 최신 릴리스 확인
         id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          : "${PRODUCT_REPO:?레포 변수 PRODUCT_REPO 를 넣으세요. 예: gh variable set PRODUCT_REPO --body 소유자/alley-store}"
           CURRENT=$(sed -n 's/^alley=//p' alley.lock | head -1)
           LATEST=$(gh release view --repo "$PRODUCT_REPO" --json tagName -q .tagName)
 
