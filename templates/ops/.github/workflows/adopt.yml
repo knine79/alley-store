@@ -48,6 +48,21 @@ jobs:
         with:
           submodules: recursive
 
+      # 제품 레포는 서브모듈 원격에서 읽는다. 따로 설정하는 값을 두면 서브모듈과 다른
+      # 레포를 가리켜도 알 수 없다 - 이 소스로 빌드하고 다른 레포의 이미지를 굴린다.
+      # 서브모듈은 이 레포에서 `git submodule add` 로 만드는 것이라 템플릿에 조직
+      # 이름이 들어가지 않는다. 뒤 단계와 롤아웃 스크립트는 `PRODUCT_REPO` 로 받는다.
+      - name: 제품 레포 확인
+        run: |
+          URL=$(git config -f .gitmodules submodule.product.url || true)
+          PRODUCT_REPO=$(printf '%s' "$URL" | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#/$##; s#\.git$##')
+          # 서명 맥의 bash 는 3.2 지만 `=~` 는 쓸 수 있다.
+          if ! [[ "$PRODUCT_REPO" =~ ^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::서브모듈 product 의 원격('$URL')에서 소유자/레포를 읽지 못했습니다. GitHub 주소여야 합니다." >&2
+            exit 1
+          fi
+          echo "PRODUCT_REPO=$PRODUCT_REPO" >> "$GITHUB_ENV"
+
       # alley.lock 과 서브모듈이 같은 곳을 가리키는지 본다.
       #
       # 서브모듈 포인터만 옮기고 lock 을 안 고치는 실수가 흔하다. 그러면 "v0.3.0 을
@@ -213,7 +228,8 @@ jobs:
         if: ${{ hashFiles('scripts/rollout-server.sh') != '' }}
         run: |
           set -euo pipefail
-          IMAGE="ghcr.io/knine79/alley-store:${{ steps.lock.outputs.version }}"
+          # ghcr 경로는 소문자만 받는다. 소유자에 대문자가 있으면 이미지를 영영 못 찾는다.
+          IMAGE="ghcr.io/$(printf '%s' "$PRODUCT_REPO" | tr '[:upper:]' '[:lower:]'):${{ steps.lock.outputs.version }}"
 
           # 10분. 이미지 빌드는 보통 5분 안쪽이고, 그보다 오래 걸리면 기다릴 것이
           # 아니라 그쪽 로그를 봐야 합니다.

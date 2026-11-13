@@ -1,8 +1,7 @@
 # Alley 운영 레포 (템플릿)
 
 이 디렉터리를 **비공개 레포로 복사해** 쓰세요. 여기에는 조직에 묶이는 것만 둡니다.
-제품 코드는 [Alley 제품 레포](https://github.com/knine79/alley-store)에 있고, 이
-레포는 그것을 태그로 고정해 받아 **빌드·서명·배포**합니다 (ADR-0043).
+제품 코드는 Alley 제품 레포(`<제품 소유자>/alley-store`)에 있고, 이 레포는 그것을 태그로 고정해 받아 **빌드·서명·배포**합니다 (ADR-0043).
 
 ## 왜 레포가 둘인가
 
@@ -21,11 +20,14 @@
 gh repo create <조직>/alley-ops --private
 git clone https://github.com/<조직>/alley-ops && cd alley-ops
 cp -R <제품레포>/templates/ops/. .
-git submodule add https://github.com/knine79/alley-store.git product
+git submodule add https://github.com/<제품 소유자>/alley-store.git product
 git -C product checkout v0.3.0
 ```
 
 `alley.lock` 에 그 태그를 적습니다.
+
+워크플로와 롤아웃 스크립트는 받아 쓸 제품 레포를 이 서브모듈의 원격에서 읽습니다.
+따로 설정할 값은 없습니다. 포크했다면 자기 조직의 주소로 서브모듈을 추가하면 됩니다.
 
 ### 2. 서명 맥에 러너 붙이기
 
